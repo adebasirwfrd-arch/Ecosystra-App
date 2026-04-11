@@ -45,7 +45,17 @@ export function Providers({ children }: { children: ReactNode }) {
             });
             return;
           }
-          if (n) {
+          // Only refetch full board when structure/items change — not on every cell edit
+          // (UpdateItemDynamicData + board invalidation was wiping optimistic rows before createItem finished).
+          const boardStructureMutations = new Set([
+            "CreateItem",
+            "DeleteItem",
+            "BulkCreateItems",
+            "CreateGroup",
+            "DeleteGroup",
+            "ArchiveGroup",
+          ]);
+          if (n && boardStructureMutations.has(n)) {
             void queryClient.invalidateQueries({ queryKey: ecoKeys.board });
           }
         },

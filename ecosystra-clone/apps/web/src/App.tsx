@@ -1683,11 +1683,11 @@ function AppContent({
             title={boardTitle}
             activeTab={activeTab}
             onTabChange={setActiveTab}
-            onAddGroup={() => {}}
-            onImportItems={() => {}}
+            onAddGroup={handleAddGroup}
+            onImportItems={handleImportItems}
             onRenameBoard={setBoardTitle}
-            onQuickAddTask={() => {}}
-            onSaveView={() => {}}
+            onQuickAddTask={handleQuickAddTask}
+            onSaveView={handleSaveView}
             isBoardStarred={isBoardStarred}
             onToggleBoardStar={() => setIsBoardStarred(!isBoardStarred)}
             searchTerm={searchTerm}
@@ -1718,12 +1718,39 @@ function AppContent({
             ) : (
               <VirtualBoardLazy
                 groups={groups}
-                onItemClick={setSelectedItem}
+                selectedItem={selectedItem}
+                onItemClick={handleItemClick}
                 columnSettings={columnSettings}
                 searchTerm={searchTerm}
                 filters={filters}
                 sortConfig={sortConfig}
                 viewSettings={viewSettings}
+                onUpdateGroup={handleUpdateGroup}
+                onUpdateItem={handleUpdateItem}
+                onAddColumn={handleAddColumn}
+                onAddItem={handleAddItem}
+                onDeleteItem={handleDeleteItem}
+                onDuplicateItem={handleDuplicateItem}
+                onAddSubitem={handleAddSubitem}
+                onAddSubitemColumn={handleAddSubitemColumn}
+                onRenameColumn={handleRenameColumn}
+                onAddGroup={handleAddGroup}
+                onDeleteGroup={handleDeleteGroup}
+                onDuplicateGroup={handleDuplicateGroup}
+                onAddColumnRight={handleAddColumnRight}
+                onArchiveGroup={handleArchiveGroup}
+                onExportGroup={handleExportGroup}
+                onToggleWrapText={handleToggleWrapText}
+                onAddSubsort={handleAddSubsort}
+                onSaveOrder={handleSaveOrder}
+                onDuplicateColumn={handleDuplicateColumn}
+                onChangeColumnType={handleChangeColumnType}
+                onRemoveColumn={handleRemoveColumn}
+                onSetColumnDescription={handleSetColumnDescription}
+                onSetColumnRequired={handleSetColumnRequired}
+                onToggleColumnNotifications={handleToggleColumnNotifications}
+                onSetStatusLabels={handleSetStatusLabels}
+                onCreateAutomation={handleCreateAutomation}
               />
             )}
           </Suspense>
@@ -1751,9 +1778,9 @@ function AppContent({
           <ItemDetailPanel
             item={selectedItem}
             columns={INITIAL_COLUMNS}
-            onAddItemUpdate={() => {}}
+            onAddItemUpdate={handleAddItemUpdate}
             onClose={() => setSelectedItem(null)}
-            onUpdateItem={() => {}}
+            onUpdateItem={(id, data) => handleUpdateItem(id, data)}
           />
         )}
         <GlobalModals setBoardRules={() => {}} />
@@ -1788,9 +1815,9 @@ function AppContent({
         <ItemDetailPanel
           item={selectedItem}
           columns={INITIAL_COLUMNS}
-          onAddItemUpdate={() => {}}
+          onAddItemUpdate={handleAddItemUpdate}
           onClose={() => setSelectedItem(null)}
-          onUpdateItem={() => {}}
+          onUpdateItem={(id, data) => handleUpdateItem(id, data)}
         />
       )}
       <GlobalModals setBoardRules={() => {}} />
