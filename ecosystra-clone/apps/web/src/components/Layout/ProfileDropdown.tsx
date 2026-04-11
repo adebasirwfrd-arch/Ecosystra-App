@@ -32,7 +32,7 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({
   ];
 
   const adminItems = [
-    { icon: Users, label: 'Members', path: '/members', count: 12 },
+    { icon: Users, label: 'Members', path: '/members' },
     { icon: Settings, label: 'Workspace settings', path: '/settings' },
     { icon: Layout, label: 'Switch workspace', path: '/settings' },
   ];
@@ -79,11 +79,11 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
             <div style={{ 
               width: '44px', height: '44px', borderRadius: '12px', 
-              background: 'linear-gradient(135deg, var(--primary), #6C6CFF)',
+              background: user.avatarUrl ? `url(${user.avatarUrl}) center/cover` : 'linear-gradient(135deg, var(--primary), #6C6CFF)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: '16px'
+              color: 'white', fontWeight: 700, fontSize: '16px', overflow: 'hidden'
             }}>
-              {user.name.split(' ').map(n => n[0]).join('')}
+              {!user.avatarUrl && user.name.split(' ').map((n: string) => n[0]).join('')}
             </div>
             <div>
               <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '15px' }}>{user.name}</div>
@@ -150,7 +150,6 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({
             >
               <item.icon size={16} />
               <span style={{ flex: 1 }}>{item.label}</span>
-              {item.count && <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{item.count}</span>}
             </div>
           ))}
 

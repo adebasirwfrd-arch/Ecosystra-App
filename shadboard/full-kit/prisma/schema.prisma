@@ -3,7 +3,7 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
   // Separate from Ecosystra domain tables in `public` (same Supabase DB).
-  schemas   = ["nextauth", "shadboard_content"]
+  schemas   = ["nextauth", "shadboard_content", "public"]
 }
 
 generator client {
@@ -194,4 +194,146 @@ model CrmSalesRep {
 
   @@map("crm_sales_rep")
   @@schema("shadboard_content")
+}
+
+// ============================================================
+// Ecosystra domain models (schema: public)
+// ============================================================
+
+model EcoWorkspace {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  folders     EcoFolder[]
+  boards      EcoBoard[]
+  members     EcoMember[]
+  createdAt   DateTime     @default(now())
+
+  @@map("Workspace")
+  @@schema("public")
+}
+
+model EcoFolder {
+  id          String       @id @default(uuid())
+  name        String
+  workspaceId String
+  workspace   EcoWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  boards      EcoBoard[]
+
+  @@map("Folder")
+  @@schema("public")
+}
+
+model EcoBoard {
+  id              String       @id @default(uuid())
+  name            String
+  workspaceId     String
+  workspace       EcoWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folderId        String?
+  folder          EcoFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdByUserId String?
+  createdBy       EcoUser?     @relation("BoardCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  columns         Json         @default("[]")
+  subitemColumns  Json         @default("[]")
+  groups          EcoGroup[]
+  items           EcoItem[]
+  createdAt       DateTime     @default(now())
+
+  @@map("Board")
+  @@schema("public")
+}
+
+model EcoGroup {
+  id      String   @id @default(uuid())
+  name    String
+  color   String?
+  boardId String
+  board   EcoBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  items   EcoItem[]
+
+  @@map("Group")
+  @@schema("public")
+}
+
+model EcoItem {
+  id              String    @id @default(uuid())
+  name            String
+  boardId         String
+  board           EcoBoard  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  groupId         String?
+  group           EcoGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  createdByUserId String?
+  createdBy       EcoUser?  @relation("ItemCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  parentItemId    String?
+  parentItem      EcoItem?  @relation("ItemToSubitems", fields: [parentItemId], references: [id])
+  subitems        EcoItem[] @relation("ItemToSubitems")
+  dynamicData     Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  auditLogs       EcoTaskAuditLog[]
+
+  @@map("Item")
+  @@schema("public")
+}
+
+model EcoUser {
+  id            String             @id @default(uuid())
+  email         String             @unique
+  name          String?
+  avatarUrl     String?
+  status        String?            @default("Active")
+  notifications EcoNotification[]
+  memberships   EcoMember[]
+  boardsCreated EcoBoard[]         @relation("BoardCreatedBy")
+  itemsCreated  EcoItem[]          @relation("ItemCreatedBy")
+  auditEntries  EcoTaskAuditLog[]
+  createdAt     DateTime           @default(now())
+
+  @@map("User")
+  @@schema("public")
+}
+
+model EcoTaskAuditLog {
+  id          String   @id @default(uuid())
+  itemId      String
+  item        EcoItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  actor       EcoUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  fieldKey    String
+  oldValue    Json?
+  newValue    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([itemId])
+  @@map("TaskAuditLog")
+  @@schema("public")
+}
+
+model EcoNotification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      EcoUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  type      String?
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@map("Notification")
+  @@schema("public")
+}
+
+model EcoMember {
+  id          String       @id @default(uuid())
+  userId      String
+  user        EcoUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   EcoWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        String       @default("MEMBER")
+  createdAt   DateTime     @default(now())
+
+  @@unique([userId, workspaceId])
+  @@map("Member")
+  @@schema("public")
 }

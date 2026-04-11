@@ -1,4 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useApolloClient } from "@apollo/client";
+import type { BoardGroup, BoardItem, ColumnDef } from "./boardTypes";
+import { EcoGroupTanStackBody } from "./ecoBoardTable/EcoGroupTanStackBody";
+import { WORKSPACE_USERS_SEARCH } from "../../lib/gql-queries";
 import * as Lucide from "lucide-react";
 
 const {
@@ -57,56 +61,11 @@ const {
 } = Lucide as any;
 
 /* ============ Types ============ */
-export interface ColumnDef {
-  id: string;
-  title: string;
-  type:
-    | "status"
-    | "person"
-    | "date"
-    | "text"
-    | "priority"
-    | "timestamp"
-    | "file"
-    | "numbers"
-    | "tags"
-    | "timeline"
-    | "due_date_priority"
-    | "notes_category"
-    | "checkbox"
-    | "dropdown"
-    | "doc"
-    | "formula"
-    | "connect"
-    | "extract"
-    | "mirror"
-    | "link"
-    | "world_clock";
-  width?: number;
-  wrapText?: boolean;
-}
-
-export interface BoardItem {
-  id: string;
-  name: string;
-  groupId: string;
-  dynamicData: Record<string, any>;
-  subitems?: BoardItem[];
-  subitemColumns?: ColumnDef[];
-  subitemPrimaryColumnTitle?: string;
-}
-
-export interface BoardGroup {
-  id: string;
-  name: string;
-  color: string;
-  items: BoardItem[];
-  columns?: ColumnDef[];
-  primaryColumnTitle?: string;
-}
+export type { BoardGroup, BoardItem, ColumnDef } from "./boardTypes";
 
 const INITIAL_COLUMNS: ColumnDef[] = [
   { id: "owner", title: "Owner", type: "person" },
+  { id: "assignee", title: "Person", type: "person" },
   { id: "status", title: "Status", type: "status" },
   { id: "due_date", title: "Due date", type: "date" },
   { id: "last_updated", title: "Last updated", type: "timestamp" },
@@ -913,16 +872,173 @@ const TextEditor: React.FC<{
   );
 };
 
+/** Map search text + API results to one user (for Enter / click-outside commit). */
+function resolvePersonPick(
+  query: string,
+  results: {
+    id: string;
+    name: string | null;
+    email: string;
+    avatarUrl?: string | null;
+  }[],
+  mode: "outside" | "enter",
+) {
+  const q = query.trim();
+  if (!q || results.length === 0) return null;
+  const lower = q.toLowerCase();
+  const byEmail = results.find((u) => u.email.toLowerCase() === lower);
+  if (byEmail) return byEmail;
+  const byName = results.find((u) => u.name && u.name.toLowerCase() === lower);
+  if (byName) return byName;
+  if (results.length === 1) return results[0];
+  if (mode === "enter") return results[0];
+  return null;
+}
+
+/**
+ * Person columns read from fixed API keys: `owner` / `owner_*` vs `assignee` / `assignee_*`.
+ * Boards saved in DB may use a column id ≠ "assignee" for the Person column; mutations still
+ * write assignee fields, so we must not use only dynamicData[column.id] for display.
+ */
+function getPersonCellData(
+  column: ColumnDef,
+  dynamicData: Record<string, unknown> | undefined,
+): { displayValue: string; avatarUrl: string | undefined } {
+  const d = dynamicData || {};
+  if (column.id === "owner") {
+    return {
+      displayValue: String(d.owner ?? ""),
+      avatarUrl: (d.owner_avatarUrl as string | undefined) || undefined,
+    };
+  }
+  if (column.type === "person") {
+    return {
+      displayValue: String(d.assignee ?? d[column.id] ?? ""),
+      avatarUrl:
+        (d.assignee_avatarUrl as string | undefined) || undefined,
+    };
+  }
+  return {
+    displayValue: String(d[column.id] ?? ""),
+    avatarUrl: undefined,
+  };
+}
+
+/** Avatar circle: photo when URL exists, else colored initials. */
+const PersonAvatarFace: React.FC<{
+  label: string;
+  avatarUrl?: string | null;
+  size?: number;
+}> = ({ label, avatarUrl, size = 28 }) => {
+  const initials = getInitials(label);
+  const idx = initials ? initials.charCodeAt(0) % AVATAR_COLORS.length : 0;
+  return (
+    <div
+      className="person-avatar"
+      style={{
+        background: !avatarUrl && label ? AVATAR_COLORS[idx] : undefined,
+        width: size,
+        height: size,
+        fontSize: size < 24 ? 9 : 11,
+        overflow: "hidden",
+        flexShrink: 0,
+      }}
+    >
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt=""
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : (
+        initials || ""
+      )}
+    </div>
+  );
+};
+
 const PersonCell: React.FC<{
+  columnId: string;
+  itemId: string;
+  workspaceId?: string | null;
   value: string;
+  /** Profile image URL persisted on the task (owner_avatarUrl / assignee_avatarUrl). */
+  avatarUrl?: string | null;
   onChange: (val: string) => void;
-}> = ({ value, onChange }) => {
+  onPersonAssign?: (
+    itemId: string,
+    columnId: string,
+    user: { id: string; name: string | null; email: string } | null,
+  ) => void | Promise<void>;
+}> = ({
+  columnId,
+  itemId,
+  workspaceId,
+  value,
+  avatarUrl,
+  onChange,
+  onPersonAssign,
+}) => {
+  const client = useApolloClient();
   const [open, setOpen] = useState(false);
-  const people = ["Ade Basir", "John Doe", "Jane Smith"];
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<
+    { id: string; name: string | null; email: string; avatarUrl?: string | null }[]
+  >([]);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const legacyPeople = ["Ade Basir", "John Doe", "Jane Smith"];
+  const useApi = !!(workspaceId && onPersonAssign);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const commitSearchSelection = useCallback(
+    async (mode: "outside" | "enter") => {
+      if (!useApi || !onPersonAssign) return;
+      const picked = resolvePersonPick(search, results, mode);
+      if (!picked) return;
+      await onPersonAssign(itemId, columnId, picked);
+    },
+    [useApi, onPersonAssign, search, results, itemId, columnId],
+  );
+
+  useEffect(() => {
+    if (!open || !useApi || !workspaceId) return;
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const q = search.trim() || ".";
+        const { data } = await client.query({
+          query: WORKSPACE_USERS_SEARCH,
+          variables: { workspaceId, query: q, take: 12 },
+          fetchPolicy: "network-only",
+        });
+        setResults(data.workspaceUsers || []);
+      } catch {
+        setResults([]);
+      }
+    }, 200);
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [search, open, useApi, workspaceId, client]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const root = rootRef.current;
+      if (!root || root.contains(e.target as Node)) return;
+      void commitSearchSelection("outside").finally(() => {
+        setOpen(false);
+        setSearch("");
+      });
+    };
+    document.addEventListener("mousedown", onDocMouseDown, true);
+    return () => document.removeEventListener("mousedown", onDocMouseDown, true);
+  }, [open, commitSearchSelection]);
 
   if (!value && !open) {
     return (
       <div
+        ref={rootRef}
         className="person-avatar-empty"
         onClick={(e) => {
           e.stopPropagation();
@@ -933,15 +1049,15 @@ const PersonCell: React.FC<{
     );
   }
 
-  const initials = getInitials(value);
-  const idx = initials ? initials.charCodeAt(0) % AVATAR_COLORS.length : 0;
-
   return (
-    <div style={{ position: "relative" }}>
+    <div ref={rootRef} style={{ position: "relative" }}>
       <div
-        className="person-avatar"
         style={{
-          background: value ? AVATAR_COLORS[idx] : undefined,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          minWidth: 0,
+          width: "100%",
           cursor: "pointer",
         }}
         title={value}
@@ -950,43 +1066,119 @@ const PersonCell: React.FC<{
           setOpen(!open);
         }}
       >
-        {value ? initials : ""}
+        <PersonAvatarFace label={value} avatarUrl={avatarUrl} />
+        {value ? (
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontSize: 12,
+              color: "var(--text-primary)",
+            }}
+          >
+            {value}
+          </span>
+        ) : null}
       </div>
       {open && (
         <div className="person-dropdown" onClick={(e) => e.stopPropagation()}>
-          {people.map((p) => (
-            <div
-              key={p}
-              className="person-dropdown-item"
-              onClick={() => {
-                onChange(p);
-                setOpen(false);
-              }}
-            >
-              <div
-                className="person-avatar"
-                style={{
-                  background:
-                    AVATAR_COLORS[
-                      getInitials(p).charCodeAt(0) % AVATAR_COLORS.length
-                    ],
-                  width: 24,
-                  height: 24,
-                  fontSize: 10,
+          {useApi && (
+            <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border-light)" }}>
+              <input
+                type="search"
+                placeholder="Search name or email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  await commitSearchSelection("enter");
+                  setOpen(false);
+                  setSearch("");
                 }}
-              >
-                {getInitials(p)}
-              </div>
-              <span>{p}</span>
-              {p === value && (
-                <Check size={12} style={{ marginLeft: "auto" }} />
-              )}
+                className="cell-text-input"
+                style={{ width: "100%", fontSize: 12 }}
+                autoFocus
+              />
             </div>
-          ))}
+          )}
+          {useApi
+            ? results.map((u) => (
+                <div
+                  key={u.id}
+                  className="person-dropdown-item"
+                  onClick={async () => {
+                    if (onPersonAssign) {
+                      await onPersonAssign(itemId, columnId, u);
+                    }
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <PersonAvatarFace
+                    label={u.name || u.email || ""}
+                    avatarUrl={u.avatarUrl}
+                    size={24}
+                  />
+                  <span style={{ flex: 1 }}>
+                    {u.name || u.email}
+                    {u.email ? (
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: 11,
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        {u.email}
+                      </span>
+                    ) : null}
+                  </span>
+                  {(u.name || u.email) === value && (
+                    <Check size={12} style={{ marginLeft: "auto" }} />
+                  )}
+                </div>
+              ))
+            : legacyPeople.map((p) => (
+                <div
+                  key={p}
+                  className="person-dropdown-item"
+                  onClick={() => {
+                    onChange(p);
+                    setOpen(false);
+                  }}
+                >
+                  <div
+                    className="person-avatar"
+                    style={{
+                      background:
+                        AVATAR_COLORS[
+                          getInitials(p).charCodeAt(0) % AVATAR_COLORS.length
+                        ],
+                      width: 24,
+                      height: 24,
+                      fontSize: 10,
+                    }}
+                  >
+                    {getInitials(p)}
+                  </div>
+                  <span>{p}</span>
+                  {p === value && (
+                    <Check size={12} style={{ marginLeft: "auto" }} />
+                  )}
+                </div>
+              ))}
           <div
             className="person-dropdown-item"
-            onClick={() => {
-              onChange("");
+            onClick={async () => {
+              if (useApi && onPersonAssign) {
+                await onPersonAssign(itemId, columnId, null);
+              } else {
+                onChange("");
+              }
               setOpen(false);
             }}
             style={{ color: "var(--text-secondary)" }}
@@ -1162,6 +1354,13 @@ interface VirtualBoardProps {
   ) => void;
   onCreateAutomation?: (type: string, columnId: string) => void;
   columnSettings?: Record<string, any>;
+  workspaceId?: string | null;
+  boardId?: string | null;
+  onPersonAssign?: (
+    itemId: string,
+    columnId: string,
+    user: { id: string; name: string | null; email: string } | null,
+  ) => void | Promise<void>;
 }
 
 export const VirtualBoard: React.FC<VirtualBoardProps> = ({
@@ -1195,6 +1394,9 @@ export const VirtualBoard: React.FC<VirtualBoardProps> = ({
   onSetStatusLabels,
   onCreateAutomation,
   columnSettings = {},
+  workspaceId = null,
+  boardId: _boardId = null,
+  onPersonAssign,
   searchTerm,
   onSearchChange,
   hiddenColumns = [],
@@ -2592,12 +2794,12 @@ export const VirtualBoard: React.FC<VirtualBoardProps> = ({
     }
   };
 
-  const renderItem = (
+  function renderItem(
     item: BoardItem,
     level: number = 0,
     groupColor: string,
     parentColumns?: ColumnDef[],
-  ): React.ReactElement => {
+  ): React.ReactElement {
     const isExpanded = expandedSubitems.has(item.id);
     const hasSubitems = item.subitems && item.subitems.length > 0;
 
@@ -2760,155 +2962,164 @@ export const VirtualBoard: React.FC<VirtualBoardProps> = ({
           <div style={{ width: 40 }} />
         </div>
 
-        {isExpanded && (
-          <div className="subitems-container">
-            <div className="subitem-headers" data-level={level + 1}>
-              <div className="level-spacer" data-level={level + 1} />
-              <div
-                className="group-indicator"
-                style={{ background: "transparent" }}
-              />
-              <div className="item-checkbox" />
-              <div className="subitem-toggle" />
-              <div
-                className={`column-header col-name ${viewSettings?.pinnedColumnsCount && viewSettings.pinnedColumnsCount > 0 ? "sticky-column" : ""}`}
-                style={
-                  viewSettings?.pinnedColumnsCount &&
-                  viewSettings.pinnedColumnsCount > 0
-                    ? {
-                        position: "sticky",
-                        left: getPinnedLeft(
-                          "name",
-                          item.subitemColumns || INITIAL_SUBITEM_COLUMNS,
-                          level + 1,
-                        ),
-                        width: 300,
-                        zIndex: 20,
-                        backgroundColor: "var(--bg-surface)",
-                      }
-                    : { width: 300 }
-                }
-              >
-                {editingColumn?.id === "subitem-primary" &&
-                editingColumn?.level === level + 1 &&
-                editingColumn?.contextId === item.id ? (
-                  <input
-                    ref={columnEditRef}
-                    className="column-title-input"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={finishRenameColumn}
-                    onKeyDown={(e) => e.key === "Enter" && finishRenameColumn()}
-                  />
-                ) : (
-                  <span
-                    onDoubleClick={() =>
-                      handleHeaderDoubleClick(
-                        "subitem-primary",
-                        item.subitemPrimaryColumnTitle || "Subitem",
-                        level + 1,
-                        item.id,
-                      )
-                    }
-                  >
-                    {item.subitemPrimaryColumnTitle || "Subitem"}
-                  </span>
-                )}
-              </div>
-              {(item.subitemColumns || INITIAL_SUBITEM_COLUMNS)
-                .filter((c: any) => !hiddenColumns.includes(c.id))
-                .map((col: any, idx: number) => {
-                  const isPinned =
-                    viewSettings?.pinnedColumnsCount &&
-                    viewSettings.pinnedColumnsCount > idx + 1;
-                  const headerStyle: React.CSSProperties = {
-                    width: col.width || 140,
-                  };
-
-                  if (isPinned) {
-                    headerStyle.position = "sticky";
-                    headerStyle.left = getPinnedLeft(
-                      col.id,
-                      item.subitemColumns || INITIAL_SUBITEM_COLUMNS,
-                      level + 1,
-                    );
-                    headerStyle.zIndex = 20;
-                    headerStyle.backgroundColor = "var(--bg-surface)";
-                    headerStyle.boxShadow =
-                      "inset -1px 0 0 var(--border-default)";
-                  }
-
-                  return (
-                    <div
-                      key={col.id}
-                      className={`column-header col-standard ${isPinned ? "sticky-column" : ""}`}
-                      style={headerStyle}
-                      onDoubleClick={() =>
-                        handleHeaderDoubleClick(
-                          col.id,
-                          col.title,
-                          level + 1,
-                          item.id,
-                        )
-                      }
-                    >
-                      {editingColumn?.id === col.id &&
-                      editingColumn?.level === level + 1 &&
-                      editingColumn?.contextId === item.id ? (
-                        <input
-                          ref={columnEditRef}
-                          className="column-title-input"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={finishRenameColumn}
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && finishRenameColumn()
-                          }
-                        />
-                      ) : (
-                        col.title
-                      )}
-                    </div>
-                  );
-                })}
-              <div
-                style={{
-                  width: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Plus
-                  size={14}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => {
-                    setAddingSubitemColumnToId(item.id);
-                    setColumnPickerOpen(true);
-                  }}
-                />
-              </div>
-            </div>
-
-            {item.subitems?.map((sub) =>
-              renderItem(sub, level + 1, groupColor, item.subitemColumns),
-            )}
-
-            <div
-              className="add-subitem-row"
-              onClick={() => onAddSubitem?.(item.id, "")}
-              style={{ height: rowHeight }}
-            >
-              <div className="level-spacer" data-level={level + 1} />
-              <div style={{ width: 66 }} />
-              <Plus size={12} />
-              <span>Add subitem</span>
-            </div>
-          </div>
-        )}
+        {renderSubitemsContainer(item, level, groupColor, parentColumns)}
       </React.Fragment>
     );
-  };
+  }
+
+  function renderSubitemsContainer(
+    item: BoardItem,
+    level: number,
+    groupColor: string,
+    parentColumns?: ColumnDef[],
+  ): React.ReactNode {
+    if (!expandedSubitems.has(item.id)) return null;
+    return (
+      <div className="subitems-container">
+        <div className="subitem-headers" data-level={level + 1}>
+          <div className="level-spacer" data-level={level + 1} />
+          <div
+            className="group-indicator"
+            style={{ background: "transparent" }}
+          />
+          <div className="item-checkbox" />
+          <div className="subitem-toggle" />
+          <div
+            className={`column-header col-name ${viewSettings?.pinnedColumnsCount && viewSettings.pinnedColumnsCount > 0 ? "sticky-column" : ""}`}
+            style={
+              viewSettings?.pinnedColumnsCount &&
+              viewSettings.pinnedColumnsCount > 0
+                ? {
+                    position: "sticky",
+                    left: getPinnedLeft(
+                      "name",
+                      item.subitemColumns || INITIAL_SUBITEM_COLUMNS,
+                      level + 1,
+                    ),
+                    width: 300,
+                    zIndex: 20,
+                    backgroundColor: "var(--bg-surface)",
+                  }
+                : { width: 300 }
+            }
+          >
+            {editingColumn?.id === "subitem-primary" &&
+            editingColumn?.level === level + 1 &&
+            editingColumn?.contextId === item.id ? (
+              <input
+                ref={columnEditRef}
+                className="column-title-input"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={finishRenameColumn}
+                onKeyDown={(e) => e.key === "Enter" && finishRenameColumn()}
+              />
+            ) : (
+              <span
+                onDoubleClick={() =>
+                  handleHeaderDoubleClick(
+                    "subitem-primary",
+                    item.subitemPrimaryColumnTitle || "Subitem",
+                    level + 1,
+                    item.id,
+                  )
+                }
+              >
+                {item.subitemPrimaryColumnTitle || "Subitem"}
+              </span>
+            )}
+          </div>
+          {(item.subitemColumns || INITIAL_SUBITEM_COLUMNS)
+            .filter((c: any) => !hiddenColumns.includes(c.id))
+            .map((col: any, idx: number) => {
+              const isPinned =
+                viewSettings?.pinnedColumnsCount &&
+                viewSettings.pinnedColumnsCount > idx + 1;
+              const headerStyle: React.CSSProperties = {
+                width: col.width || 140,
+              };
+
+              if (isPinned) {
+                headerStyle.position = "sticky";
+                headerStyle.left = getPinnedLeft(
+                  col.id,
+                  item.subitemColumns || INITIAL_SUBITEM_COLUMNS,
+                  level + 1,
+                );
+                headerStyle.zIndex = 20;
+                headerStyle.backgroundColor = "var(--bg-surface)";
+                headerStyle.boxShadow = "inset -1px 0 0 var(--border-default)";
+              }
+
+              return (
+                <div
+                  key={col.id}
+                  className={`column-header col-standard ${isPinned ? "sticky-column" : ""}`}
+                  style={headerStyle}
+                  onDoubleClick={() =>
+                    handleHeaderDoubleClick(
+                      col.id,
+                      col.title,
+                      level + 1,
+                      item.id,
+                    )
+                  }
+                >
+                  {editingColumn?.id === col.id &&
+                  editingColumn?.level === level + 1 &&
+                  editingColumn?.contextId === item.id ? (
+                    <input
+                      ref={columnEditRef}
+                      className="column-title-input"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={finishRenameColumn}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && finishRenameColumn()
+                      }
+                    />
+                  ) : (
+                    col.title
+                  )}
+                </div>
+              );
+            })}
+          <div
+            style={{
+              width: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Plus
+              size={14}
+              style={{ cursor: "pointer" }}
+              onClick={() => {
+                setAddingSubitemColumnToId(item.id);
+                setColumnPickerOpen(true);
+              }}
+            />
+          </div>
+        </div>
+
+        {item.subitems?.map((sub) =>
+          renderItem(sub, level + 1, groupColor, item.subitemColumns),
+        )}
+
+        <div
+          className="add-subitem-row"
+          onClick={() => onAddSubitem?.(item.id, "")}
+          style={{ height: rowHeight }}
+        >
+          <div className="level-spacer" data-level={level + 1} />
+          <div style={{ width: 66 }} />
+          <Plus size={12} />
+          <span>Add subitem</span>
+        </div>
+      </div>
+    );
+  }
 
   const renderCell = (column: ColumnDef, item: BoardItem, itemId: string) => {
     if (hiddenColumns.includes(column.id)) return null;
@@ -2953,13 +3164,20 @@ export const VirtualBoard: React.FC<VirtualBoardProps> = ({
             onChange={(val) => handleCellUpdate(itemId, column.id, val)}
           />
         );
-      case "person":
+      case "person": {
+        const person = getPersonCellData(column, item.dynamicData);
         return (
           <PersonCell
-            value={value || ""}
+            columnId={column.id}
+            itemId={itemId}
+            workspaceId={workspaceId}
+            value={person.displayValue || ""}
+            avatarUrl={person.avatarUrl}
             onChange={(val) => handleCellUpdate(itemId, column.id, val)}
+            onPersonAssign={onPersonAssign}
           />
         );
+      }
       case "date":
         return (
           <DateEditor
@@ -3558,8 +3776,32 @@ export const VirtualBoard: React.FC<VirtualBoardProps> = ({
                   </div>
                 </div>
 
-                {/* Item Rows */}
-                {group.items.map((item) => renderItem(item, 0, group.color))}
+                {/* Item rows — TanStack Table core row model + legacy subitem tree */}
+                <EcoGroupTanStackBody
+                  group={group}
+                  items={group.items}
+                  columns={group.columns || INITIAL_COLUMNS}
+                  hiddenColumns={hiddenColumns}
+                  viewSettings={viewSettings}
+                  rowHeight={rowHeight}
+                  getPinnedLeft={getPinnedLeft}
+                  expandedSubitems={expandedSubitems}
+                  toggleSubitems={toggleSubitems}
+                  selectedItem={selectedItem}
+                  editingItem={editingItem}
+                  editValue={editValue}
+                  setEditValue={setEditValue}
+                  startEditItem={startEditItem}
+                  finishEditItem={finishEditItem}
+                  onItemClick={onItemClick}
+                  clickTimeoutRef={clickTimeoutRef}
+                  editRef={editRef}
+                  renderCell={renderCell}
+                  handleContextMenu={handleContextMenu}
+                  renderSubitemsAfterRow={(item) =>
+                    renderSubitemsContainer(item, 0, group.color)
+                  }
+                />
 
                 {/* Add task row */}
                 <div className="add-item-row" style={{ height: rowHeight }}>

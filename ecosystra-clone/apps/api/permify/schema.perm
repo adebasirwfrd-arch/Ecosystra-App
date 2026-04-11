@@ -1,0 +1,17 @@
+entity user {}
+
+entity project {
+  relation owner @user
+  relation admin @user
+
+  action assign = owner or admin
+}
+
+entity task {
+  relation project @project
+  relation owner @user
+  relation assignee @user
+
+  action edit = owner or assignee or project.admin
+  action view = owner or assignee or project.admin
+}

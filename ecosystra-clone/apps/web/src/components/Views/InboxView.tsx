@@ -50,7 +50,12 @@ export const InboxView: React.FC<InboxViewProps> = ({ notifications, onMarkAsRea
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{notif.title}</span>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {new Date(parseInt(notif.createdAt || Date.now())).toLocaleDateString()}
+                  {(() => {
+                    const t = new Date(notif.createdAt);
+                    return Number.isNaN(t.getTime())
+                      ? '—'
+                      : t.toLocaleDateString();
+                  })()}
                 </span>
               </div>
               <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{notif.message}</p>

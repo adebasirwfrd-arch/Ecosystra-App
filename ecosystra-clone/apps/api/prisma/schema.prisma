@@ -44,6 +44,8 @@ model Board {
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folderId    String?    
   folder      Folder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdByUserId String?
+  createdBy       User?   @relation("BoardCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   // Menyimpan referensi skema meta kolom (misal: [{ id: "col1", title: "Status", type: "dropdown" }])
   columns     Json       @default("[]")
   subitemColumns Json    @default("[]")
@@ -75,6 +77,9 @@ model Item {
   board         Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
   groupId       String?
   group         Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  /// Permify `task.owner` bootstrap for top-level tasks.
+  createdByUserId String?
+  createdBy       User?  @relation("ItemCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   
   // Adjacency List untuk kapabilitas hierarki Subitems
   parentItemId  String?
@@ -88,6 +93,8 @@ model Item {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  auditLogs     TaskAuditLog[]
+
   @@schema("public")
 }
 
@@ -99,8 +106,27 @@ model User {
   status        String?  @default("Active")
   notifications Notification[]
   memberships   Member[]
+  boardsCreated Board[]  @relation("BoardCreatedBy")
+  itemsCreated  Item[]   @relation("ItemCreatedBy")
+  auditEntries  TaskAuditLog[]
   createdAt     DateTime @default(now())
 
+  @@schema("public")
+}
+
+/// Row-level audit for task fields (Bemi-style trail; complements optional Bemi triggers after Prisma 6 upgrade).
+model TaskAuditLog {
+  id          String   @id @default(uuid())
+  itemId      String
+  item        Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  fieldKey    String
+  oldValue    Json?
+  newValue    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([itemId])
   @@schema("public")
 }
 
@@ -111,7 +137,8 @@ model Notification {
   title     String
   message   String
   isRead    Boolean  @default(false)
-  link      String?  // Optional link to associated object
+  type      String?
+  link      String?
   createdAt DateTime @default(now())
 
   @@schema("public")
@@ -123,9 +150,10 @@ model Member {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  role        String    @default("MEMBER") // ADMIN, MEMBER, VIEWER
+  role        String    @default("MEMBER") // ADMIN, MANAGER, MEMBER, VIEWER
   createdAt   DateTime  @default(now())
 
   @@unique([userId, workspaceId])
   @@schema("public")
 }
+

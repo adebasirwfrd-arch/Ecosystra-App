@@ -28,6 +28,10 @@ import {
   useEcosystraMeQuery,
   useEcosystraNotificationsQuery,
 } from './hooks/use-ecosystra-queries';
+import {
+  SET_TASK_ASSIGNEE,
+  SET_TASK_OWNER,
+} from './lib/gql-queries';
 
 const VirtualBoardLazy = lazy(() =>
   import('./components/Board/VirtualBoard').then((m) => ({ default: m.VirtualBoard }))
@@ -192,6 +196,7 @@ const UPDATE_USER_STATUS = gql`
 /* ============ Initial Definitions ============ */
 const INITIAL_COLUMNS: ColumnDef[] = [
   { id: 'owner', title: 'Owner', type: 'person' },
+  { id: 'assignee', title: 'Person', type: 'person' },
   { id: 'status', title: 'Status', type: 'status' },
   { id: 'due_date', title: 'Due date', type: 'date' },
   { id: 'last_updated', title: 'Last updated', type: 'timestamp' },
@@ -742,6 +747,7 @@ function AppContent({
   const [groups, setGroups] = useState<BoardGroup[]>(DEMO_GROUPS);
   const [boardTitle, setBoardTitle] = useState("Task management");
   const [boardId, setBoardId] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [savedViews, setSavedViews] = useState<any[]>([]);
   const [isBoardStarred, setIsBoardStarred] = useState(false);
@@ -767,24 +773,33 @@ function AppContent({
   });
   const [boardRules, setBoardRules] = useState<any[]>([]);
 
+  const allBoardItems = useMemo(() =>
+    groups.flatMap(g => (g.items || []).map((item: any) => ({ ...item, groupId: item.groupId || g.id }))),
+    [groups]
+  );
+
   const { data: boardData } = useEcosystraBoardQuery();
-  const { data: meData, refetch: refetchUser } = useEcosystraMeQuery();
-  const { data: notifData, refetch: refetchNotifs } =
-    useEcosystraNotificationsQuery();
+  const { data: meData } = useEcosystraMeQuery();
+  const { data: notifData } = useEcosystraNotificationsQuery();
   const [updateItemDynamicData] = useMutation(UPDATE_ITEM_DYNAMIC_DATA);
   const [updateItemName] = useMutation(UPDATE_ITEM_NAME);
+  const boardRefetch = {
+    refetchQueries: ["GetOrCreateBoard", "GetNotifications"] as const,
+  };
   const [updateGroup] = useMutation(UPDATE_GROUP);
-  const [createGroupMutation] = useMutation(CREATE_GROUP);
-  const [deleteGroupMutation] = useMutation(DELETE_GROUP);
-  const [createItemMutation] = useMutation(CREATE_ITEM);
-  const [deleteItemMutation] = useMutation(DELETE_ITEM);
-  const [bulkCreateItemsMutation] = useMutation(BULK_CREATE_ITEMS);
+  const [createGroupMutation] = useMutation(CREATE_GROUP, boardRefetch);
+  const [deleteGroupMutation] = useMutation(DELETE_GROUP, boardRefetch);
+  const [createItemMutation] = useMutation(CREATE_ITEM, boardRefetch);
+  const [deleteItemMutation] = useMutation(DELETE_ITEM, boardRefetch);
+  const [bulkCreateItemsMutation] = useMutation(BULK_CREATE_ITEMS, boardRefetch);
   const [updateBoardMutation] = useMutation(UPDATE_BOARD);
   const [updateBoardMetadataMutation] = useMutation(UPDATE_BOARD_METADATA);
   const [addItemUpdateMutation] = useMutation(ADD_ITEM_UPDATE);
-  const [archiveGroupMutation] = useMutation(ARCHIVE_GROUP);
-  
-  const [updateUserStatusMutation] = useMutation(UPDATE_USER_STATUS);
+  const [archiveGroupMutation] = useMutation(ARCHIVE_GROUP, boardRefetch);
+
+  const [updateUserStatusMutation] = useMutation(UPDATE_USER_STATUS, { refetchQueries: ["Me"] });
+  const [setTaskOwnerMutation] = useMutation(SET_TASK_OWNER, boardRefetch);
+  const [setTaskAssigneeMutation] = useMutation(SET_TASK_ASSIGNEE, boardRefetch);
 
   useEffect(() => {
     setActiveView(initialView);
@@ -811,7 +826,6 @@ function AppContent({
   const handleUpdateStatus = async (status: string) => {
     try {
       await updateUserStatusMutation({ variables: { status } });
-      refetchUser();
     } catch (err) {
       console.error('Failed to update status:', err);
     }
@@ -826,11 +840,32 @@ function AppContent({
     window.location.reload();
   };
 
+  const handlePersonAssign = async (
+    itemId: string,
+    columnId: string,
+    user: { id: string; name: string | null; email: string } | null
+  ) => {
+    try {
+      if (columnId === "owner") {
+        await setTaskOwnerMutation({
+          variables: { itemId, ownerUserId: user?.id ?? null },
+        });
+      } else {
+        await setTaskAssigneeMutation({
+          variables: { itemId, assigneeUserId: user?.id ?? null },
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     const board = boardData?.getOrCreateBoard;
     if (!board) return;
 
     setBoardId(board.id);
+    setWorkspaceId(board.workspaceId || null);
     setBoardTitle(board.name || 'Task management');
 
     const boardColumns = Array.isArray(board.columns) && board.columns.length > 0 ? board.columns : INITIAL_COLUMNS;
@@ -1639,7 +1674,7 @@ function AppContent({
     return baseGroups;
   }, [groups, searchTerm, filters, sortConfig, viewSettings.groupBy]);
 
-  const [markAsRead] = useMutation(MARK_NOTIFICATION_AS_READ);
+  const [markAsRead] = useMutation(MARK_NOTIFICATION_AS_READ, { refetchQueries: ["GetNotifications"] });
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
 
   const notifications = notifData?.notifications || [];
@@ -1647,7 +1682,6 @@ function AppContent({
 
   const handleMarkAsRead = async (id: string) => {
     await markAsRead({ variables: { id } });
-    refetchNotifs();
   };
 
   const handleNavigate = (view: string) => {
@@ -1659,7 +1693,7 @@ function AppContent({
     }
   };
 
-  if (!currentUser) {
+  if (useExternalShell && !currentUser) {
     return (
       <AuthLayout>
         <Login onAuthenticated={(user) => setCurrentUser(user)} />
@@ -1751,22 +1785,25 @@ function AppContent({
                 onToggleColumnNotifications={handleToggleColumnNotifications}
                 onSetStatusLabels={handleSetStatusLabels}
                 onCreateAutomation={handleCreateAutomation}
+                workspaceId={workspaceId}
+                boardId={boardId}
+                onPersonAssign={handlePersonAssign}
               />
             )}
           </Suspense>
         </>
       )}
       {activeView === 'dashboard' && (
-        <DashboardView boardTitle={boardTitle} />
+        <DashboardView boardTitle={boardTitle} items={allBoardItems} groups={groups} />
       )}
       {activeView === 'profile' && (
         <ProfileView user={currentUser} onUpdateStatus={handleUpdateStatus} onLogout={handleLogout} />
       )}
-      {activeView === 'tasks' && <TasksView />}
-      {activeView === 'members' && <MembersView memberships={memberships} />}
+      {activeView === 'tasks' && <TasksView items={allBoardItems} groups={groups} currentUserId={currentUser?.id} />}
+      {activeView === 'members' && <MembersView workspaceId={workspaceId} />}
       {activeView === 'settings' && <SettingsView />}
       {activeView === 'inbox' && <InboxView notifications={notifications} onMarkAsRead={handleMarkAsRead} />}
-      {activeView === 'notifications' && <NotificationsView />}
+      {activeView === 'notifications' && <NotificationsView notifications={notifications} onMarkAsRead={handleMarkAsRead} />}
     </div>
   );
 
@@ -1802,10 +1839,11 @@ function AppContent({
     <div className="app-shell">
       <Sidebar onNavigate={handleNavigate} activeView={activeView} />
       <div className="main-content">
-        <TopBar 
-          user={currentUser} 
-          onLogout={handleLogout} 
-          onUpdateStatus={handleUpdateStatus} 
+        <TopBar
+          user={currentUser}
+          unreadCount={notifications.filter((n: any) => !n.isRead).length}
+          onLogout={handleLogout}
+          onUpdateStatus={handleUpdateStatus}
           onNavigate={handleNavigate}
         />
         {mainViewContent}

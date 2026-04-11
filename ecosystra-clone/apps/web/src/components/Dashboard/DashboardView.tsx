@@ -166,41 +166,90 @@ const FALLBACK = {
   sampleOwner: 'Ade Basir',
 } as const;
 
+interface BoardItem {
+  id: string;
+  name: string;
+  groupId?: string | null;
+  dynamicData?: Record<string, unknown>;
+}
+
+interface BoardGroup {
+  id: string;
+  name: string;
+  color?: string;
+}
+
 interface DashboardViewProps {
   boardTitle?: string;
+  items?: BoardItem[];
+  groups?: BoardGroup[];
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   boardTitle,
+  items = [],
+  groups = [],
 }) => {
   const dictionary = useOptionalEcosystraDictionary();
   const t = dictionary?.ecosystraApp.dashboardView ?? FALLBACK;
 
   const title = boardTitle ?? t.defaultTitle;
 
+  const statusCounts = useMemo(() => {
+    let done = 0, working = 0, stuck = 0, blank = 0;
+    for (const item of items) {
+      const s = ((item.dynamicData?.status as string) || '').toLowerCase();
+      if (s === 'done') done++;
+      else if (s === 'working on it') working++;
+      else if (s === 'stuck') stuck++;
+      else blank++;
+    }
+    return { done, working, stuck, blank, total: items.length };
+  }, [items]);
+
   const statsData = useMemo(
     () => [
-      { title: t.allTasks, value: 4 },
-      { title: t.inProgress, value: 1 },
-      { title: t.stuck, value: 1 },
-      { title: t.done, value: 1 },
+      { title: t.allTasks, value: statusCounts.total },
+      { title: t.inProgress, value: statusCounts.working },
+      { title: t.stuck, value: statusCounts.stuck },
+      { title: t.done, value: statusCounts.done },
     ],
-    [t]
+    [t, statusCounts]
   );
 
-  const pieData: PieSlice[] = useMemo(
-    () => [
-      { label: t.workingOnIt, value: 33.3, color: '#FDAB3D' },
-      { label: t.done, value: 33.3, color: '#00C875' },
-      { label: t.stuck, value: 33.3, color: '#E2445C' },
-    ],
-    [t]
-  );
+  const pieData: PieSlice[] = useMemo(() => {
+    const w = statusCounts.working;
+    const d = statusCounts.done;
+    const s = statusCounts.stuck;
+    const b = statusCounts.blank;
+    const total = w + d + s + b;
+    if (total === 0) return [{ label: t.workingOnIt, value: 1, color: '#ddd' }];
+    return [
+      ...(w > 0 ? [{ label: t.workingOnIt, value: w, color: '#FDAB3D' }] : []),
+      ...(d > 0 ? [{ label: t.done, value: d, color: '#00C875' }] : []),
+      ...(s > 0 ? [{ label: t.stuck, value: s, color: '#E2445C' }] : []),
+      ...(b > 0 ? [{ label: 'Not started', value: b, color: '#C4C4C4' }] : []),
+    ];
+  }, [t, statusCounts]);
 
-  const barData: BarData[] = useMemo(
-    () => [{ label: t.sampleOwner, value: 1, initials: 'AB' }],
-    [t]
-  );
+  const barData: BarData[] = useMemo(() => {
+    const ownerMap: Record<string, { name: string; count: number }> = {};
+    for (const item of items) {
+      const ownerName = (item.dynamicData?.owner_name as string) || 'Unassigned';
+      if (!ownerMap[ownerName]) {
+        ownerMap[ownerName] = { name: ownerName, count: 0 };
+      }
+      ownerMap[ownerName].count++;
+    }
+    return Object.values(ownerMap)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8)
+      .map(o => ({
+        label: o.name,
+        value: o.count,
+        initials: o.name.split(' ').map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?',
+      }));
+  }, [items]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 bg-background p-4 sm:p-6 md:p-8">

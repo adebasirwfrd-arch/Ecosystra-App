@@ -12,12 +12,13 @@ interface TopBarProps {
     status: string;
     avatarUrl?: string;
   };
+  unreadCount?: number;
   onLogout: () => void;
   onUpdateStatus: (status: string) => void;
   onNavigate: (path: string) => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ user, onLogout, onUpdateStatus, onNavigate }) => {
+export const TopBar: React.FC<TopBarProps> = ({ user, unreadCount = 0, onLogout, onUpdateStatus, onNavigate }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,7 +84,9 @@ export const TopBar: React.FC<TopBarProps> = ({ user, onLogout, onUpdateStatus, 
 
         <button className="topbar-icon-btn relative group" onClick={() => onNavigate('notifications')}>
           <Bell size={18} />
-          <span className="topbar-notification-badge">1</span>
+          {unreadCount > 0 && (
+            <span className="topbar-notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+          )}
         </button>
         
         <button className="topbar-icon-btn" onClick={() => onNavigate('inbox')}>
@@ -104,15 +107,16 @@ export const TopBar: React.FC<TopBarProps> = ({ user, onLogout, onUpdateStatus, 
             className="topbar-avatar"
             onClick={() => setIsProfileOpen(!isProfileOpen)}
             style={{ 
-              background: 'linear-gradient(135deg, var(--primary), #6C6CFF)',
+              background: currentUser.avatarUrl ? `url(${currentUser.avatarUrl}) center/cover` : 'linear-gradient(135deg, var(--primary), #6C6CFF)',
               display: 'flex',
               flexDirection: 'column',
               padding: '2px',
               height: '34px',
-              width: '34px'
+              width: '34px',
+              overflow: 'hidden'
             }}
           >
-            {currentUser.name.split(' ').map(n => n[0]).join('')}
+            {!currentUser.avatarUrl && currentUser.name.split(' ').map((n: string) => n[0]).join('')}
           </div>
 
           <AnimatePresence>

@@ -3,7 +3,7 @@ import { User, Globe, Shield, Bell, LogOut, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { useOptionalEcosystraDictionary } from '../../../../../../shadboard/full-kit/src/components/ecosystra/ecosystra-dictionary-context';
-import { Avatar, AvatarFallback } from '../../../../../../shadboard/full-kit/src/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '../../../../../../shadboard/full-kit/src/components/ui/avatar';
 import { Badge } from '../../../../../../shadboard/full-kit/src/components/ui/badge';
 import { Button } from '../../../../../../shadboard/full-kit/src/components/ui/button';
 import {
@@ -159,6 +159,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <CardContent className="space-y-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <Avatar className="size-20 rounded-2xl text-xl font-bold">
+                  {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name || 'User'} className="rounded-2xl" />}
                   <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary to-violet-600 text-primary-foreground">
                     {initials}
                   </AvatarFallback>
@@ -167,7 +168,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <p className="text-lg font-semibold text-foreground">
                     {user?.name}
                   </p>
-                  <p className="text-sm text-muted-foreground">{t.memberSince}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {user?.createdAt
+                      ? `Member since ${new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+                      : t.memberSince}
+                  </p>
                 </div>
               </div>
               <Separator />

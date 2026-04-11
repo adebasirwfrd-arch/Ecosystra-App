@@ -6,6 +6,7 @@ export const GET_OR_CREATE_BOARD = gql`
     getOrCreateBoard {
       id
       name
+      workspaceId
       columns
       subitemColumns
       metadata
@@ -38,6 +39,7 @@ export const ME_QUERY = gql`
       email
       status
       avatarUrl
+      createdAt
       memberships {
         id
         role
@@ -58,7 +60,56 @@ export const GET_NOTIFICATIONS = gql`
       title
       message
       isRead
+      type
+      link
       createdAt
     }
   }
 `;
+
+export const WORKSPACE_USERS_SEARCH = gql`
+  query WorkspaceUsers($workspaceId: ID!, $query: String!, $take: Int) {
+    workspaceUsers(workspaceId: $workspaceId, query: $query, take: $take) {
+      id
+      name
+      email
+      avatarUrl
+    }
+  }
+`;
+
+export const SET_TASK_OWNER = gql`
+  mutation SetTaskOwner($itemId: ID!, $ownerUserId: ID) {
+    setTaskOwner(itemId: $itemId, ownerUserId: $ownerUserId) {
+      id
+      dynamicData
+    }
+  }
+`;
+
+export const SET_TASK_ASSIGNEE = gql`
+  mutation SetTaskAssignee($itemId: ID!, $assigneeUserId: ID) {
+    setTaskAssignee(itemId: $itemId, assigneeUserId: $assigneeUserId) {
+      id
+      dynamicData
+    }
+  }
+`;
+
+export const WORKSPACE_MEMBERS = gql`
+  query WorkspaceMembers($workspaceId: ID!) {
+    workspaceMembers(workspaceId: $workspaceId) {
+      id
+      role
+      createdAt
+      user {
+        id
+        name
+        email
+        avatarUrl
+        status
+      }
+    }
+  }
+`;
+

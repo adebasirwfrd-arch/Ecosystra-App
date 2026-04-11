@@ -1,9 +1,9 @@
 import GraphQLJSON from "graphql-type-json";
 import type { Prisma } from "@prisma/client";
-import type { AuthState } from "../lib/auth";
-import { prisma } from "../db";
-import { logItemFieldChange } from "../lib/audit";
-import { enqueueTaskEmail } from "../lib/email-queue";
+import type { AuthState } from "./auth";
+import { db as prisma } from "@/lib/prisma";
+import { logItemFieldChange } from "./audit";
+import { enqueueTaskEmail } from "./email-queue";
 import {
   assertProjectAssign,
   assertTaskEdit,
@@ -12,17 +12,18 @@ import {
   permifyDisabled,
   setTaskAssigneeTuple,
   setTaskOwnerTuple,
-} from "../lib/permify";
-import { isSuperUserEmail } from "../lib/superuser";
+} from "./permify";
+import { isSuperUserEmail } from "./superuser";
 
 export type GqlContext = {
   auth: AuthState;
-  prismaUser: Awaited<ReturnType<typeof prisma.user.findUnique>>;
+  prismaUser: Awaited<ReturnType<typeof prisma.ecoUser.findUnique>>;
 };
 
 function appBaseUrl(): string {
   return (
     process.env.APP_BASE_URL ||
+    process.env.BASE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     "http://localhost:3002"
   );
@@ -32,7 +33,7 @@ async function getViewer(ctx: GqlContext) {
   if (!ctx.auth.email) {
     throw new Error("UNAUTHORIZED");
   }
-  return prisma.user.upsert({
+  return prisma.ecoUser.upsert({
     where: { email: ctx.auth.email },
     create: {
       email: ctx.auth.email,
@@ -48,7 +49,7 @@ async function requireWorkspaceAccess(
   ctx: GqlContext
 ) {
   if (isSuperUserEmail(ctx.auth.email)) return;
-  const m = await prisma.member.findUnique({
+  const m = await prisma.ecoMember.findUnique({
     where: {
       userId_workspaceId: { userId: viewerId, workspaceId },
     },
@@ -57,7 +58,7 @@ async function requireWorkspaceAccess(
 }
 
 async function loadBoardWithTree(boardId: string) {
-  return prisma.board.findUniqueOrThrow({
+  return prisma.ecoBoard.findUniqueOrThrow({
     where: { id: boardId },
     include: {
       groups: true,
@@ -98,7 +99,7 @@ export const resolvers = {
     getOrCreateBoard: async (_: unknown, __: unknown, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
 
-      const membership = await prisma.member.findFirst({
+      const membership = await prisma.ecoMember.findFirst({
         where: { userId: viewer.id },
         include: {
           workspace: {
@@ -113,13 +114,13 @@ export const resolvers = {
         return loadBoardWithTree(membership.workspace.boards[0].id);
       }
 
-      const legacy = await prisma.board.findFirst({
+      const legacy = await prisma.ecoBoard.findFirst({
         orderBy: { createdAt: "asc" },
         include: { workspace: true },
       });
 
       if (legacy) {
-        await prisma.member.upsert({
+        await prisma.ecoMember.upsert({
           where: {
             userId_workspaceId: {
               userId: viewer.id,
@@ -134,7 +135,7 @@ export const resolvers = {
           update: {},
         });
         if (!legacy.createdByUserId) {
-          await prisma.board.update({
+          await prisma.ecoBoard.update({
             where: { id: legacy.id },
             data: { createdByUserId: viewer.id },
           });
@@ -148,17 +149,17 @@ export const resolvers = {
       }
 
       return prisma.$transaction(async (tx) => {
-        const ws = await tx.workspace.create({
+        const ws = await tx.ecoWorkspace.create({
           data: { name: "Main workspace", description: "" },
         });
-        await tx.member.create({
+        await tx.ecoMember.create({
           data: {
             userId: viewer.id,
             workspaceId: ws.id,
             role: "ADMIN",
           },
         });
-        const board = await tx.board.create({
+        const board = await tx.ecoBoard.create({
           data: {
             name: "Task management",
             workspaceId: ws.id,
@@ -167,7 +168,7 @@ export const resolvers = {
             createdByUserId: viewer.id,
           },
         });
-        await tx.group.create({
+        await tx.ecoGroup.create({
           data: {
             name: "New Group",
             color: "#A25DDC",
@@ -179,7 +180,7 @@ export const resolvers = {
         } catch {
           /* optional */
         }
-        return tx.board.findUniqueOrThrow({
+        return tx.ecoBoard.findUniqueOrThrow({
           where: { id: board.id },
           include: {
             groups: true,
@@ -197,11 +198,11 @@ export const resolvers = {
     },
 
     getItems: async (_: unknown, { boardId }: { boardId: string }) => {
-      return prisma.item.findMany({ where: { boardId } });
+      return prisma.ecoItem.findMany({ where: { boardId } });
     },
 
     exportGroup: async (_: unknown, { id }: { id: string }) => {
-      const group = await prisma.group.findUnique({
+      const group = await prisma.ecoGroup.findUnique({
         where: { id },
         include: {
           items: {
@@ -222,7 +223,7 @@ export const resolvers = {
     me: async (_: unknown, __: unknown, ctx: GqlContext) => {
       if (!ctx.auth.email) return null;
       const user = await getViewer(ctx);
-      return prisma.user.findUnique({
+      return prisma.ecoUser.findUnique({
         where: { id: user.id },
         include: { memberships: true, notifications: true },
       });
@@ -230,7 +231,7 @@ export const resolvers = {
 
     notifications: async (_: unknown, __: unknown, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      return prisma.notification.findMany({
+      return prisma.ecoNotification.findMany({
         where: { userId: viewer.id },
         orderBy: { createdAt: "desc" },
       });
@@ -238,49 +239,34 @@ export const resolvers = {
 
     search: async (_: unknown, { query }: { query: string }, ctx: GqlContext) => {
       await getViewer(ctx);
-      const items = await prisma.item.findMany({
+      const items = await prisma.ecoItem.findMany({
         where: { name: { contains: query, mode: "insensitive" } },
         take: 5,
       });
-      const groups = await prisma.group.findMany({
+      const groups = await prisma.ecoGroup.findMany({
         where: { name: { contains: query, mode: "insensitive" } },
         take: 3,
       });
-      const boards = await prisma.board.findMany({
+      const boards = await prisma.ecoBoard.findMany({
         where: { name: { contains: query, mode: "insensitive" } },
         take: 2,
       });
       return [
         ...items.map((i) => ({
-          id: i.id,
-          type: "Item",
-          name: i.name,
-          parentId: i.groupId,
-          context: "Task",
+          id: i.id, type: "Item", name: i.name, parentId: i.groupId, context: "Task",
         })),
         ...groups.map((g) => ({
-          id: g.id,
-          type: "Group",
-          name: g.name,
-          parentId: g.boardId,
-          context: "Group",
+          id: g.id, type: "Group", name: g.name, parentId: g.boardId, context: "Group",
         })),
         ...boards.map((b) => ({
-          id: b.id,
-          type: "Board",
-          name: b.name,
-          context: "Board",
+          id: b.id, type: "Board", name: b.name, context: "Board",
         })),
       ];
     },
 
     workspaceUsers: async (
       _: unknown,
-      {
-        workspaceId,
-        query,
-        take = 8,
-      }: { workspaceId: string; query: string; take?: number },
+      { workspaceId, query, take = 8 }: { workspaceId: string; query: string; take?: number },
       ctx: GqlContext
     ) => {
       const viewer = await getViewer(ctx);
@@ -288,15 +274,15 @@ export const resolvers = {
       const lim = Math.min(Math.max(take || 8, 1), 25);
       const q = (query || "").trim();
       const broad = q.length === 0 || q === ".";
-      return prisma.user.findMany({
+      return prisma.ecoUser.findMany({
         where: {
           memberships: { some: { workspaceId } },
           ...(broad
             ? {}
             : {
                 OR: [
-                  { email: { contains: q, mode: "insensitive" } },
-                  { name: { contains: q, mode: "insensitive" } },
+                  { email: { contains: q, mode: "insensitive" as const } },
+                  { name: { contains: q, mode: "insensitive" as const } },
                 ],
               }),
         },
@@ -312,7 +298,7 @@ export const resolvers = {
     ) => {
       const viewer = await getViewer(ctx);
       await requireWorkspaceAccess(viewer.id, workspaceId, ctx);
-      return prisma.member.findMany({
+      return prisma.ecoMember.findMany({
         where: { workspaceId },
         include: { user: true, workspace: true },
         orderBy: { createdAt: "asc" },
@@ -325,7 +311,7 @@ export const resolvers = {
       ctx: GqlContext
     ) => {
       const viewer = await getViewer(ctx);
-      const item = await prisma.item.findUnique({
+      const item = await prisma.ecoItem.findUnique({
         where: { id: itemId },
         include: { board: true },
       });
@@ -338,7 +324,7 @@ export const resolvers = {
       }).catch(() => {
         if (!isSuperUserEmail(ctx.auth.email)) throw new Error("FORBIDDEN");
       });
-      return prisma.taskAuditLog.findMany({
+      return prisma.ecoTaskAuditLog.findMany({
         where: { itemId },
         orderBy: { createdAt: "desc" },
         take: 200,
@@ -357,20 +343,13 @@ export const resolvers = {
       ctx: GqlContext
     ) => {
       const viewer = await getViewer(ctx);
-      const item = await prisma.item.findUnique({ where: { id: itemId } });
+      const item = await prisma.ecoItem.findUnique({ where: { id: itemId } });
       if (!item) throw new Error("NOT_FOUND");
-      await assertTaskEdit({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        taskItemId: itemId,
-      });
+      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: itemId });
 
       const prev = (item.dynamicData as Record<string, unknown>) || {};
       const prevOwnerId = (prev.ownerUserId as string) || item.createdByUserId;
-
-      const ownerUser = ownerUserId
-        ? await prisma.user.findUnique({ where: { id: ownerUserId } })
-        : null;
+      const ownerUser = ownerUserId ? await prisma.ecoUser.findUnique({ where: { id: ownerUserId } }) : null;
 
       return prisma.$transaction(async (tx) => {
         const nextData = {
@@ -380,20 +359,14 @@ export const resolvers = {
           owner_avatarUrl: ownerUser?.avatarUrl ?? null,
           last_updated: new Date().toISOString(),
         };
-
-        const updated = await tx.item.update({
+        const updated = await tx.ecoItem.update({
           where: { id: itemId },
           data: { dynamicData: nextData },
         });
-
         await logItemFieldChange(tx, {
-          itemId,
-          actorUserId: viewer.id,
-          fieldKey: "owner",
-          oldValue: prev.owner,
-          newValue: nextData.owner,
+          itemId, actorUserId: viewer.id, fieldKey: "owner",
+          oldValue: prev.owner, newValue: nextData.owner,
         });
-
         if (!permifyDisabled()) {
           await setTaskOwnerTuple({
             taskItemId: itemId,
@@ -401,7 +374,6 @@ export const resolvers = {
             previousOwnerUserId: prevOwnerId || null,
           });
         }
-
         return updated;
       });
     },
@@ -412,20 +384,13 @@ export const resolvers = {
       ctx: GqlContext
     ) => {
       const viewer = await getViewer(ctx);
-      const item = await prisma.item.findUnique({ where: { id: itemId } });
+      const item = await prisma.ecoItem.findUnique({ where: { id: itemId } });
       if (!item) throw new Error("NOT_FOUND");
-      await assertTaskEdit({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        taskItemId: itemId,
-      });
+      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: itemId });
 
       const prev = (item.dynamicData as Record<string, unknown>) || {};
       const prevAssignee = (prev.assigneeUserId as string) || null;
-
-      const assignee = assigneeUserId
-        ? await prisma.user.findUnique({ where: { id: assigneeUserId } })
-        : null;
+      const assignee = assigneeUserId ? await prisma.ecoUser.findUnique({ where: { id: assigneeUserId } }) : null;
 
       const updated = await prisma.$transaction(async (tx) => {
         const nextData = {
@@ -436,43 +401,27 @@ export const resolvers = {
           assignee_avatarUrl: assignee?.avatarUrl ?? null,
           last_updated: new Date().toISOString(),
         };
-
-        const row = await tx.item.update({
-          where: { id: itemId },
-          data: { dynamicData: nextData },
-        });
-
+        const row = await tx.ecoItem.update({ where: { id: itemId }, data: { dynamicData: nextData } });
         await logItemFieldChange(tx, {
-          itemId,
-          actorUserId: viewer.id,
-          fieldKey: "assignee",
-          oldValue: prev.assignee,
-          newValue: nextData.assignee,
+          itemId, actorUserId: viewer.id, fieldKey: "assignee",
+          oldValue: prev.assignee, newValue: nextData.assignee,
         });
-
         return row;
       });
 
       if (!permifyDisabled()) {
         await setTaskAssigneeTuple({
-          taskItemId: itemId,
-          assigneeUserId: assignee?.id || null,
-          previousAssigneeUserId: prevAssignee,
+          taskItemId: itemId, assigneeUserId: assignee?.id || null, previousAssigneeUserId: prevAssignee,
         });
       }
 
-      const assigneeChanged =
-        (prevAssignee || null) !== (assignee?.id || null);
+      const assigneeChanged = (prevAssignee || null) !== (assignee?.id || null);
 
       if (assignee && assigneeChanged) {
         try {
-          const actor = await prisma.user.findUnique({
-            where: { id: viewer.id },
-            select: { name: true, email: true },
-          });
-          const actorLabel =
-            actor?.name?.trim() || actor?.email || "Someone";
-          await prisma.notification.create({
+          const actor = await prisma.ecoUser.findUnique({ where: { id: viewer.id }, select: { name: true, email: true } });
+          const actorLabel = actor?.name?.trim() || actor?.email || "Someone";
+          await prisma.ecoNotification.create({
             data: {
               userId: assignee.id,
               title: `Assigned: ${item.name}`,
@@ -488,23 +437,11 @@ export const resolvers = {
 
       if (assignee?.email && assigneeChanged) {
         await enqueueTaskEmail({
-          taskId: itemId,
-          assigneeEmail: assignee.email,
-          assigneeName: assignee.name,
-          changes: {
-            assignee: {
-              old: prev.assignee,
-              new: assignee.name || assignee.email,
-            },
-          },
+          taskId: itemId, assigneeEmail: assignee.email, assigneeName: assignee.name,
+          changes: { assignee: { old: prev.assignee, new: assignee.name || assignee.email } },
           deepLink: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
           summary: `You were assigned to task "${item.name}"`,
         });
-      } else if (assignee && !assigneeChanged) {
-        console.info(
-          "[setTaskAssignee] skip email (assignee user unchanged)",
-          itemId,
-        );
       }
 
       return updated;
@@ -512,66 +449,38 @@ export const resolvers = {
 
     assignMemberRole: async (
       _: unknown,
-      {
-        workspaceId,
-        userId,
-        role,
-      }: { workspaceId: string; userId: string; role: string },
+      { workspaceId, userId, role }: { workspaceId: string; userId: string; role: string },
       ctx: GqlContext
     ) => {
-      if (!isSuperUserEmail(ctx.auth.email)) {
-        throw new Error("FORBIDDEN");
-      }
+      if (!isSuperUserEmail(ctx.auth.email)) throw new Error("FORBIDDEN");
       await getViewer(ctx);
-      return prisma.member.update({
-        where: {
-          userId_workspaceId: { userId, workspaceId },
-        },
+      return prisma.ecoMember.update({
+        where: { userId_workspaceId: { userId, workspaceId } },
         data: { role },
       });
     },
 
     updateBoard: async (
       _: unknown,
-      {
-        id,
-        name,
-        columns,
-        subitemColumns,
-      }: {
-        id: string;
-        name?: string;
-        columns?: unknown;
-        subitemColumns?: unknown;
-      },
+      { id, name, columns, subitemColumns }: { id: string; name?: string; columns?: unknown; subitemColumns?: unknown },
       ctx: GqlContext
     ) => {
       await getViewer(ctx);
-      const existingBoard = await prisma.board.findUnique({ where: { id } });
+      const existingBoard = await prisma.ecoBoard.findUnique({ where: { id } });
       const existingColumns = existingBoard?.columns;
       const existingMetadata =
-        existingColumns &&
-        typeof existingColumns === "object" &&
-        !Array.isArray(existingColumns)
-          ? (existingColumns as { metadata?: Record<string, unknown> }).metadata ||
-            {}
+        existingColumns && typeof existingColumns === "object" && !Array.isArray(existingColumns)
+          ? (existingColumns as { metadata?: Record<string, unknown> }).metadata || {}
           : {};
       const nextColumns: unknown =
-        columns !== undefined
-          ? { definitions: columns, metadata: existingMetadata }
-          : existingColumns;
+        columns !== undefined ? { definitions: columns, metadata: existingMetadata } : existingColumns;
       const safeColumns = nextColumns === null ? [] : nextColumns;
-
-      return prisma.board.update({
+      return prisma.ecoBoard.update({
         where: { id },
         data: {
           ...(name !== undefined ? { name } : {}),
-          ...(columns !== undefined
-            ? { columns: safeColumns as Prisma.InputJsonValue }
-            : {}),
-          ...(subitemColumns !== undefined
-            ? { subitemColumns: subitemColumns as Prisma.InputJsonValue }
-            : {}),
+          ...(columns !== undefined ? { columns: safeColumns as Prisma.InputJsonValue } : {}),
+          ...(subitemColumns !== undefined ? { subitemColumns: subitemColumns as Prisma.InputJsonValue } : {}),
         },
       });
     },
@@ -582,75 +491,46 @@ export const resolvers = {
       ctx: GqlContext
     ) => {
       await getViewer(ctx);
-      const board = await prisma.board.findUnique({ where: { id } });
+      const board = await prisma.ecoBoard.findUnique({ where: { id } });
       const existingColumns = board?.columns;
       const definitions = Array.isArray(existingColumns)
         ? existingColumns
-        : existingColumns &&
-            typeof existingColumns === "object" &&
-            Array.isArray(
-              (existingColumns as { definitions?: unknown[] }).definitions
-            )
+        : existingColumns && typeof existingColumns === "object" &&
+            Array.isArray((existingColumns as { definitions?: unknown[] }).definitions)
           ? (existingColumns as { definitions: unknown[] }).definitions
           : [];
       const existingMetadata =
-        existingColumns &&
-        typeof existingColumns === "object" &&
-        !Array.isArray(existingColumns)
-          ? (existingColumns as { metadata?: Record<string, unknown> })
-              .metadata || {}
+        existingColumns && typeof existingColumns === "object" && !Array.isArray(existingColumns)
+          ? (existingColumns as { metadata?: Record<string, unknown> }).metadata || {}
           : {};
-
-      return prisma.board.update({
+      return prisma.ecoBoard.update({
         where: { id },
         data: {
-          columns: {
-            definitions,
-            metadata: { ...existingMetadata, ...(metadata as object) },
-          } as Prisma.InputJsonValue,
+          columns: { definitions, metadata: { ...existingMetadata, ...(metadata as object) } } as Prisma.InputJsonValue,
         },
       });
     },
 
     createItem: async (
       _: unknown,
-      args: {
-        name: string;
-        boardId: string;
-        groupId?: string;
-        parentItemId?: string;
-        dynamicData?: Record<string, unknown>;
-      },
+      args: { name: string; boardId: string; groupId?: string; parentItemId?: string; dynamicData?: Record<string, unknown> },
       ctx: GqlContext
     ) => {
       const viewer = await getViewer(ctx);
-      await assertProjectAssign({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        projectBoardId: args.boardId,
-      });
-
-      const item = await prisma.item.create({
+      await assertProjectAssign({ prismaUserId: viewer.id, email: ctx.auth.email, projectBoardId: args.boardId });
+      const item = await prisma.ecoItem.create({
         data: {
-          name: args.name,
-          boardId: args.boardId,
-          groupId: args.groupId,
+          name: args.name, boardId: args.boardId, groupId: args.groupId,
           parentItemId: args.parentItemId,
           dynamicData: (args.dynamicData || {}) as Prisma.InputJsonValue,
           createdByUserId: viewer.id,
         },
       });
-
       try {
-        await bootstrapProjectAndTask({
-          boardId: args.boardId,
-          ownerUserId: viewer.id,
-          taskItemId: item.id,
-        });
+        await bootstrapProjectAndTask({ boardId: args.boardId, ownerUserId: viewer.id, taskItemId: item.id });
       } catch (e) {
         console.warn("[permify] bootstrap task failed", e);
       }
-
       return item;
     },
 
@@ -660,239 +540,107 @@ export const resolvers = {
       ctx: GqlContext
     ) => {
       const viewer = await getViewer(ctx);
-      await assertTaskEdit({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        taskItemId: id,
-      });
-
-      const currentItem = await prisma.item.findUnique({ where: { id } });
-      const currentData =
-        (currentItem?.dynamicData as Record<string, unknown>) || {};
+      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: id });
+      const currentItem = await prisma.ecoItem.findUnique({ where: { id } });
+      const currentData = (currentItem?.dynamicData as Record<string, unknown>) || {};
       const mergedData = { ...currentData, ...dynamicData };
-
       const statusOld = currentData.status;
       const statusNew = mergedData.status;
-
       const row = await prisma.$transaction(async (tx) => {
-        const updated = await tx.item.update({
-          where: { id },
-          data: { dynamicData: mergedData as Prisma.InputJsonValue },
-        });
-
+        const updated = await tx.ecoItem.update({ where: { id }, data: { dynamicData: mergedData as Prisma.InputJsonValue } });
         for (const key of Object.keys(dynamicData)) {
           if (currentData[key] !== mergedData[key]) {
-            await logItemFieldChange(tx, {
-              itemId: id,
-              actorUserId: viewer.id,
-              fieldKey: key,
-              oldValue: currentData[key],
-              newValue: mergedData[key],
-            });
+            await logItemFieldChange(tx, { itemId: id, actorUserId: viewer.id, fieldKey: key, oldValue: currentData[key], newValue: mergedData[key] });
           }
         }
         return updated;
       });
-
       if (statusNew !== undefined && statusNew !== statusOld) {
         const assigneeEmail = mergedData.assigneeEmail as string | undefined;
         if (assigneeEmail) {
           await enqueueTaskEmail({
-            taskId: id,
-            assigneeEmail,
-            changes: {
-              status: { old: statusOld, new: statusNew },
-            },
+            taskId: id, assigneeEmail,
+            changes: { status: { old: statusOld, new: statusNew } },
             deepLink: `${appBaseUrl()}/board?task=${encodeURIComponent(id)}`,
             summary: `Task "${currentItem?.name || ""}" status updated`,
           });
         }
       }
-
       return row;
     },
 
-    updateItem: async (
-      _: unknown,
-      { id, name }: { id: string; name: string },
-      ctx: GqlContext
-    ) => {
+    updateItem: async (_: unknown, { id, name }: { id: string; name: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      await assertTaskEdit({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        taskItemId: id,
-      });
-      const prev = await prisma.item.findUnique({ where: { id } });
+      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: id });
+      const prev = await prisma.ecoItem.findUnique({ where: { id } });
       return prisma.$transaction(async (tx) => {
-        const updated = await tx.item.update({
-          where: { id },
-          data: { name },
-        });
+        const updated = await tx.ecoItem.update({ where: { id }, data: { name } });
         if (prev?.name !== name) {
-          await logItemFieldChange(tx, {
-            itemId: id,
-            actorUserId: viewer.id,
-            fieldKey: "name",
-            oldValue: prev?.name,
-            newValue: name,
-          });
+          await logItemFieldChange(tx, { itemId: id, actorUserId: viewer.id, fieldKey: "name", oldValue: prev?.name, newValue: name });
         }
         return updated;
       });
     },
 
-    addItemUpdate: async (
-      _: unknown,
-      { id, text }: { id: string; text: string },
-      ctx: GqlContext
-    ) => {
+    addItemUpdate: async (_: unknown, { id, text }: { id: string; text: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      await assertTaskEdit({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        taskItemId: id,
-      });
-      const item = await prisma.item.findUnique({ where: { id } });
+      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: id });
+      const item = await prisma.ecoItem.findUnique({ where: { id } });
       const currentData = (item?.dynamicData as Record<string, unknown>) || {};
-      const updates = Array.isArray(currentData.updates)
-        ? currentData.updates
-        : [];
+      const updates = Array.isArray(currentData.updates) ? currentData.updates : [];
       const nextUpdates = [
-        {
-          id: `upd-${Date.now()}`,
-          text,
-          createdAt: new Date().toISOString(),
-          userId: viewer.id,
-        },
+        { id: `upd-${Date.now()}`, text, createdAt: new Date().toISOString(), userId: viewer.id },
         ...updates,
       ];
-      return prisma.item.update({
-        where: { id },
-        data: {
-          dynamicData: {
-            ...currentData,
-            updates: nextUpdates,
-          },
-        },
-      });
+      return prisma.ecoItem.update({ where: { id }, data: { dynamicData: { ...currentData, updates: nextUpdates } } });
     },
 
-    createGroup: async (
-      _: unknown,
-      {
-        name,
-        boardId,
-        color,
-      }: { name: string; boardId: string; color?: string },
-      ctx: GqlContext
-    ) => {
+    createGroup: async (_: unknown, { name, boardId, color }: { name: string; boardId: string; color?: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      await assertProjectAssign({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        projectBoardId: boardId,
-      });
-      return prisma.group.create({
-        data: { name, boardId, color },
-      });
+      await assertProjectAssign({ prismaUserId: viewer.id, email: ctx.auth.email, projectBoardId: boardId });
+      return prisma.ecoGroup.create({ data: { name, boardId, color } });
     },
 
-    updateGroup: async (
-      _: unknown,
-      {
-        id,
-        name,
-        color,
-      }: { id: string; name?: string; color?: string },
-      ctx: GqlContext
-    ) => {
+    updateGroup: async (_: unknown, { id, name, color }: { id: string; name?: string; color?: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      const g = await prisma.group.findUnique({
-        where: { id },
-        include: { board: true },
-      });
+      const g = await prisma.ecoGroup.findUnique({ where: { id }, include: { board: true } });
       if (!g) throw new Error("NOT_FOUND");
-      await assertProjectAssign({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        projectBoardId: g.boardId,
-      });
-      return prisma.group.update({
-        where: { id },
-        data: { name, color },
-      });
+      await assertProjectAssign({ prismaUserId: viewer.id, email: ctx.auth.email, projectBoardId: g.boardId });
+      return prisma.ecoGroup.update({ where: { id }, data: { name, color } });
     },
 
     deleteGroup: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      const g = await prisma.group.findUnique({
-        where: { id },
-        include: { board: true },
-      });
+      const g = await prisma.ecoGroup.findUnique({ where: { id }, include: { board: true } });
       if (!g) throw new Error("NOT_FOUND");
-      await assertProjectAssign({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        projectBoardId: g.boardId,
-      });
-      await prisma.group.delete({ where: { id } });
+      await assertProjectAssign({ prismaUserId: viewer.id, email: ctx.auth.email, projectBoardId: g.boardId });
+      await prisma.ecoGroup.delete({ where: { id } });
       return true;
     },
 
     archiveGroup: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      const group = await prisma.group.findUnique({
-        where: { id },
-        include: { board: true },
-      });
+      const group = await prisma.ecoGroup.findUnique({ where: { id }, include: { board: true } });
       if (!group) throw new Error("Group not found");
-      await assertProjectAssign({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        projectBoardId: group.boardId,
-      });
-      const archivedName = group.name.startsWith("[Archived] ")
-        ? group.name
-        : `[Archived] ${group.name}`;
-      return prisma.group.update({
-        where: { id },
-        data: { name: archivedName, color: "#9CA3AF" },
-      });
+      await assertProjectAssign({ prismaUserId: viewer.id, email: ctx.auth.email, projectBoardId: group.boardId });
+      const archivedName = group.name.startsWith("[Archived] ") ? group.name : `[Archived] ${group.name}`;
+      return prisma.ecoGroup.update({ where: { id }, data: { name: archivedName, color: "#9CA3AF" } });
     },
 
     bulkCreateItems: async (
       _: unknown,
-      {
-        boardId,
-        groupId,
-        items,
-      }: { boardId: string; groupId: string; items: Record<string, unknown>[] },
+      { boardId, groupId, items }: { boardId: string; groupId: string; items: Record<string, unknown>[] },
       ctx: GqlContext
     ) => {
       const viewer = await getViewer(ctx);
-      await assertProjectAssign({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        projectBoardId: boardId,
-      });
+      await assertProjectAssign({ prismaUserId: viewer.id, email: ctx.auth.email, projectBoardId: boardId });
       const createdItems: unknown[] = [];
       for (const item of items) {
-        const created = await prisma.item.create({
-          data: {
-            name: String(item.name || "Task"),
-            boardId,
-            groupId,
-            dynamicData: (item.dynamicData as object) || {},
-            createdByUserId: viewer.id,
-          },
+        const created = await prisma.ecoItem.create({
+          data: { name: String(item.name || "Task"), boardId, groupId, dynamicData: (item.dynamicData as object) || {}, createdByUserId: viewer.id },
         });
         try {
-          await bootstrapProjectAndTask({
-            boardId,
-            ownerUserId: viewer.id,
-            taskItemId: created.id,
-          });
+          await bootstrapProjectAndTask({ boardId, ownerUserId: viewer.id, taskItemId: created.id });
         } catch (e) {
           console.warn("[permify] bulk bootstrap", e);
         }
@@ -903,81 +651,39 @@ export const resolvers = {
 
     deleteItem: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      await assertTaskEdit({
-        prismaUserId: viewer.id,
-        email: ctx.auth.email,
-        taskItemId: id,
-      });
-      await prisma.item.delete({ where: { id } });
+      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: id });
+      await prisma.ecoItem.delete({ where: { id } });
       return true;
     },
 
-    updateBoardSubitemColumns: async (
-      _: unknown,
-      { id, subitemColumns }: { id: string; subitemColumns: unknown },
-      ctx: GqlContext
-    ) => {
+    updateBoardSubitemColumns: async (_: unknown, { id, subitemColumns }: { id: string; subitemColumns: unknown }, ctx: GqlContext) => {
       await getViewer(ctx);
-      return prisma.board.update({
-        where: { id },
-        data: { subitemColumns: subitemColumns as object },
-      });
+      return prisma.ecoBoard.update({ where: { id }, data: { subitemColumns: subitemColumns as object } });
     },
 
-    updateUserStatus: async (
-      _: unknown,
-      { status }: { status: string },
-      ctx: GqlContext
-    ) => {
+    updateUserStatus: async (_: unknown, { status }: { status: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      return prisma.user.update({
-        where: { id: viewer.id },
-        data: { status },
-      });
+      return prisma.ecoUser.update({ where: { id: viewer.id }, data: { status } });
     },
 
-    markNotificationAsRead: async (
-      _: unknown,
-      { id }: { id: string },
-      ctx: GqlContext
-    ) => {
+    markNotificationAsRead: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
       const viewer = await getViewer(ctx);
-      const n = await prisma.notification.findFirst({
-        where: { id, userId: viewer.id },
-      });
+      const n = await prisma.ecoNotification.findFirst({ where: { id, userId: viewer.id } });
       if (!n) throw new Error("NOT_FOUND");
-      return prisma.notification.update({
-        where: { id: n.id },
-        data: { isRead: true },
-      });
+      return prisma.ecoNotification.update({ where: { id: n.id }, data: { isRead: true } });
     },
   },
 
   User: {
-    createdAt: (user: { createdAt?: Date }) =>
-      user.createdAt ? user.createdAt.toISOString() : null,
-    notifications: async (user: { id: string }) => {
-      return prisma.notification.findMany({ where: { userId: user.id } });
-    },
-    memberships: async (user: { id: string }) => {
-      return prisma.member.findMany({
-        where: { userId: user.id },
-        include: { workspace: true },
-      });
-    },
+    createdAt: (user: { createdAt?: Date }) => user.createdAt ? user.createdAt.toISOString() : null,
+    notifications: async (user: { id: string }) => prisma.ecoNotification.findMany({ where: { userId: user.id } }),
+    memberships: async (user: { id: string }) => prisma.ecoMember.findMany({ where: { userId: user.id }, include: { workspace: true } }),
   },
 
   Member: {
-    createdAt: (member: { createdAt?: Date }) =>
-      member.createdAt ? member.createdAt.toISOString() : null,
-    workspace: async (member: { workspaceId: string }) => {
-      return prisma.workspace.findUnique({
-        where: { id: member.workspaceId },
-      });
-    },
-    user: async (member: { userId: string }) => {
-      return prisma.user.findUniqueOrThrow({ where: { id: member.userId } });
-    },
+    createdAt: (member: { createdAt?: Date }) => member.createdAt ? member.createdAt.toISOString() : null,
+    workspace: async (member: { workspaceId: string }) => prisma.ecoWorkspace.findUnique({ where: { id: member.workspaceId } }),
+    user: async (member: { userId: string }) => prisma.ecoUser.findUniqueOrThrow({ where: { id: member.userId } }),
   },
 
   Notification: {

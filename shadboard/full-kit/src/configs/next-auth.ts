@@ -1,4 +1,5 @@
 import { PrismaAdapter } from "@auth/prisma-adapter"
+import * as jose from "jose"
 
 import type { NextAuthOptions } from "next-auth"
 import type { Adapter } from "next-auth/adapters"
@@ -8,7 +9,6 @@ import { db } from "@/lib/prisma"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 
-// Extend NextAuth's Session and User interfaces to include custom properties
 declare module "next-auth" {
   interface Session {
     user: {
@@ -18,6 +18,7 @@ declare module "next-auth" {
       avatar: string | null
       status: string
     }
+    apiAccessToken?: string
   }
 
   interface User {
@@ -35,6 +36,7 @@ declare module "next-auth/jwt" {
     name: string
     avatar: string | null
     status: string
+    apiAccessToken?: string
   }
 }
 
@@ -158,8 +160,6 @@ export const authOptions: NextAuthOptions = {
       }
       return baseUrl
     },
-    // Callback to add custom user properties to JWT
-    // Learn more: https://next-auth.js.org/configuration/callbacks#jwt-callback
     async jwt({ token, user }) {
       if (user) {
         const image = (user as { image?: string | null }).image
@@ -170,10 +170,19 @@ export const authOptions: NextAuthOptions = {
         token.status = user.status || "ONLINE"
       }
 
+      const secret = process.env.NEXTAUTH_SECRET || "dev-nextauth-secret-change-me"
+      const key = new TextEncoder().encode(secret)
+      token.apiAccessToken = await new jose.SignJWT({
+        sub: token.id,
+        email: token.email,
+      })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt()
+        .setExpirationTime("24h")
+        .sign(key)
+
       return token
     },
-    // Callback to include JWT properties in the session object
-    // Learn more: https://next-auth.js.org/configuration/callbacks#session-callback
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id
@@ -182,6 +191,8 @@ export const authOptions: NextAuthOptions = {
         session.user.email = token.email
         session.user.status = token.status
       }
+
+      session.apiAccessToken = token.apiAccessToken
 
       return session
     },

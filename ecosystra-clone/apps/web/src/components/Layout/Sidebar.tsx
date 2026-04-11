@@ -68,6 +68,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate }) => {
         </button>
       </div>
 
+      <div className="sidebar-divider" />
+      <div className="sidebar-section-title" style={{ fontSize: '14px', textTransform: 'none', letterSpacing: 'normal', fontWeight: 500, color: 'var(--text-secondary)', padding: '0 16px' }}>
+        Ecosystra
+      </div>
+
       {/* Main Navigation */}
       {mainMenus.map((menu) => (
         <button

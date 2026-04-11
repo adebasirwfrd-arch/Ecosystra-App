@@ -69,72 +69,21 @@ export const typeDefs = `#graphql
   }
 
   type Mutation {
-    updateBoard(
-      id: ID!
-      name: String
-      columns: JSON
-      subitemColumns: JSON
-    ): Board!
-
-    updateBoardMetadata(
-      id: ID!
-      metadata: JSON!
-    ): Board!
-
-    createItem(
-      name: String!
-      boardId: ID!
-      groupId: ID
-      parentItemId: ID
-      dynamicData: JSON
-    ): Item!
-
-    updateItemDynamicData(
-      id: ID!
-      dynamicData: JSON!
-    ): Item!
-
-    updateItem(
-      id: ID!
-      name: String!
-    ): Item!
-
-    addItemUpdate(
-      id: ID!
-      text: String!
-    ): Item!
-
-    createGroup(
-      name: String!
-      boardId: ID!
-      color: String
-    ): Group!
-
-    updateGroup(
-      id: ID!
-      name: String
-      color: String
-    ): Group!
-
+    updateBoard(id: ID!, name: String, columns: JSON, subitemColumns: JSON): Board!
+    updateBoardMetadata(id: ID!, metadata: JSON!): Board!
+    createItem(name: String!, boardId: ID!, groupId: ID, parentItemId: ID, dynamicData: JSON): Item!
+    updateItemDynamicData(id: ID!, dynamicData: JSON!): Item!
+    updateItem(id: ID!, name: String!): Item!
+    addItemUpdate(id: ID!, text: String!): Item!
+    createGroup(name: String!, boardId: ID!, color: String): Group!
+    updateGroup(id: ID!, name: String, color: String): Group!
     deleteGroup(id: ID!): Boolean!
     archiveGroup(id: ID!): Group!
-
     deleteItem(id: ID!): Boolean!
-
-    updateBoardSubitemColumns(
-      id: ID!
-      subitemColumns: JSON!
-    ): Board!
-
-    bulkCreateItems(
-      boardId: ID!
-      groupId: ID!
-      items: [JSON!]!
-    ): [Item!]!
-
+    updateBoardSubitemColumns(id: ID!, subitemColumns: JSON!): Board!
+    bulkCreateItems(boardId: ID!, groupId: ID!, items: [JSON!]!): [Item!]!
     updateUserStatus(status: String!): User!
     markNotificationAsRead(id: ID!): Notification!
-
     setTaskOwner(itemId: ID!, ownerUserId: ID): Item!
     setTaskAssignee(itemId: ID!, assigneeUserId: ID): Item!
     assignMemberRole(workspaceId: ID!, userId: ID!, role: String!): Member!
