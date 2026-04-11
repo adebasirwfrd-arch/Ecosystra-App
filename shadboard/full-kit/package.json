@@ -34,7 +34,7 @@
     "node": ">=22",
     "pnpm": ">=10"
   },
-  "packageManager": "pnpm@10.8.1",
+  "packageManager": "pnpm@10.19.0",
   "dependencies": {
     "@apollo/client": "^3.14.1",
     "@auth/prisma-adapter": "2.6.0",
