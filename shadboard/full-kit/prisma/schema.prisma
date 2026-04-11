@@ -1,0 +1,197 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  // Separate from Ecosystra domain tables in `public` (same Supabase DB).
+  schemas   = ["nextauth", "shadboard_content"]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+model User {
+  id                   String          @id @default(uuid())
+  name                 String
+  username             String?         @unique
+  email                String?         @unique
+  emailVerifyToken     String?
+  emailVerified        DateTime?
+  password             String?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  image                String?
+  avatar               String?
+  profileBackground    String?
+  status               String          @default("ONLINE")
+  preferences          UserPreference?
+  accounts             Account[]
+  sessions             Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name, username, status, createdAt])
+  @@schema("nextauth")
+}
+
+model UserPreference {
+  id        String  @id @default(uuid())
+  theme     String
+  mode      String
+  radius    String
+  layout    String
+  direction String
+  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String? @unique
+
+  @@schema("nextauth")
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@schema("nextauth")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@schema("nextauth")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@schema("nextauth")
+}
+
+// Serialized page/module UI state for Shadboard dashboards & apps (JSON document per module).
+model ShadboardPageContent {
+  id        String   @id @default(uuid())
+  module    String   @unique
+  payload   Json
+  updatedAt DateTime @updatedAt
+
+  @@map("shadboard_page_content")
+  @@schema("shadboard_content")
+}
+
+// CRM operational data — shared by /dashboards/crm (aggregates) and /apps/sales-management (CRUD).
+model CrmDeal {
+  id            String    @id @default(uuid())
+  title         String
+  companyName   String
+  amount        Decimal   @db.Decimal(14, 2)
+  currency      String    @default("USD")
+  /// LEAD | PROPOSAL | NEGOTIATION | CLOSED_WON | CLOSED_LOST
+  stage         String
+  /// socialMedia | emailCampaigns | referrals | website | other
+  leadSource    String
+  countryCode   String    @db.VarChar(8)
+  countryName   String
+  ownerName     String
+  ownerEmail    String
+  ownerAvatar   String?
+  probability   Int?
+  expectedClose DateTime?
+  notes         String?
+  closedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([stage])
+  @@index([leadSource])
+  @@index([countryCode])
+  @@index([ownerEmail])
+  @@index([createdAt])
+  @@index([closedAt])
+  @@map("crm_deal")
+  @@schema("shadboard_content")
+}
+
+model CrmProject {
+  id        String   @id @default(uuid())
+  name      String
+  progress  Int
+  startDate DateTime
+  dueDate   DateTime
+  /// On Track | At Risk | On Hold
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("crm_project")
+  @@schema("shadboard_content")
+}
+
+model CrmActivity {
+  id              String   @id @default(uuid())
+  /// email | supportTicket | dealUpdate | call | meeting | note
+  type            String
+  iconName        String
+  fill            String
+  title           String
+  description     String
+  status          String?
+  occurredAt      DateTime
+  assignedMembers Json
+  createdAt       DateTime @default(now())
+
+  @@index([occurredAt])
+  @@map("crm_activity")
+  @@schema("shadboard_content")
+}
+
+model CrmFeedback {
+  id              String   @id @default(uuid())
+  name            String
+  email           String
+  avatar          String
+  rating          Decimal  @db.Decimal(4, 2)
+  feedbackMessage String
+  createdAt       DateTime
+
+  @@map("crm_feedback")
+  @@schema("shadboard_content")
+}
+
+model CrmSalesRep {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  avatar    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("crm_sales_rep")
+  @@schema("shadboard_content")
+}

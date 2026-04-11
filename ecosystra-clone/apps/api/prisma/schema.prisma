@@ -1,0 +1,131 @@
+// apps/api/prisma/schema.prisma
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  // Isolated from NextAuth tables (schema `nextauth` in same Supabase DB).
+  schemas   = ["public"]
+}
+
+// Hierarki Organisasi: Workspace -> Folder -> Board
+model Workspace {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  folders     Folder[]
+  boards      Board[]
+  members     Member[]
+  createdAt   DateTime @default(now())
+
+  @@schema("public")
+}
+
+model Folder {
+  id          String     @id @default(uuid())
+  name        String
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  boards      Board[]
+
+  @@schema("public")
+}
+
+// Board menyimpan definisi kolom dinamis 
+model Board {
+  id          String     @id @default(uuid())
+  name        String
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folderId    String?    
+  folder      Folder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  // Menyimpan referensi skema meta kolom (misal: [{ id: "col1", title: "Status", type: "dropdown" }])
+  columns     Json       @default("[]")
+  subitemColumns Json    @default("[]")
+  groups      Group[]
+  items       Item[]
+  createdAt   DateTime   @default(now())
+
+  @@schema("public")
+}
+
+// Group: Lapisan pemisahan baris per Board
+model Group {
+  id        String   @id @default(uuid())
+  name      String
+  color     String?
+  boardId   String
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  items     Item[]
+
+  @@schema("public")
+}
+
+// Item: Baris Data (mampu bersifat hirarkis subitem hingga level terdalam)
+// Desain hibrida mondayDB: Atribut struktural dipisah dari tipe data dinamis.
+model Item {
+  id            String   @id @default(uuid())
+  name          String
+  boardId       String
+  board         Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  groupId       String?
+  group         Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  
+  // Adjacency List untuk kapabilitas hierarki Subitems
+  parentItemId  String?
+  parentItem    Item?    @relation("ItemToSubitems", fields: [parentItemId], references: [id])
+  subitems      Item[]   @relation("ItemToSubitems")
+  
+  // JSONB Kolom Dinamis - Setiap mutasi / tambahan kolom di frontend akan tersimpan di sini
+  // misal: { "status": "Done", "budget": 500, "timeline": "2026-04-10" }
+  dynamicData   Json     @default("{}") 
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@schema("public")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String?
+  avatarUrl     String?
+  status        String?  @default("Active")
+  notifications Notification[]
+  memberships   Member[]
+  createdAt     DateTime @default(now())
+
+  @@schema("public")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  link      String?  // Optional link to associated object
+  createdAt DateTime @default(now())
+
+  @@schema("public")
+}
+
+model Member {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        String    @default("MEMBER") // ADMIN, MEMBER, VIEWER
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, workspaceId])
+  @@schema("public")
+}

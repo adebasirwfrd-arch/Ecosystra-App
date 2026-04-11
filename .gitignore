@@ -1,0 +1,35 @@
+# Dependencies & package managers
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Build / caches
+.next/
+out/
+build/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# Env & secrets (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+**/client_secret*.json
+
+# Local DB / logs
+*.db
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vercel / deploy
+.vercel
+
+# OS
+.DS_Store

@@ -1,0 +1,2882 @@
+{
+  "modules": {
+    "analytics": {
+      "overview": {
+        "uniqueVisitors": {
+          "averageValue": 15091.67,
+          "percentageChange": 0.07,
+          "perMonth": [
+            {
+              "month": "January",
+              "value": 12000
+            },
+            {
+              "month": "February",
+              "value": 16000
+            },
+            {
+              "month": "March",
+              "value": 15050
+            },
+            {
+              "month": "April",
+              "value": 14000
+            },
+            {
+              "month": "May",
+              "value": 17500
+            },
+            {
+              "month": "June",
+              "value": 16000
+            }
+          ]
+        },
+        "averageSessionDuration": {
+          "averageValue": 73333.33,
+          "percentageChange": -0.04,
+          "perMonth": [
+            {
+              "month": "January",
+              "value": 110000,
+              "fill": "hsl(var(--chart-1))"
+            },
+            {
+              "month": "February",
+              "value": -90000,
+              "fill": "hsl(var(--chart-2))"
+            },
+            {
+              "month": "March",
+              "value": 220000,
+              "fill": "hsl(var(--chart-1))"
+            },
+            {
+              "month": "April",
+              "value": -130000,
+              "fill": "hsl(var(--chart-2))"
+            },
+            {
+              "month": "May",
+              "value": 135000,
+              "fill": "hsl(var(--chart-1))"
+            },
+            {
+              "month": "June",
+              "value": 195000,
+              "fill": "hsl(var(--chart-1))"
+            }
+          ]
+        },
+        "bounceRate": {
+          "averageValue": 0.5933,
+          "percentageChange": 0.05,
+          "perMonth": [
+            {
+              "month": "January",
+              "value": 0.12
+            },
+            {
+              "month": "February",
+              "value": 0.55
+            },
+            {
+              "month": "March",
+              "value": 0.68
+            },
+            {
+              "month": "April",
+              "value": 0.48
+            },
+            {
+              "month": "May",
+              "value": 0.7
+            },
+            {
+              "month": "June",
+              "value": 0.53
+            }
+          ]
+        },
+        "conversionRate": {
+          "averageValue": 0.5631,
+          "percentageChange": 0.038,
+          "perMonth": [
+            {
+              "month": "January",
+              "value": 0.4
+            },
+            {
+              "month": "February",
+              "value": 0.48
+            },
+            {
+              "month": "March",
+              "value": 0.43
+            },
+            {
+              "month": "April",
+              "value": 0.6
+            },
+            {
+              "month": "May",
+              "value": 0.52
+            },
+            {
+              "month": "June",
+              "value": 0.75
+            }
+          ]
+        }
+      },
+      "trafficSourcesData": {
+        "period": "Last month",
+        "sources": [
+          {
+            "name": "Direct",
+            "visitors": 4000,
+            "fill": "hsl(var(--chart-1))",
+            "percentageChange": 0.3,
+            "icon": "MousePointer"
+          },
+          {
+            "name": "Referral",
+            "visitors": 2500,
+            "fill": "hsl(var(--chart-2))",
+            "percentageChange": 0.25,
+            "icon": "Link"
+          },
+          {
+            "name": "Social Media",
+            "visitors": 2000,
+            "fill": "hsl(var(--chart-3))",
+            "percentageChange": 0.2,
+            "icon": "Users"
+          },
+          {
+            "name": "Search Engine",
+            "visitors": 1000,
+            "fill": "hsl(var(--chart-4))",
+            "percentageChange": -0.1,
+            "icon": "Search"
+          },
+          {
+            "name": "Email",
+            "visitors": 500,
+            "fill": "hsl(var(--chart-5))",
+            "percentageChange": 0.05,
+            "icon": "Mail"
+          }
+        ]
+      },
+      "conversionFunnelData": {
+        "period": "Last month",
+        "funnelSteps": [
+          {
+            "name": "Visited Page",
+            "value": 15000
+          },
+          {
+            "name": "Added to Cart",
+            "value": 5000
+          },
+          {
+            "name": "Initiated Checkout",
+            "value": 1000
+          },
+          {
+            "name": "Completed Purchase",
+            "value": 300
+          }
+        ]
+      },
+      "newVsReturningVisitors": {
+        "visitors": {
+          "new": {
+            "value": 7234,
+            "percentageChange": 0.65,
+            "fill": "hsl(var(--chart-1))"
+          },
+          "returning": {
+            "value": 4128,
+            "percentageChange": 0.35,
+            "fill": "hsl(var(--chart-2))"
+          }
+        }
+      },
+      "performanceOverTimeData": {
+        "summary": {
+          "totalVisitors": 24500,
+          "totalConversions": 860
+        },
+        "performance": [
+          {
+            "month": "January",
+            "visitors": 1300,
+            "conversions": 30
+          },
+          {
+            "month": "February",
+            "visitors": 2200,
+            "conversions": 60
+          },
+          {
+            "month": "March",
+            "visitors": 3200,
+            "conversions": 80
+          },
+          {
+            "month": "April",
+            "visitors": 2100,
+            "conversions": 40
+          },
+          {
+            "month": "May",
+            "visitors": 4000,
+            "conversions": 120
+          },
+          {
+            "month": "June",
+            "visitors": 2300,
+            "conversions": 70
+          },
+          {
+            "month": "July",
+            "visitors": 4500,
+            "conversions": 150
+          },
+          {
+            "month": "August",
+            "visitors": 3700,
+            "conversions": 110
+          },
+          {
+            "month": "September",
+            "visitors": 5000,
+            "conversions": 180
+          },
+          {
+            "month": "October",
+            "visitors": 3000,
+            "conversions": 70
+          },
+          {
+            "month": "November",
+            "visitors": 5500,
+            "conversions": 200
+          },
+          {
+            "month": "December",
+            "visitors": 6000,
+            "conversions": 250
+          }
+        ]
+      },
+      "visitorsByCountryData": {
+        "summary": {
+          "totalVisitors": 24500
+        },
+        "countries": [
+          {
+            "countryName": "United States",
+            "countryCode": "US",
+            "visitors": 18000,
+            "percentageChange": 0.1
+          },
+          {
+            "countryName": "Canada",
+            "countryCode": "CA",
+            "visitors": 11000,
+            "percentageChange": 0.08
+          },
+          {
+            "countryName": "United Kingdom",
+            "countryCode": "GB",
+            "visitors": 9000,
+            "percentageChange": -0.01
+          },
+          {
+            "countryName": "India",
+            "countryCode": "IN",
+            "visitors": 8500,
+            "percentageChange": 0.06
+          },
+          {
+            "countryName": "Germany",
+            "countryCode": "DE",
+            "visitors": 6400,
+            "percentageChange": 0.03
+          },
+          {
+            "countryName": "Australia",
+            "countryCode": "AU",
+            "visitors": 5500,
+            "percentageChange": -0.04
+          }
+        ]
+      },
+      "engagementByDeviceData": [
+        {
+          "deviceType": "Windows",
+          "sessionDuration": 300000,
+          "pagesPerSession": 6.8,
+          "bounceRate": 0.35,
+          "userPercentage": 0.42,
+          "conversionRate": 0.08
+        },
+        {
+          "deviceType": "macOS",
+          "sessionDuration": 290000,
+          "pagesPerSession": 6.5,
+          "bounceRate": 0.3,
+          "userPercentage": 0.25,
+          "conversionRate": 0.1
+        },
+        {
+          "deviceType": "iOS",
+          "sessionDuration": 180000,
+          "pagesPerSession": 4.2,
+          "bounceRate": 0.45,
+          "userPercentage": 0.15,
+          "conversionRate": 0.06
+        },
+        {
+          "deviceType": "Android",
+          "sessionDuration": 200000,
+          "pagesPerSession": 4,
+          "bounceRate": 0.4,
+          "userPercentage": 0.1,
+          "conversionRate": 0.05
+        },
+        {
+          "deviceType": "ChromeOS",
+          "sessionDuration": 250000,
+          "pagesPerSession": 5.5,
+          "bounceRate": 0.38,
+          "userPercentage": 0.04,
+          "conversionRate": 0.07
+        },
+        {
+          "deviceType": "Linux",
+          "sessionDuration": 270000,
+          "pagesPerSession": 5.8,
+          "bounceRate": 0.37,
+          "userPercentage": 0.03,
+          "conversionRate": 0.09
+        },
+        {
+          "deviceType": "Other",
+          "sessionDuration": 150000,
+          "pagesPerSession": 3.7,
+          "bounceRate": 0.5,
+          "userPercentage": 0.01,
+          "conversionRate": 0.02
+        }
+      ]
+    },
+    "crm": {
+      "overview": {
+        "totalSales": {
+          "period": "Last month",
+          "value": 1234567,
+          "percentageChange": 5.9
+        },
+        "totalProfit": {
+          "period": "Last month",
+          "value": 345678,
+          "percentageChange": -0.2
+        },
+        "revenueGrowth": {
+          "period": "Last month",
+          "value": 789123,
+          "percentageChange": 7.3
+        },
+        "newCustomers": {
+          "period": "Last month",
+          "value": 456,
+          "percentageChange": 12.4
+        }
+      },
+      "salesTrendData": {
+        "period": "Last year",
+        "summary": {
+          "totalLead": 2200,
+          "totalProposal": 1550,
+          "totalNegotiation": 900,
+          "totalClosed": 700
+        },
+        "monthly": [
+          {
+            "month": "January",
+            "lead": 250,
+            "proposal": 200,
+            "negotiation": 80,
+            "closed": 50
+          },
+          {
+            "month": "February",
+            "lead": 230,
+            "proposal": 190,
+            "negotiation": 70,
+            "closed": 55
+          },
+          {
+            "month": "March",
+            "lead": 200,
+            "proposal": 180,
+            "negotiation": 75,
+            "closed": 60
+          },
+          {
+            "month": "April",
+            "lead": 180,
+            "proposal": 160,
+            "negotiation": 85,
+            "closed": 65
+          },
+          {
+            "month": "May",
+            "lead": 190,
+            "proposal": 140,
+            "negotiation": 90,
+            "closed": 50
+          },
+          {
+            "month": "June",
+            "lead": 170,
+            "proposal": 130,
+            "negotiation": 95,
+            "closed": 45
+          },
+          {
+            "month": "July",
+            "lead": 160,
+            "proposal": 120,
+            "negotiation": 100,
+            "closed": 70
+          },
+          {
+            "month": "August",
+            "lead": 150,
+            "proposal": 130,
+            "negotiation": 110,
+            "closed": 80
+          },
+          {
+            "month": "September",
+            "lead": 200,
+            "proposal": 150,
+            "negotiation": 120,
+            "closed": 90
+          },
+          {
+            "month": "October",
+            "lead": 220,
+            "proposal": 170,
+            "negotiation": 100,
+            "closed": 85
+          },
+          {
+            "month": "November",
+            "lead": 240,
+            "proposal": 190,
+            "negotiation": 70,
+            "closed": 70
+          },
+          {
+            "month": "December",
+            "lead": 210,
+            "proposal": 220,
+            "negotiation": 100,
+            "closed": 80
+          }
+        ]
+      },
+      "salesByCountryData": {
+        "period": "Last month",
+        "countries": [
+          {
+            "countryName": "United States",
+            "countryCode": "US",
+            "sales": 8450
+          },
+          {
+            "countryName": "Brazil",
+            "countryCode": "BR",
+            "sales": 7780
+          },
+          {
+            "countryName": "India",
+            "countryCode": "IN",
+            "sales": 6480
+          },
+          {
+            "countryName": "Australia",
+            "countryCode": "AU",
+            "sales": 5120
+          },
+          {
+            "countryName": "France",
+            "countryCode": "FR",
+            "sales": 4450
+          },
+          {
+            "countryName": "Germany",
+            "countryCode": "DE",
+            "sales": 4320
+          },
+          {
+            "countryName": "Canada",
+            "countryCode": "CA",
+            "sales": 3980
+          },
+          {
+            "countryName": "United Kingdom",
+            "countryCode": "GB",
+            "sales": 3640
+          },
+          {
+            "countryName": "Japan",
+            "countryCode": "JP",
+            "sales": 3280
+          },
+          {
+            "countryName": "South Korea",
+            "countryCode": "KR",
+            "sales": 2920
+          }
+        ]
+      },
+      "revenueTrendData": {
+        "period": "2024",
+        "summary": {
+          "totalRevenue": 80000,
+          "totalPercentageChange": 0.25
+        },
+        "revenueTrends": [
+          {
+            "month": "January",
+            "revenue": 5000
+          },
+          {
+            "month": "February",
+            "revenue": 5500
+          },
+          {
+            "month": "March",
+            "revenue": 5000
+          },
+          {
+            "month": "April",
+            "revenue": 6000
+          },
+          {
+            "month": "May",
+            "revenue": 6500
+          },
+          {
+            "month": "June",
+            "revenue": 7000
+          },
+          {
+            "month": "July",
+            "revenue": 7250
+          },
+          {
+            "month": "August",
+            "revenue": 7250
+          },
+          {
+            "month": "September",
+            "revenue": 6500
+          },
+          {
+            "month": "October",
+            "revenue": 6000
+          },
+          {
+            "month": "November",
+            "revenue": 7000
+          },
+          {
+            "month": "December",
+            "revenue": 8000
+          }
+        ]
+      },
+      "leadSourcesData": {
+        "period": "Last month",
+        "summary": {
+          "totalLeads": 2200
+        },
+        "leads": {
+          "socialMedia": 600,
+          "emailCampaigns": 500,
+          "referrals": 450,
+          "website": 425,
+          "other": 325
+        }
+      },
+      "customerSatisfactionData": {
+        "period": "Last week",
+        "summary": {
+          "name": "Total rating",
+          "value": 3.8
+        },
+        "feedbacks": [
+          {
+            "name": "Emily Smith",
+            "email": "emily.smith@example.com",
+            "avatar": "/images/avatars/female-01.svg",
+            "rating": 4.5,
+            "feedbackMessage": "Great service! Everything was handled smoothly.",
+            "createdAt": "2024-11-20T14:35:00.000Z"
+          },
+          {
+            "name": "Michael Brown",
+            "email": "michael.brown@example.com",
+            "avatar": "/images/avatars/male-02.svg",
+            "rating": 3,
+            "feedbackMessage": "The experience was decent overall, but there is definitely room for improvement. Some aspects of the service felt rushed, and communication could have been clearer. I hope future interactions are smoother.",
+            "createdAt": "2024-11-19T10:15:00.000Z"
+          },
+          {
+            "name": "Olivia Martinez",
+            "email": "olivia.martinez@example.com",
+            "avatar": "/images/avatars/female-03.svg",
+            "rating": 5,
+            "feedbackMessage": "Exceptional service!",
+            "createdAt": "2024-11-18T09:45:00.000Z"
+          },
+          {
+            "name": "John Doe",
+            "email": "john.doe@example.com",
+            "avatar": "/images/avatars/male-01.svg",
+            "rating": 2.5,
+            "feedbackMessage": "Unfortunately, I faced several issues with the product delivery, which impacted my overall experience. The delays were frustrating, and I struggled to get proper updates. While there were some positives, these challenges made the experience less than ideal.",
+            "createdAt": "2024-11-17T17:00:00.000Z"
+          },
+          {
+            "name": "Sarah Johnson",
+            "email": "sarah.johnson@example.com",
+            "avatar": "/images/avatars/female-02.svg",
+            "rating": 4,
+            "feedbackMessage": "I had a good experience overall. The team was friendly and efficient, and I felt that they genuinely cared about my satisfaction. There’s always room for small improvements, but I’d definitely recommend them to others looking for reliable service.",
+            "createdAt": "2024-11-16T12:30:00.000Z"
+          }
+        ]
+      },
+      "activityTimelineData": {
+        "period": "Today",
+        "activities": [
+          {
+            "type": "email",
+            "iconName": "Mail",
+            "fill": "hsl(var(--chart-1))",
+            "title": "Follow-up Email to John Doe",
+            "description": "Followed up on the proposal sent last week. Awaiting response.",
+            "status": "Opened",
+            "date": "2025-02-27T10:30:00Z",
+            "assignedMembers": [
+              {
+                "name": "Emily Smith",
+                "avatar": "/images/avatars/female-01.svg",
+                "href": "/"
+              },
+              {
+                "name": "Michael Brown",
+                "avatar": "/images/avatars/male-02.svg",
+                "href": "/"
+              }
+            ]
+          },
+          {
+            "type": "supportTicket",
+            "iconName": "TicketCheck",
+            "fill": "hsl(var(--chart-2))",
+            "title": "Billing Discrepancy Support Ticket",
+            "description": "Ticket ID: TKT-12345 - Customer reported an overcharge, issue resolved with refund processed.",
+            "status": "Resolved",
+            "date": "2025-02-27T11:10:00Z",
+            "assignedMembers": [
+              {
+                "name": "Emily Smith",
+                "avatar": "/images/avatars/female-01.svg",
+                "href": "/"
+              }
+            ]
+          },
+          {
+            "type": "dealUpdate",
+            "iconName": "DollarSign",
+            "fill": "hsl(var(--chart-3))",
+            "title": "Enterprise Subscription Deal - Acme Corp",
+            "description": "Negotiation completed. Deal closed at $50,000 annual value.",
+            "status": "Closed-Won",
+            "date": "2025-02-27T14:45:00Z",
+            "assignedMembers": [
+              {
+                "name": "Sarah Johnson",
+                "avatar": "/images/avatars/female-02.svg",
+                "href": "/"
+              },
+              {
+                "name": "Michael Brown",
+                "avatar": "/images/avatars/male-02.svg",
+                "href": "/"
+              }
+            ]
+          },
+          {
+            "type": "call",
+            "iconName": "Phone",
+            "fill": "hsl(var(--chart-4))",
+            "title": "Client Call with Jane Smith",
+            "description": "15-minute call. Jane showed interest and requested a product demo.",
+            "date": "2025-02-27T15:00:00Z",
+            "assignedMembers": [
+              {
+                "name": "Michael Brown",
+                "avatar": "/images/avatars/male-02.svg",
+                "href": "/"
+              }
+            ]
+          },
+          {
+            "type": "meeting",
+            "fill": "hsl(var(--chart-5))",
+            "iconName": "Users",
+            "title": "Quarterly Planning Session - Global Tech Team",
+            "description": "Discussion on quarterly goals, key initiatives, and strategic planning.",
+            "status": "Completed",
+            "date": "2025-02-24T13:00:00Z",
+            "assignedMembers": [
+              {
+                "name": "John Doe",
+                "avatar": "/images/avatars/male-01.svg",
+                "href": "/"
+              },
+              {
+                "name": "Michael Brown",
+                "avatar": "/images/avatars/male-02.svg",
+                "href": "/"
+              },
+              {
+                "name": "Sarah Johnson",
+                "avatar": "/images/avatars/female-02.svg",
+                "href": "/"
+              },
+              {
+                "name": "Olivia Martinez",
+                "avatar": "/images/avatars/female-03.svg",
+                "href": "/"
+              },
+              {
+                "name": "Emily Smith",
+                "avatar": "/images/avatars/female-01.svg",
+                "href": "/"
+              }
+            ]
+          },
+          {
+            "type": "note",
+            "iconName": "FileText",
+            "fill": "hsl(var(--muted-foreground))",
+            "title": "Internal Note by Alice Thompson",
+            "description": "Client expressed interest in an upsell package. Follow-up recommended next week.",
+            "date": "2025-02-27T18:20:00Z",
+            "assignedMembers": [
+              {
+                "name": "John Doe",
+                "avatar": "/images/avatars/male-01.svg",
+                "href": "/"
+              },
+              {
+                "name": "Emily Smith",
+                "avatar": "/images/avatars/female-01.svg",
+                "href": "/"
+              }
+            ]
+          }
+        ]
+      },
+      "activeProjectsData": [
+        {
+          "name": "E-Commerce Platform Redesign",
+          "progress": 85,
+          "startDate": "2024-01-15T00:00:00.000Z",
+          "dueDate": "2024-10-01T00:00:00.000Z",
+          "status": "On Track"
+        },
+        {
+          "name": "Mobile App Development",
+          "progress": 60,
+          "startDate": "2024-03-10T00:00:00.000Z",
+          "dueDate": "2024-09-30T00:00:00.000Z",
+          "status": "At Risk"
+        },
+        {
+          "name": "Marketing Automation Setup",
+          "progress": 40,
+          "startDate": "2024-05-05T00:00:00.000Z",
+          "dueDate": "2024-12-15T00:00:00.000Z",
+          "status": "On Hold"
+        },
+        {
+          "name": "Cloud Migration",
+          "progress": 20,
+          "startDate": "2024-06-01T00:00:00.000Z",
+          "dueDate": "2025-03-01T00:00:00.000Z",
+          "status": "On Track"
+        },
+        {
+          "name": "Customer Support Portal Upgrade",
+          "progress": 90,
+          "startDate": "2023-12-01T00:00:00.000Z",
+          "dueDate": "2024-08-15T00:00:00.000Z",
+          "status": "On Track"
+        }
+      ],
+      "salesRepresentativeData": {
+        "period": "Last month",
+        "representatives": [
+          {
+            "name": "John Doe",
+            "avatar": "/images/avatars/male-01.svg",
+            "sales": 51099,
+            "email": "john.doe@example.com"
+          },
+          {
+            "name": "Emily Smith",
+            "avatar": "/images/avatars/female-01.svg",
+            "sales": 45078,
+            "email": "emily.smith@example.com"
+          },
+          {
+            "name": "Michael Brown",
+            "avatar": "/images/avatars/male-02.svg",
+            "sales": 40008,
+            "email": "michael.brown@example.com"
+          },
+          {
+            "name": "Olivia Martinez",
+            "avatar": "/images/avatars/female-03.svg",
+            "sales": 39000,
+            "email": "olivia.martinez@example.com"
+          },
+          {
+            "name": "Sarah Johnson",
+            "avatar": "/images/avatars/female-02.svg",
+            "sales": 22055,
+            "email": "sarah.johnson@example.com"
+          }
+        ]
+      }
+    },
+    "ecommerce": {
+      "overview": {
+        "totalSales": {
+          "value": 1243000,
+          "percentageChange": 0.08,
+          "period": "Last month"
+        },
+        "revenueSummary": {
+          "value": 952000,
+          "percentageChange": 0.05,
+          "period": "Last month"
+        },
+        "numberOfOrders": {
+          "value": 256,
+          "percentageChange": 0.12,
+          "period": "Last month"
+        },
+        "averageOrderValue": {
+          "value": 4648,
+          "percentageChange": -0.03,
+          "period": "Last month"
+        }
+      },
+      "churnRateData": {
+        "period": "Current year",
+        "summary": {
+          "totalCustomers": 9400,
+          "totalLostCustomers": 7300,
+          "averageChurnRate": 0.0815
+        },
+        "months": [
+          {
+            "month": "January",
+            "totalCustomers": 5000,
+            "lostCustomers": 400,
+            "churnRate": 0.08
+          },
+          {
+            "month": "February",
+            "totalCustomers": 5400,
+            "lostCustomers": 350,
+            "churnRate": 0.0648
+          },
+          {
+            "month": "March",
+            "totalCustomers": 5800,
+            "lostCustomers": 500,
+            "churnRate": 0.0862
+          },
+          {
+            "month": "April",
+            "totalCustomers": 6200,
+            "lostCustomers": 450,
+            "churnRate": 0.0726
+          },
+          {
+            "month": "May",
+            "totalCustomers": 6600,
+            "lostCustomers": 600,
+            "churnRate": 0.0909
+          },
+          {
+            "month": "June",
+            "totalCustomers": 7000,
+            "lostCustomers": 550,
+            "churnRate": 0.0786
+          },
+          {
+            "month": "July",
+            "totalCustomers": 7400,
+            "lostCustomers": 700,
+            "churnRate": 0.0946
+          },
+          {
+            "month": "August",
+            "totalCustomers": 7800,
+            "lostCustomers": 650,
+            "churnRate": 0.0833
+          },
+          {
+            "month": "September",
+            "totalCustomers": 8200,
+            "lostCustomers": 800,
+            "churnRate": 0.0976
+          },
+          {
+            "month": "October",
+            "totalCustomers": 8600,
+            "lostCustomers": 750,
+            "churnRate": 0.0872
+          },
+          {
+            "month": "November",
+            "totalCustomers": 9000,
+            "lostCustomers": 900,
+            "churnRate": 0.1
+          },
+          {
+            "month": "December",
+            "totalCustomers": 9400,
+            "lostCustomers": 600,
+            "churnRate": 0.0638
+          }
+        ]
+      },
+      "revenueBySourceData": {
+        "period": "Last year",
+        "summary": {
+          "totalRevenue": 1000000,
+          "percentageChange": 0.08
+        },
+        "sources": [
+          {
+            "name": "Direct",
+            "value": 250000,
+            "percentage": 0.26,
+            "fill": "hsl(var(--chart-1))"
+          },
+          {
+            "name": "Organic Search",
+            "value": 320000,
+            "percentage": 0.33,
+            "fill": "hsl(var(--chart-2))"
+          },
+          {
+            "name": "Paid Ads",
+            "value": 180000,
+            "percentage": 0.19,
+            "fill": "hsl(var(--chart-3))"
+          },
+          {
+            "name": "Social Media",
+            "value": 120000,
+            "percentage": 0.12,
+            "fill": "hsl(var(--chart-4))"
+          },
+          {
+            "name": "Referrals",
+            "value": 82000,
+            "percentage": 0.08,
+            "fill": "hsl(var(--chart-5))"
+          },
+          {
+            "name": "Email Marketing",
+            "value": 48000,
+            "percentage": 0.05,
+            "fill": "hsl(var(--muted-foreground))"
+          }
+        ]
+      },
+      "customerInsightsData": {
+        "period": "Last month",
+        "totalCustomers": 5120,
+        "newCustomers": 45,
+        "returningCustomers": 150,
+        "vipCustomers": 320
+      },
+      "genderDistributionData": [
+        {
+          "name": "Male",
+          "value": 12500,
+          "percentage": 0.5363,
+          "fill": "hsl(var(--chart-1))",
+          "x": 1.75,
+          "y": 3
+        },
+        {
+          "name": "Female",
+          "value": 10000,
+          "percentage": 0.4293,
+          "fill": "hsl(var(--chart-2))",
+          "x": 2.75,
+          "y": 2
+        },
+        {
+          "name": "Other",
+          "value": 800,
+          "percentage": 0.0343,
+          "fill": "hsl(var(--chart-3))",
+          "x": 3.75,
+          "y": 3.5
+        }
+      ],
+      "salesTrendData": {
+        "period": "Last week",
+        "summary": {
+          "lowestSales": {
+            "date": 1694025600000,
+            "sales": 85000
+          },
+          "highestSales": {
+            "date": 1693939200000,
+            "sales": 162000
+          },
+          "avgSales": 120500,
+          "totalSales": 3615000
+        },
+        "salesTrends": [
+          {
+            "date": 1693593600000,
+            "sales": 102000
+          },
+          {
+            "date": 1693680000000,
+            "sales": 158000
+          },
+          {
+            "date": 1693766400000,
+            "sales": 128000
+          },
+          {
+            "date": 1693852800000,
+            "sales": 92000
+          },
+          {
+            "date": 1693939200000,
+            "sales": 162000
+          },
+          {
+            "date": 1694025600000,
+            "sales": 85000
+          },
+          {
+            "date": 1694112000000,
+            "sales": 116000
+          }
+        ]
+      },
+      "topProductsData": {
+        "period": "Last month",
+        "products": [
+          {
+            "name": "Bluetooth Headphones",
+            "sku": "BH-001",
+            "sales": {
+              "value": 85,
+              "percentageChange": 0.15
+            },
+            "revenue": {
+              "value": 340000,
+              "percentageChange": 0.1
+            },
+            "order": 1,
+            "image": "/images/misc/product-01.jpg"
+          },
+          {
+            "name": "Smartwatch",
+            "sku": "SW-002",
+            "sales": {
+              "value": 72,
+              "percentageChange": 0.2
+            },
+            "revenue": {
+              "value": 576000,
+              "percentageChange": 0.12
+            },
+            "order": 2,
+            "image": "/images/misc/product-02.jpg"
+          },
+          {
+            "name": "Mirrorless Camera",
+            "sku": "MC-003",
+            "sales": {
+              "value": 54,
+              "percentageChange": -0.05
+            },
+            "revenue": {
+              "value": 162000,
+              "percentageChange": 0.08
+            },
+            "order": 3,
+            "image": "/images/misc/product-03.jpg"
+          },
+          {
+            "name": "Smartphone",
+            "sku": "SP-004",
+            "sales": {
+              "value": 67,
+              "percentageChange": 0.1
+            },
+            "revenue": {
+              "value": 134000,
+              "percentageChange": 0.07
+            },
+            "order": 4,
+            "image": "/images/misc/product-04.jpg"
+          }
+        ]
+      },
+      "invoicesData": [
+        {
+          "invoiceId": "INV-1001",
+          "customerName": "John Doe",
+          "orderDate": "2024-11-01T00:00:00Z",
+          "dueDate": "2024-11-15T00:00:00Z",
+          "totalAmount": 250,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1002",
+          "customerName": "Sarah Lee",
+          "orderDate": "2024-11-05T00:00:00Z",
+          "dueDate": "2024-11-20T00:00:00Z",
+          "totalAmount": 180,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1003",
+          "customerName": "Adam Smith",
+          "orderDate": "2024-11-08T00:00:00Z",
+          "dueDate": "2024-11-22T00:00:00Z",
+          "totalAmount": 320,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1004",
+          "customerName": "Emma Brown",
+          "orderDate": "2024-11-10T00:00:00Z",
+          "dueDate": "2024-11-24T00:00:00Z",
+          "totalAmount": 420,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1005",
+          "customerName": "Michael Tan",
+          "orderDate": "2024-11-15T00:00:00Z",
+          "dueDate": "2024-11-30T00:00:00Z",
+          "totalAmount": 150,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1006",
+          "customerName": "Sophia White",
+          "orderDate": "2024-11-02T00:00:00Z",
+          "dueDate": "2024-11-16T00:00:00Z",
+          "totalAmount": 275,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1007",
+          "customerName": "James Wilson",
+          "orderDate": "2024-11-06T00:00:00Z",
+          "dueDate": "2024-11-20T00:00:00Z",
+          "totalAmount": 150,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1008",
+          "customerName": "Olivia Taylor",
+          "orderDate": "2024-11-07T00:00:00Z",
+          "dueDate": "2024-11-21T00:00:00Z",
+          "totalAmount": 310,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1009",
+          "customerName": "Liam Harris",
+          "orderDate": "2024-11-09T00:00:00Z",
+          "dueDate": "2024-11-23T00:00:00Z",
+          "totalAmount": 200,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1010",
+          "customerName": "Amelia Clark",
+          "orderDate": "2024-11-11T00:00:00Z",
+          "dueDate": "2024-11-25T00:00:00Z",
+          "totalAmount": 450,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1011",
+          "customerName": "Benjamin Allen",
+          "orderDate": "2024-11-12T00:00:00Z",
+          "dueDate": "2024-11-26T00:00:00Z",
+          "totalAmount": 500,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1012",
+          "customerName": "Charlotte King",
+          "orderDate": "2024-11-13T00:00:00Z",
+          "dueDate": "2024-11-27T00:00:00Z",
+          "totalAmount": 370,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1013",
+          "customerName": "Henry Wright",
+          "orderDate": "2024-11-14T00:00:00Z",
+          "dueDate": "2024-11-28T00:00:00Z",
+          "totalAmount": 190,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1014",
+          "customerName": "Mia Scott",
+          "orderDate": "2024-11-15T00:00:00Z",
+          "dueDate": "2024-11-29T00:00:00Z",
+          "totalAmount": 230,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1015",
+          "customerName": "Jackson Lee",
+          "orderDate": "2024-11-16T00:00:00Z",
+          "dueDate": "2024-11-30T00:00:00Z",
+          "totalAmount": 350,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1016",
+          "customerName": "Harper Evans",
+          "orderDate": "2024-11-17T00:00:00Z",
+          "dueDate": "2024-12-01T00:00:00Z",
+          "totalAmount": 280,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1017",
+          "customerName": "Sebastian Mitchell",
+          "orderDate": "2024-11-18T00:00:00Z",
+          "dueDate": "2024-12-02T00:00:00Z",
+          "totalAmount": 390,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1018",
+          "customerName": "Isabella Garcia",
+          "orderDate": "2024-11-19T00:00:00Z",
+          "dueDate": "2024-12-03T00:00:00Z",
+          "totalAmount": 420,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1019",
+          "customerName": "Matthew Lopez",
+          "orderDate": "2024-11-20T00:00:00Z",
+          "dueDate": "2024-12-04T00:00:00Z",
+          "totalAmount": 160,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1020",
+          "customerName": "Avery Rodriguez",
+          "orderDate": "2024-11-21T00:00:00Z",
+          "dueDate": "2024-12-05T00:00:00Z",
+          "totalAmount": 250,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1021",
+          "customerName": "David Perez",
+          "orderDate": "2024-11-22T00:00:00Z",
+          "dueDate": "2024-12-06T00:00:00Z",
+          "totalAmount": 300,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1022",
+          "customerName": "Ella Gonzalez",
+          "orderDate": "2024-11-23T00:00:00Z",
+          "dueDate": "2024-12-07T00:00:00Z",
+          "totalAmount": 220,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1023",
+          "customerName": "Lucas Martinez",
+          "orderDate": "2024-11-24T00:00:00Z",
+          "dueDate": "2024-12-08T00:00:00Z",
+          "totalAmount": 280,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1024",
+          "customerName": "Zoe Young",
+          "orderDate": "2024-11-25T00:00:00Z",
+          "dueDate": "2024-12-09T00:00:00Z",
+          "totalAmount": 310,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1025",
+          "customerName": "Elijah Davis",
+          "orderDate": "2024-11-26T00:00:00Z",
+          "dueDate": "2024-12-10T00:00:00Z",
+          "totalAmount": 360,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1026",
+          "customerName": "Chloe Moore",
+          "orderDate": "2024-11-27T00:00:00Z",
+          "dueDate": "2024-12-11T00:00:00Z",
+          "totalAmount": 180,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1027",
+          "customerName": "Matthew Harris",
+          "orderDate": "2024-11-28T00:00:00Z",
+          "dueDate": "2024-12-12T00:00:00Z",
+          "totalAmount": 250,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1028",
+          "customerName": "Victoria Nelson",
+          "orderDate": "2024-11-29T00:00:00Z",
+          "dueDate": "2024-12-13T00:00:00Z",
+          "totalAmount": 330,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1029",
+          "customerName": "Ethan Walker",
+          "orderDate": "2024-11-30T00:00:00Z",
+          "dueDate": "2024-12-14T00:00:00Z",
+          "totalAmount": 220,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1030",
+          "customerName": "Diana Thomas",
+          "orderDate": "2024-12-01T00:00:00Z",
+          "dueDate": "2024-12-15T00:00:00Z",
+          "totalAmount": 250,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1031",
+          "customerName": "Lucas Robinson",
+          "orderDate": "2024-12-02T00:00:00Z",
+          "dueDate": "2024-12-16T00:00:00Z",
+          "totalAmount": 360,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1032",
+          "customerName": "Lily Hall",
+          "orderDate": "2024-12-03T00:00:00Z",
+          "dueDate": "2024-12-17T00:00:00Z",
+          "totalAmount": 390,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1033",
+          "customerName": "Sebastian Green",
+          "orderDate": "2024-12-04T00:00:00Z",
+          "dueDate": "2024-12-18T00:00:00Z",
+          "totalAmount": 330,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1034",
+          "customerName": "Zara Moore",
+          "orderDate": "2024-12-05T00:00:00Z",
+          "dueDate": "2024-12-19T00:00:00Z",
+          "totalAmount": 420,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1035",
+          "customerName": "Abigail Gonzalez",
+          "orderDate": "2024-12-06T00:00:00Z",
+          "dueDate": "2024-12-20T00:00:00Z",
+          "totalAmount": 350,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1036",
+          "customerName": "Tyler Martin",
+          "orderDate": "2024-12-07T00:00:00Z",
+          "dueDate": "2024-12-21T00:00:00Z",
+          "totalAmount": 500,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1037",
+          "customerName": "Sophie Clark",
+          "orderDate": "2024-12-08T00:00:00Z",
+          "dueDate": "2024-12-22T00:00:00Z",
+          "totalAmount": 250,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1038",
+          "customerName": "Jack Mitchell",
+          "orderDate": "2024-12-09T00:00:00Z",
+          "dueDate": "2024-12-23T00:00:00Z",
+          "totalAmount": 400,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1039",
+          "customerName": "Samantha Lee",
+          "orderDate": "2024-12-10T00:00:00Z",
+          "dueDate": "2024-12-24T00:00:00Z",
+          "totalAmount": 180,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1040",
+          "customerName": "Eliana Wilson",
+          "orderDate": "2024-12-11T00:00:00Z",
+          "dueDate": "2024-12-25T00:00:00Z",
+          "totalAmount": 370,
+          "deliveryStatus": "Processing"
+        },
+        {
+          "invoiceId": "INV-1041",
+          "customerName": "Henry Perez",
+          "orderDate": "2024-12-12T00:00:00Z",
+          "dueDate": "2024-12-26T00:00:00Z",
+          "totalAmount": 450,
+          "deliveryStatus": "Delivered"
+        },
+        {
+          "invoiceId": "INV-1042",
+          "customerName": "Isaac Baker",
+          "orderDate": "2024-12-13T00:00:00Z",
+          "dueDate": "2024-12-27T00:00:00Z",
+          "totalAmount": 390,
+          "deliveryStatus": "Shipped"
+        },
+        {
+          "invoiceId": "INV-1043",
+          "customerName": "Dylan Brooks",
+          "orderDate": "2024-12-14T00:00:00Z",
+          "dueDate": "2024-12-28T00:00:00Z",
+          "totalAmount": 220,
+          "deliveryStatus": "Pending"
+        },
+        {
+          "invoiceId": "INV-1044",
+          "customerName": "Ella Carter",
+          "orderDate": "2024-12-15T00:00:00Z",
+          "dueDate": "2024-12-29T00:00:00Z",
+          "totalAmount": 330,
+          "deliveryStatus": "In Transit"
+        },
+        {
+          "invoiceId": "INV-1045",
+          "customerName": "Sophie Green",
+          "orderDate": "2024-12-16T00:00:00Z",
+          "dueDate": "2024-12-30T00:00:00Z",
+          "totalAmount": 250,
+          "deliveryStatus": "Processing"
+        }
+      ],
+      "deliveryStatusesData": [
+        {
+          "label": "In Transit",
+          "value": "In Transit"
+        },
+        {
+          "label": "Delivered",
+          "value": "Delivered"
+        },
+        {
+          "label": "Processing",
+          "value": "Processing"
+        },
+        {
+          "label": "Pending",
+          "value": "Pending"
+        }
+      ]
+    },
+    "email": {
+      "emailsData": [
+        {
+          "id": "1",
+          "sender": {
+            "id": "1",
+            "name": "John Doe",
+            "avatar": "/images/avatars/male-01.svg",
+            "email": "john.doe@example.com",
+            "status": "Active"
+          },
+          "subject": "How to Succeed with Your Shopify Store",
+          "content": "Hi, John here!\n\nI wanted to share some tips and strategies that have helped me scale my Shopify store...",
+          "read": false,
+          "starred": false,
+          "createdAt": "2024-11-07T10:46:00.000Z",
+          "label": "work",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "2",
+          "sender": {
+            "id": "2",
+            "name": "Sarah Johnson",
+            "avatar": "/images/avatars/female-02.svg",
+            "email": "sarah.johnson@example.com",
+            "status": "Inactive"
+          },
+          "subject": "Please find attached the latest Company Report",
+          "content": "Dear Team,\n\nAttached you will find the most recent company report...",
+          "read": true,
+          "starred": true,
+          "createdAt": "2024-11-07T10:55:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": true,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "3",
+          "sender": {
+            "id": "3",
+            "name": "Olivia Martinez",
+            "avatar": "/images/avatars/female-03.svg",
+            "email": "olivia.martinez@example.com",
+            "status": "Active"
+          },
+          "subject": "Update Can Change Your Personal Life",
+          "content": "Hi, it's Olivia.\n\nI wanted to share some recent updates that have greatly impacted my personal life...",
+          "read": true,
+          "starred": false,
+          "createdAt": "2024-11-07T12:04:00.000Z",
+          "label": "personal",
+          "isDraft": true,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": true
+        },
+        {
+          "id": "4",
+          "sender": {
+            "id": "4",
+            "name": "Michael Brown",
+            "avatar": "/images/avatars/male-02.svg",
+            "email": "michael.brown@example.com",
+            "status": "Active"
+          },
+          "subject": "Weekly Team Meeting Agenda",
+          "content": "Hey everyone,\n\nI just wanted to remind you all about the weekly team meeting tomorrow...",
+          "read": false,
+          "starred": false,
+          "createdAt": "2024-11-07T14:30:00.000Z",
+          "label": "work",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": true,
+          "isDeleted": false
+        },
+        {
+          "id": "5",
+          "sender": {
+            "id": "5",
+            "name": "Emily Smith",
+            "avatar": "/images/avatars/female-01.svg",
+            "email": "emily.smith@example.com",
+            "status": "Inactive"
+          },
+          "subject": "New Product Launch Details",
+          "content": "Hi Team,\n\nExciting news! We are launching a new product next week...",
+          "read": true,
+          "starred": true,
+          "createdAt": "2024-11-07T16:15:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": true,
+          "isStarred": true,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "11",
+          "sender": {
+            "id": "11",
+            "name": "Emily Smith",
+            "avatar": "/images/avatars/female-01.svg",
+            "email": "emily.smith@example.com",
+            "status": "Active"
+          },
+          "subject": "Welcome to the Company!",
+          "content": "Dear New Employee,\n\nWelcome aboard! We are excited to have you join our team. Please find attached the employee handbook, and don't forget to complete your onboarding paperwork. \n\nIf you have any questions or need help settling in, don’t hesitate to reach out. We look forward to working with you!\n\nBest,  \nEmily",
+          "read": false,
+          "starred": true,
+          "createdAt": "2024-11-08T14:20:00.000Z",
+          "label": "work",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": true,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "12",
+          "sender": {
+            "id": "12",
+            "name": "Michael Brown",
+            "avatar": "/images/avatars/male-02.svg",
+            "email": "michael.brown@example.com",
+            "status": "Inactive"
+          },
+          "subject": "Reminder: Subscription Renewal",
+          "content": "Dear Customer,\n\nThis is a reminder that your subscription will be renewing soon. If you wish to cancel or update your plan, please do so before the renewal date. \n\nIf you have any questions or need assistance, our support team is here to help. Thank you for your continued support.\n\nBest regards,  \nMichael",
+          "read": true,
+          "starred": false,
+          "createdAt": "2024-11-08T15:40:00.000Z",
+          "isDraft": false,
+          "isSent": true,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": true
+        },
+        {
+          "id": "13",
+          "sender": {
+            "id": "13",
+            "name": "Olivia Martinez",
+            "avatar": "/images/avatars/female-03.svg",
+            "email": "olivia.martinez@example.com",
+            "status": "Active"
+          },
+          "subject": "Invitation to Join Our Webinar",
+          "content": "Hi there!\n\nWe are hosting a free webinar next week, and we would love for you to join. The topic will be 'Mastering Digital Marketing for 2024'. It's a great opportunity to learn valuable strategies from industry experts. \n\nClick here to register, and we hope to see you there!\n\nBest regards,  \nOlivia",
+          "read": false,
+          "starred": true,
+          "createdAt": "2024-11-08T16:55:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": true,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "14",
+          "sender": {
+            "id": "14",
+            "name": "John Doe",
+            "avatar": "/images/avatars/male-01.svg",
+            "email": "john.doe@example.com",
+            "status": "Inactive"
+          },
+          "subject": "System Maintenance Notification",
+          "content": "Dear Users,\n\nPlease be aware that our system will undergo maintenance this weekend from Friday 10:00 PM to Saturday 2:00 AM. During this time, there may be intermittent outages. \n\nWe apologize for any inconvenience and encourage you to plan accordingly. Thank you for your understanding.\n\nBest regards,  \nJohn",
+          "read": true,
+          "starred": false,
+          "createdAt": "2024-11-08T17:10:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "15",
+          "sender": {
+            "id": "15",
+            "name": "Sarah Johnson",
+            "avatar": "/images/avatars/female-02.svg",
+            "email": "sarah.johnson@example.com",
+            "status": "Active"
+          },
+          "subject": "Thank You for Your Purchase!",
+          "content": "Dear Customer,\n\nThank you for your recent purchase! We're excited for you to enjoy your new product. If you have any questions about the product or need assistance with setup, our customer service team is here to help. \n\nFeel free to reach out anytime. Enjoy your purchase!\n\nBest regards,  \nSarah",
+          "read": false,
+          "starred": false,
+          "createdAt": "2024-11-08T18:25:00.000Z",
+          "label": "work",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": true,
+          "isDeleted": false
+        },
+        {
+          "id": "21",
+          "sender": {
+            "id": "21",
+            "name": "John Doe",
+            "avatar": "/images/avatars/male-01.svg",
+            "email": "john.doe@example.com",
+            "status": "Active"
+          },
+          "subject": "Product Feedback Survey",
+          "content": "Hello,\n\nWe’d love to hear your thoughts on our recent product. Your feedback will help us improve and ensure we’re providing the best possible experience. The survey should only take a few minutes to complete.\n\nThank you in advance for your time!\n\nBest, John",
+          "read": false,
+          "starred": false,
+          "createdAt": "2024-11-09T12:00:00.000Z",
+          "label": "personal",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "22",
+          "sender": {
+            "id": "22",
+            "name": "Michael Brown",
+            "email": "michael.brown@example.com",
+            "status": "Inactive"
+          },
+          "subject": "Scheduled Maintenance Alert",
+          "content": "Dear Customer,\n\nWe will be conducting scheduled maintenance on our website this Saturday from 12:00 AM to 6:00 AM. During this time, our services may be temporarily unavailable.\n\nWe apologize for any inconvenience and appreciate your understanding.\n\nBest regards, Michael",
+          "read": true,
+          "starred": false,
+          "createdAt": "2024-11-09T13:00:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": true,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "23",
+          "sender": {
+            "id": "23",
+            "name": "Olivia Martinez",
+            "email": "olivia.martinez@example.com",
+            "status": "Active"
+          },
+          "subject": "Action Required: Tax Form Submission",
+          "content": "Hi there,\n\nThis is a reminder to submit your tax forms by the end of this week. If you have not yet submitted them, please complete the necessary paperwork as soon as possible to avoid any penalties.\n\nLet me know if you need assistance.\n\nThanks, Olivia",
+          "read": true,
+          "starred": true,
+          "createdAt": "2024-11-09T13:30:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": true,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "24",
+          "sender": {
+            "id": "24",
+            "name": "Sarah Johnson",
+            "email": "sarah.johnson@example.com",
+            "status": "Inactive"
+          },
+          "subject": "Monthly Report Submission Reminder",
+          "content": "Hi team,\n\nJust a quick reminder to submit your monthly reports by end of day Monday. We need all reports in order to prepare for the upcoming board meeting.\n\nPlease let me know if there are any issues with your submissions.\n\nBest, Sarah",
+          "read": false,
+          "starred": false,
+          "createdAt": "2024-11-09T14:00:00.000Z",
+          "label": "work",
+          "isDraft": true,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "25",
+          "sender": {
+            "id": "25",
+            "name": "Emily Smith",
+            "email": "emily.smith@example.com",
+            "status": "Active"
+          },
+          "subject": "Meeting Confirmation for Next Week",
+          "content": "Hello,\n\nI just wanted to confirm the meeting scheduled for next week on Tuesday at 11:00 AM. Please make sure to attend, as we’ll be discussing important updates and upcoming projects.\n\nLet me know if you need to reschedule.\n\nBest regards, Emily",
+          "read": false,
+          "starred": true,
+          "createdAt": "2024-11-09T14:30:00.000Z",
+          "label": "work",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": true,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "26",
+          "sender": {
+            "id": "26",
+            "name": "Michael Brown",
+            "email": "michael.brown@example.com",
+            "status": "Inactive"
+          },
+          "subject": "Important: Insurance Claim Submission",
+          "content": "Dear customer,\n\nThis is an important reminder to submit your insurance claim by the deadline. If you need assistance with your claim, please reach out to our support team. We’re here to help!\n\nBest regards, Michael",
+          "read": true,
+          "starred": false,
+          "createdAt": "2024-11-09T15:00:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "27",
+          "sender": {
+            "id": "27",
+            "name": "Olivia Martinez",
+            "email": "olivia.martinez@example.com",
+            "status": "Active"
+          },
+          "subject": "Website Design Proposal",
+          "content": "Hello,\n\nI’ve attached the proposal for the website redesign project. Please review the document and provide any feedback before our meeting next Thursday.\n\nI look forward to your thoughts.\n\nBest, Olivia",
+          "read": false,
+          "starred": false,
+          "createdAt": "2024-11-09T15:30:00.000Z",
+          "label": "work",
+          "isDraft": false,
+          "isSent": true,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "28",
+          "sender": {
+            "id": "28",
+            "name": "Sarah Johnson",
+            "email": "sarah.johnson@example.com",
+            "status": "Inactive"
+          },
+          "subject": "Job Application Status Update",
+          "content": "Dear applicant,\n\nThank you for your interest in the position at our company. After careful review, we regret to inform you that we have decided to move forward with another candidate.\n\nWe appreciate your time and wish you the best in your job search.\n\nBest regards, Sarah",
+          "read": true,
+          "starred": false,
+          "createdAt": "2024-11-09T16:00:00.000Z",
+          "label": "personal",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": true
+        },
+        {
+          "id": "29",
+          "sender": {
+            "id": "29",
+            "name": "Emily Smith",
+            "email": "emily.smith@example.com",
+            "status": "Active"
+          },
+          "subject": "Reminder: Event Registration Deadline",
+          "content": "Hi there,\n\nJust a reminder that the registration deadline for our upcoming event is this Friday. Please make sure to sign up if you plan to attend.\n\nWe look forward to seeing you there!\n\nBest regards, Emily",
+          "read": false,
+          "starred": true,
+          "createdAt": "2024-11-09T16:30:00.000Z",
+          "label": "important",
+          "isDraft": false,
+          "isSent": false,
+          "isStarred": true,
+          "isSpam": false,
+          "isDeleted": false
+        },
+        {
+          "id": "30",
+          "sender": {
+            "id": "30",
+            "name": "John Doe",
+            "email": "john.doe@example.com",
+            "status": "Inactive"
+          },
+          "subject": "Holiday Schedule Confirmation",
+          "content": "Hi team,\n\nI just wanted to confirm the holiday schedule for the upcoming month. Please let me know if there are any changes, as I need to finalize the roster.\n\nThanks for your cooperation!\n\nBest regards, John",
+          "read": true,
+          "starred": false,
+          "createdAt": "2024-11-09T17:00:00.000Z",
+          "label": "work",
+          "isDraft": false,
+          "isSent": true,
+          "isStarred": false,
+          "isSpam": false,
+          "isDeleted": false
+        }
+      ],
+      "sidebarItemsData": {
+        "folders": [
+          {
+            "iconName": "Archive",
+            "name": "inbox",
+            "unreadCount": 8
+          },
+          {
+            "iconName": "Send",
+            "name": "sent",
+            "unreadCount": 3
+          },
+          {
+            "iconName": "Pencil",
+            "name": "draft",
+            "unreadCount": 3
+          },
+          {
+            "iconName": "Star",
+            "name": "starred",
+            "unreadCount": 6
+          },
+          {
+            "iconName": "Clock",
+            "name": "spam",
+            "unreadCount": 3
+          },
+          {
+            "iconName": "Trash2",
+            "name": "trash",
+            "unreadCount": 0
+          }
+        ],
+        "labels": [
+          {
+            "iconName": "Tag",
+            "name": "personal",
+            "unreadCount": 1
+          },
+          {
+            "iconName": "Tag",
+            "name": "work",
+            "unreadCount": 11
+          },
+          {
+            "iconName": "Tag",
+            "name": "important",
+            "unreadCount": 3
+          }
+        ]
+      },
+      "labelsData": [
+        "inbox",
+        "sent",
+        "draft",
+        "starred",
+        "spam",
+        "trash"
+      ]
+    },
+    "chat": {
+      "chatsData": [
+        {
+          "id": "chat_1",
+          "lastMessage": {
+            "content": "Thank you for the update. I'll review it shortly.",
+            "createdAt": "2024-10-31T10:37:00.000Z"
+          },
+          "name": "Tech Team Discussions",
+          "messages": [
+            {
+              "id": "msg_24",
+              "senderId": "1",
+              "text": "Thank you for the update. I'll review it shortly.",
+              "createdAt": "2024-10-31T10:37:00.000Z",
+              "status": "DELIVERED"
+            },
+            {
+              "id": "msg_23",
+              "senderId": "5",
+              "files": [
+                {
+                  "id": "file_1",
+                  "name": "Flowchart_Updated.pdf",
+                  "type": "application/pdf",
+                  "size": 204800,
+                  "url": ""
+                }
+              ],
+              "createdAt": "2024-10-31T10:34:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_22",
+              "senderId": "5",
+              "text": "Here's the updated flowchart for review.",
+              "files": [
+                {
+                  "id": "file_1",
+                  "name": "flowchart-updated",
+                  "type": "application/pdf",
+                  "size": 204800,
+                  "url": ""
+                }
+              ],
+              "createdAt": "2024-10-31T10:33:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_21",
+              "senderId": "1",
+              "text": "Looks good! Do we have an alternative version?",
+              "createdAt": "2024-10-31T10:10:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_20",
+              "senderId": "5",
+              "text": "This mockup might help visualize the design.",
+              "createdAt": "2024-10-31T10:08:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_19",
+              "senderId": "5",
+              "images": [
+                {
+                  "id": "img_1",
+                  "name": "mockup-home-page",
+                  "type": "image/svg",
+                  "size": 512000,
+                  "url": "/images/illustrations/misc/whiteboard.svg"
+                }
+              ],
+              "createdAt": "2024-10-31T10:07:00.000Z",
+              "status": "READ"
+            }
+          ],
+          "users": [
+            {
+              "id": "1",
+              "name": "John Doe",
+              "avatar": "/images/avatars/male-01.svg",
+              "status": "ONLINE"
+            },
+            {
+              "id": "5",
+              "name": "Sarah Johnson",
+              "avatar": "/images/avatars/female-02.svg",
+              "status": "ONLINE"
+            }
+          ],
+          "typingUsers": []
+        },
+        {
+          "id": "chat_2",
+          "lastMessage": {
+            "content": "Hello everyone!",
+            "createdAt": "2024-10-31T10:03:00.000Z"
+          },
+          "name": "General Group",
+          "messages": [
+            {
+              "id": "msg_12",
+              "senderId": "2",
+              "text": "Pretty good! Just getting started with the day.",
+              "createdAt": "2024-10-31T10:03:00.000Z",
+              "status": "DELIVERED"
+            },
+            {
+              "id": "msg_11",
+              "senderId": "1",
+              "text": "How's everyone doing today?",
+              "createdAt": "2024-10-31T10:02:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_2",
+              "senderId": "1",
+              "text": "Hey Olivia!",
+              "createdAt": "2024-10-31T10:01:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_1",
+              "senderId": "2",
+              "text": "Hello everyone!",
+              "createdAt": "2024-10-31T10:00:00.000Z",
+              "status": "READ"
+            }
+          ],
+          "users": [
+            {
+              "id": "1",
+              "name": "John Doe",
+              "avatar": "/images/avatars/male-01.svg",
+              "status": "ONLINE"
+            },
+            {
+              "id": "2",
+              "name": "Olivia Martinez",
+              "avatar": "/images/avatars/female-03.svg",
+              "status": "IDLE"
+            }
+          ],
+          "typingUsers": [],
+          "unreadCount": 1
+        },
+        {
+          "id": "chat_3",
+          "lastMessage": {
+            "content": "Hey, did you see the updates?",
+            "createdAt": "2024-10-31T10:08:00.000Z"
+          },
+          "name": "Olivia Martinez",
+          "avatar": "/images/avatars/female-03.svg",
+          "status": "IDLE",
+          "messages": [
+            {
+              "id": "msg_14",
+              "senderId": "1",
+              "text": "Great! Let's keep it that way.",
+              "createdAt": "2024-10-31T10:08:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_13",
+              "senderId": "2",
+              "text": "They look good! I think we're on track.",
+              "createdAt": "2024-10-31T10:07:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_4",
+              "senderId": "1",
+              "text": "Yes, I checked them this morning.",
+              "createdAt": "2024-10-31T10:06:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_3",
+              "senderId": "2",
+              "text": "Hey, did you see the updates?",
+              "createdAt": "2024-10-31T10:05:00.000Z",
+              "status": "READ"
+            }
+          ],
+          "users": [
+            {
+              "id": "1",
+              "name": "John Doe",
+              "avatar": "/images/avatars/male-01.svg",
+              "status": "ONLINE"
+            },
+            {
+              "id": "2",
+              "name": "Olivia Martinez",
+              "avatar": "/images/avatars/female-03.svg",
+              "status": "IDLE"
+            }
+          ],
+          "typingUsers": []
+        },
+        {
+          "id": "chat_4",
+          "lastMessage": {
+            "content": "Meeting at 3 PM tomorrow.",
+            "createdAt": "2024-10-31T10:13:00.000Z"
+          },
+          "name": "Work Team",
+          "messages": [
+            {
+              "id": "msg_16",
+              "senderId": "4",
+              "text": "Sure! I'll prepare that.",
+              "createdAt": "2024-10-31T10:13:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_15",
+              "senderId": "3",
+              "text": "Can you send out the agenda before then?",
+              "createdAt": "2024-10-31T10:12:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_6",
+              "senderId": "4",
+              "text": "Got it! I'll be there.",
+              "createdAt": "2024-10-31T10:11:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_5",
+              "senderId": "3",
+              "text": "Meeting at 3 PM tomorrow.",
+              "createdAt": "2024-10-31T10:10:00.000Z",
+              "status": "READ"
+            }
+          ],
+          "users": [
+            {
+              "id": "3",
+              "name": "Michael Brown",
+              "avatar": "/images/avatars/male-02.svg",
+              "status": "ONLINE"
+            },
+            {
+              "id": "4",
+              "name": "Emily Smith",
+              "avatar": "/images/avatars/female-01.svg",
+              "status": "DO NOT DISTURB"
+            }
+          ],
+          "typingUsers": []
+        },
+        {
+          "id": "chat_5",
+          "lastMessage": {
+            "content": "Let’s grab lunch later?",
+            "createdAt": "2024-10-31T10:18:00.000Z"
+          },
+          "name": "Michael Johnson",
+          "avatar": "/images/avatars/male-02.svg",
+          "status": "ONLINE",
+          "messages": [
+            {
+              "id": "msg_18",
+              "senderId": "3",
+              "text": "Sounds good! I'll see you then.",
+              "createdAt": "2024-10-31T10:18:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_17",
+              "senderId": "1",
+              "text": "How about 1 PM?",
+              "createdAt": "2024-10-31T10:17:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_8",
+              "senderId": "3",
+              "text": "Sure! What time?",
+              "createdAt": "2024-10-31T10:16:00.000Z",
+              "status": "READ"
+            },
+            {
+              "id": "msg_7",
+              "senderId": "1",
+              "text": "Let’s grab lunch later?",
+              "createdAt": "2024-10-31T10:15:00.000Z",
+              "status": "READ"
+            }
+          ],
+          "users": [
+            {
+              "id": "1",
+              "name": "John Doe",
+              "avatar": "/images/avatars/male-01.svg",
+              "status": "ONLINE"
+            },
+            {
+              "id": "3",
+              "name": "Michael Johnson",
+              "avatar": "/images/avatars/male-02.svg",
+              "status": "ONLINE"
+            }
+          ],
+          "typingUsers": []
+        }
+      ]
+    },
+    "calendar": {
+      "eventsData": [
+        {
+          "id": "1",
+          "title": "Team Meeting",
+          "allDay": true,
+          "start": "2026-04-10T17:56:41.504Z",
+          "end": "2026-04-10T17:56:41.504Z",
+          "extendedProps": {
+            "category": "Business",
+            "description": "Discuss project updates."
+          }
+        },
+        {
+          "id": "2",
+          "title": "Doctor Appointment",
+          "allDay": true,
+          "start": "2026-04-15T17:56:41.504Z",
+          "end": "2026-04-15T17:56:41.504Z",
+          "extendedProps": {
+            "category": "Health",
+            "description": "Annual check-up."
+          }
+        },
+        {
+          "id": "3",
+          "title": "Birthday Party",
+          "allDay": true,
+          "start": "2026-03-31T17:56:41.504Z",
+          "end": "2026-03-31T17:56:41.504Z",
+          "extendedProps": {
+            "category": "Family",
+            "description": "Celebrating John’s birthday."
+          }
+        },
+        {
+          "id": "4",
+          "title": "Project Deadline",
+          "allDay": true,
+          "start": "2026-04-25T17:56:41.504Z",
+          "end": "2026-04-25T17:56:41.504Z",
+          "extendedProps": {
+            "category": "Business",
+            "description": "Final submission for the project."
+          }
+        },
+        {
+          "id": "5",
+          "title": "Weekend Getaway",
+          "allDay": true,
+          "start": "2026-04-05T17:56:41.504Z",
+          "end": "2026-04-07T17:56:41.504Z",
+          "extendedProps": {
+            "category": "Holiday",
+            "description": "Relaxing at the beach."
+          }
+        },
+        {
+          "id": "6",
+          "title": "Family Reunion",
+          "allDay": true,
+          "start": "2026-05-05T17:56:41.504Z",
+          "end": "2026-05-05T17:56:41.504Z",
+          "extendedProps": {
+            "category": "Family",
+            "description": "Gathering with relatives."
+          }
+        }
+      ],
+      "categoriesData": [
+        "Business",
+        "Personal",
+        "Family",
+        "Holiday",
+        "Health",
+        "Miscellaneous"
+      ]
+    },
+    "kanban": {
+      "kanbanData": [
+        {
+          "id": "backlog",
+          "title": "Backlog",
+          "order": 0,
+          "tasks": [
+            {
+              "id": "task-0",
+              "columnId": "backlog",
+              "order": 0,
+              "title": "Research Project",
+              "description": "Conduct initial research on market trends.",
+              "label": "Research",
+              "assigned": [
+                {
+                  "id": "member-0",
+                  "username": "john.doe",
+                  "name": "John Doe",
+                  "avatar": "/images/avatars/male-01.svg"
+                },
+                {
+                  "id": "member-1",
+                  "username": "emily.smith",
+                  "name": "Emily Smith",
+                  "avatar": "/images/avatars/female-01.svg"
+                },
+                {
+                  "id": "member-2",
+                  "username": "michael.brown",
+                  "name": "Michael Brown",
+                  "avatar": "/images/avatars/male-02.svg"
+                },
+                {
+                  "id": "member-3",
+                  "username": "sarah.johnson",
+                  "name": "Sarah Johnson",
+                  "avatar": "/images/avatars/female-02.svg"
+                },
+                {
+                  "id": "member-4",
+                  "username": "olivia.martinez",
+                  "name": "Olivia Martinez",
+                  "avatar": "/images/avatars/female-03.svg"
+                }
+              ],
+              "dueDate": "2026-04-10T17:56:41.505Z",
+              "attachments": [
+                {
+                  "id": "attachment-0",
+                  "url": "/research-report.pdf",
+                  "name": "research-report.pdf",
+                  "size": 1048576,
+                  "type": "application/pdf"
+                },
+                {
+                  "id": "attachment-1",
+                  "url": "/images/illustrations/scenes/scene-02.svg",
+                  "name": "scene-02.svg",
+                  "size": 524288,
+                  "type": "image/jpeg"
+                }
+              ],
+              "comments": [
+                {
+                  "id": "comment-0",
+                  "userId": "member-0",
+                  "text": "Let's start gathering data.",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                }
+              ]
+            },
+            {
+              "id": "task-1",
+              "columnId": "backlog",
+              "order": 1,
+              "title": "Design Wireframe",
+              "description": "Create a wireframe for the new feature.",
+              "label": "Design",
+              "assigned": [
+                {
+                  "id": "member-0",
+                  "username": "john.doe",
+                  "name": "John Doe",
+                  "avatar": "/images/avatars/male-01.svg"
+                },
+                {
+                  "id": "member-1",
+                  "username": "emily.smith",
+                  "name": "Emily Smith",
+                  "avatar": "/images/avatars/female-01.svg"
+                },
+                {
+                  "id": "member-2",
+                  "username": "michael.brown",
+                  "name": "Michael Brown",
+                  "avatar": "/images/avatars/male-02.svg"
+                },
+                {
+                  "id": "member-4",
+                  "username": "sarah.johnson",
+                  "name": "Sarah Johnson",
+                  "avatar": "/images/avatars/female-02.svg"
+                }
+              ],
+              "dueDate": "2026-04-10T17:56:41.505Z",
+              "attachments": [],
+              "comments": [
+                {
+                  "id": "comment-1",
+                  "userId": "member-0",
+                  "text": "We need to focus on user experience.",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                },
+                {
+                  "id": "comment-2",
+                  "userId": "member-2",
+                  "text": "Can we add more options for users?",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "in-progress",
+          "title": "In Progress",
+          "order": 1,
+          "tasks": [
+            {
+              "id": "task-3",
+              "columnId": "in-progress",
+              "order": 0,
+              "title": "Develop API",
+              "description": "Build the API for user authentication.",
+              "label": "Development",
+              "assigned": [
+                {
+                  "id": "member-2",
+                  "username": "olivia.martinez",
+                  "name": "Olivia Martinez",
+                  "avatar": "/images/avatars/female-03.svg"
+                },
+                {
+                  "id": "member-3",
+                  "username": "olivia.clark",
+                  "name": "Olivia Clark",
+                  "avatar": "/images/avatars/female-01.svg"
+                }
+              ],
+              "dueDate": "2026-04-10T17:56:41.505Z",
+              "attachments": [
+                {
+                  "id": "attachment-2",
+                  "url": "/images/illustrations/scenes/scene-01.svg",
+                  "name": "scene-01.svg",
+                  "size": 524288,
+                  "type": "image/jpeg"
+                },
+                {
+                  "id": "attachment-3",
+                  "url": "/images/illustrations/scenes/scene-02.svg",
+                  "name": "scene-02.svg",
+                  "size": 524288,
+                  "type": "image/jpeg"
+                },
+                {
+                  "id": "attachment-4",
+                  "url": "/images/illustrations/scenes/scene-03.svg",
+                  "name": "scene-03.svg",
+                  "size": 524288,
+                  "type": "image/jpeg"
+                },
+                {
+                  "id": "attachment-5",
+                  "url": "/images/illustrations/scenes/scene-04.svg",
+                  "name": "scene-04.svg",
+                  "size": 524288,
+                  "type": "image/jpeg"
+                },
+                {
+                  "id": "attachment-6",
+                  "url": "/images/illustrations/scenes/scene-04.svg",
+                  "name": "scene-05.svg",
+                  "size": 524288,
+                  "type": "image/jpeg"
+                },
+                {
+                  "id": "attachment-7",
+                  "url": "/api-specs.pdf",
+                  "name": "api-specs.pdf",
+                  "size": 2097152,
+                  "type": "application/pdf"
+                }
+              ],
+              "comments": [
+                {
+                  "id": "comment-3",
+                  "userId": "member-2",
+                  "text": "I started on the endpoints.",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                },
+                {
+                  "id": "comment-4",
+                  "userId": "member-3",
+                  "text": "Let me know if you need help!",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                }
+              ]
+            },
+            {
+              "id": "task-4",
+              "columnId": "in-progress",
+              "order": 1,
+              "title": "Update UI",
+              "description": "Revise the user interface for better UX.",
+              "label": "Design",
+              "assigned": [
+                {
+                  "id": "member-0",
+                  "username": "john.doe",
+                  "name": "John Doe",
+                  "avatar": "/images/avatars/male-01.svg"
+                }
+              ],
+              "dueDate": "2026-04-10T17:56:41.505Z",
+              "attachments": [],
+              "comments": [
+                {
+                  "id": "comment-5",
+                  "userId": "member-0",
+                  "text": "What do you think about the new color scheme?",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "done",
+          "title": "Done",
+          "order": 2,
+          "tasks": [
+            {
+              "id": "task-5",
+              "columnId": "done",
+              "order": 0,
+              "title": "Write Documentation",
+              "description": "Prepare the project documentation for release.",
+              "label": "Documentation",
+              "assigned": [
+                {
+                  "id": "member-2",
+                  "username": "michael.brown",
+                  "name": "Michael Brown",
+                  "avatar": "/images/avatars/male-02.svg"
+                },
+                {
+                  "id": "member-3",
+                  "username": "sarah.johnson",
+                  "name": "Sarah Johnson",
+                  "avatar": "/images/avatars/female-02.svg"
+                },
+                {
+                  "id": "member-4",
+                  "username": "olivia.martinez",
+                  "name": "Olivia Martinez",
+                  "avatar": "/images/avatars/female-03.svg"
+                }
+              ],
+              "dueDate": "2026-04-10T17:56:41.505Z",
+              "attachments": [
+                {
+                  "id": "attachment-8",
+                  "url": "/project-docs.pdf",
+                  "name": "project-docs.pdf",
+                  "size": 1572864,
+                  "type": "application/pdf"
+                }
+              ],
+              "comments": [
+                {
+                  "id": "comment-6",
+                  "userId": "member-2",
+                  "text": "Documentation is complete!",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                },
+                {
+                  "id": "comment-7",
+                  "userId": "member-3",
+                  "text": "Looks good, ready for review.",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                }
+              ]
+            },
+            {
+              "id": "task-6",
+              "columnId": "done",
+              "order": 1,
+              "title": "Fix Bugs",
+              "description": "Resolve all known bugs from the previous release.",
+              "label": "QA",
+              "assigned": [
+                {
+                  "id": "member-0",
+                  "username": "john.doe",
+                  "name": "John Doe",
+                  "avatar": "/images/avatars/male-01.svg"
+                },
+                {
+                  "id": "member-1",
+                  "username": "emily.smith",
+                  "name": "Emily Smith",
+                  "avatar": "/images/avatars/female-01.svg"
+                },
+                {
+                  "id": "member-2",
+                  "username": "michael.brown",
+                  "name": "Michael Brown",
+                  "avatar": "/images/avatars/male-02.svg"
+                },
+                {
+                  "id": "member-3",
+                  "username": "sarah.johnson",
+                  "name": "Sarah Johnson",
+                  "avatar": "/images/avatars/female-02.svg"
+                }
+              ],
+              "dueDate": "2026-04-10T17:56:41.505Z",
+              "attachments": [
+                {
+                  "id": "attachment-9",
+                  "url": "/bug-report.pdf",
+                  "name": "bug-report.pdf",
+                  "size": 512000,
+                  "type": "application/pdf"
+                }
+              ],
+              "comments": [
+                {
+                  "id": "comment-8",
+                  "userId": "member-1",
+                  "text": "All bugs have been fixed.",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                },
+                {
+                  "id": "comment-9",
+                  "userId": "member-0",
+                  "text": "Great teamwork!",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                }
+              ]
+            },
+            {
+              "id": "task-7",
+              "columnId": "done",
+              "order": 2,
+              "title": "Launch Campaign",
+              "description": "Officially launch the marketing campaign.",
+              "label": "Marketing",
+              "assigned": [
+                {
+                  "id": "member-1",
+                  "username": "emily.smith",
+                  "name": "Emily Smith",
+                  "avatar": "/images/avatars/female-01.svg"
+                },
+                {
+                  "id": "member-2",
+                  "username": "michael.brown",
+                  "name": "Michael Brown",
+                  "avatar": "/images/avatars/male-02.svg"
+                },
+                {
+                  "id": "member-0",
+                  "username": "john.doe",
+                  "name": "John Doe",
+                  "avatar": "/images/avatars/male-01.svg"
+                }
+              ],
+              "dueDate": "2026-04-10T17:56:41.505Z",
+              "attachments": [
+                {
+                  "id": "attachment-10",
+                  "url": "/campaign-plan.pdf",
+                  "name": "Campaign Plan",
+                  "size": 1310720,
+                  "type": "application/pdf"
+                }
+              ],
+              "comments": [
+                {
+                  "id": "comment-10",
+                  "userId": "member-1",
+                  "text": "The campaign is live!",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                },
+                {
+                  "id": "comment-11",
+                  "userId": "member-2",
+                  "text": "Let’s monitor the response closely.",
+                  "createdAt": "2026-04-10T17:56:41.505Z"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "labelsData": [
+        {
+          "id": "research",
+          "name": "Research"
+        },
+        {
+          "id": "design",
+          "name": "Design"
+        },
+        {
+          "id": "development",
+          "name": "Development"
+        },
+        {
+          "id": "meeting",
+          "name": "Meeting"
+        },
+        {
+          "id": "documentation",
+          "name": "Documentation"
+        },
+        {
+          "id": "qa",
+          "name": "QA"
+        },
+        {
+          "id": "marketing",
+          "name": "Marketing"
+        }
+      ],
+      "teamMembersData": [
+        {
+          "id": "member-0",
+          "username": "john.doe",
+          "name": "John Doe",
+          "avatar": "/images/avatars/male-01.svg"
+        },
+        {
+          "id": "member-1",
+          "username": "emily.smith",
+          "name": "Emily Smith",
+          "avatar": "/images/avatars/female-01.svg"
+        },
+        {
+          "id": "member-2",
+          "username": "michael.brown",
+          "name": "Michael Brown",
+          "avatar": "/images/avatars/male-02.svg"
+        },
+        {
+          "id": "member-3",
+          "username": "sarah.johnson",
+          "name": "Sarah Johnson",
+          "avatar": "/images/avatars/female-02.svg"
+        },
+        {
+          "id": "member-4",
+          "username": "olivia.martinez",
+          "name": "Olivia Martinez",
+          "avatar": "/images/avatars/female-03.svg"
+        }
+      ]
+    }
+  }
+}
