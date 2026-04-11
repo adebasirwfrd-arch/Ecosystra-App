@@ -1,4 +1,4 @@
-import { db } from "@/lib/prisma"
+import { db, withPrismaRetry } from "@/lib/prisma"
 
 import {
   type ShadboardPageModule,
@@ -15,9 +15,11 @@ export { isShadboardPageModule }
 export async function getShadboardPageContent(
   module: ShadboardPageModule
 ): Promise<Record<string, unknown>> {
-  const row = await db.shadboardPageContent.findUnique({
-    where: { module },
-  })
+  const row = await withPrismaRetry(() =>
+    db.shadboardPageContent.findUnique({
+      where: { module },
+    })
+  )
   if (
     row?.payload &&
     typeof row.payload === "object" &&

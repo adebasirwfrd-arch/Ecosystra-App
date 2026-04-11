@@ -24,8 +24,30 @@ function localizedHomeDestination() {
 
 const homeRedirectDest = localizedHomeDestination()
 
+function supabaseStorageImageRemotePatterns() {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!raw) return []
+  try {
+    const { hostname, protocol } = new URL(raw)
+    if (!hostname) return []
+    return [
+      {
+        protocol: protocol === "http:" ? "http" : "https",
+        hostname,
+        pathname: "/storage/v1/object/public/**",
+      },
+    ]
+  } catch {
+    return []
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  images: {
+    remotePatterns: supabaseStorageImageRemotePatterns(),
+  },
+
   // pnpm workspace: node_modules are hoisted to workspace root, trace from there
   outputFileTracingRoot: workspaceRoot,
 

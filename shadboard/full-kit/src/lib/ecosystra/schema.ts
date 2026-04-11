@@ -55,6 +55,47 @@ export const typeDefs = `#graphql
     createdAt: String!
   }
 
+  type Email {
+    id: ID!
+    sender: EmailUser!
+    recipientId: ID!
+    subject: String!
+    content: String!
+    read: Boolean!
+    starred: Boolean!
+    label: String
+    isDraft: Boolean!
+    isSent: Boolean!
+    isStarred: Boolean!
+    isSpam: Boolean!
+    isDeleted: Boolean!
+    muted: Boolean!
+    cc: String
+    bcc: String
+    attachments: JSON!
+    createdAt: String!
+  }
+
+  type EmailUser {
+    id: ID!
+    name: String!
+    email: String!
+    avatar: String
+    status: String
+  }
+
+  type EmailCounts {
+    inbox: Int!
+    sent: Int!
+    draft: Int!
+    starred: Int!
+    spam: Int!
+    trash: Int!
+    personal: Int!
+    important: Int!
+    work: Int!
+  }
+
   type Query {
     getBoard(id: ID!): Board
     getOrCreateBoard: Board!
@@ -66,6 +107,9 @@ export const typeDefs = `#graphql
     workspaceUsers(workspaceId: ID!, query: String!, take: Int): [User!]!
     workspaceMembers(workspaceId: ID!): [Member!]!
     taskAuditLog(itemId: ID!): [TaskAuditEntry!]!
+    emails(filter: String!): [Email!]!
+    emailById(id: ID!): Email
+    emailCounts: EmailCounts!
   }
 
   type Mutation {
@@ -87,6 +131,23 @@ export const typeDefs = `#graphql
     setTaskOwner(itemId: ID!, ownerUserId: ID): Item!
     setTaskAssignee(itemId: ID!, assigneeUserId: ID): Item!
     assignMemberRole(workspaceId: ID!, userId: ID!, role: String!): Member!
+    sendEmail(
+      to: String!
+      subject: String!
+      content: String!
+      label: String
+      cc: String
+      bcc: String
+      attachments: JSON
+    ): Email!
+    toggleStarEmail(id: ID!): Email!
+    markEmailAsRead(id: ID!): Email!
+    markEmailAsUnread(id: ID!): Email!
+    archiveEmail(id: ID!): Email!
+    markEmailAsSpam(id: ID!): Email!
+    deleteEmail(id: ID!): Boolean!
+    setEmailLabel(id: ID!, label: String!): Email!
+    toggleMuteEmail(id: ID!): Email!
   }
 
   type User {

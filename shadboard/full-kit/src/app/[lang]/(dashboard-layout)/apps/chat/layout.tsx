@@ -1,8 +1,8 @@
 import type { ReactNode } from "react"
+import { redirect } from "next/navigation"
 
-import { getShadboardPageContent } from "@/lib/get-shadboard-page-content"
-
-import type { ChatType } from "./types"
+import { getSession } from "@/lib/auth"
+import { ecoUserToChatUserType, ensureEcoUserFromSession, loadChatsForEcoUserId } from "@/lib/chat-server"
 
 import { ChatWrapper } from "./_components/chat-wrapper"
 
@@ -11,9 +11,23 @@ export default async function ChatLayout({
 }: {
   children: ReactNode
 }) {
-  const b = await getShadboardPageContent("chat")
+  const session = await getSession()
+
+  if (!session?.user?.email) {
+    redirect("/sign-in")
+  }
+
+  const eco = await ensureEcoUserFromSession(session)
+  if (!eco) {
+    redirect("/sign-in")
+  }
+
+  const chats = await loadChatsForEcoUserId(eco.id)
+  const currentUser = ecoUserToChatUserType(eco)
 
   return (
-    <ChatWrapper chatsData={b.chatsData as ChatType[]}>{children}</ChatWrapper>
+    <ChatWrapper chatsData={chats} currentUser={currentUser}>
+      {children}
+    </ChatWrapper>
   )
 }

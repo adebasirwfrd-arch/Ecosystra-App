@@ -1,14 +1,16 @@
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
-  // Separate from Ecosystra domain tables in `public` (same Supabase DB).
-  schemas   = ["nextauth", "shadboard_content", "public"]
+  provider = "postgresql"
+  // Prisma CLI (`db push`, `migrate`) uses this only. Use your Supabase **pooler** URI here
+  // if direct `db.*:5432` is unreachable from your machine — no separate `directUrl` required.
+  url      = env("DATABASE_URL")
+  schemas  = ["nextauth", "shadboard_content", "public"]
 }
 
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
+  // Isolated from node_modules/@prisma/client so stale generates cannot break EcoEmail fields (cc, bcc, attachments).
+  output          = "../src/generated/prisma"
 }
 
 model User {
@@ -256,10 +258,10 @@ model EcoGroup {
 }
 
 model EcoItem {
-  id              String    @id @default(uuid())
+  id              String          @id @default(uuid())
   name            String
   boardId         String
-  board           EcoBoard  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board           EcoBoard        @relation(fields: [boardId], references: [id], onDelete: Cascade)
   groupId         String?
   group           EcoGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdByUserId String?
@@ -271,6 +273,7 @@ model EcoItem {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   auditLogs       EcoTaskAuditLog[]
+  chatThreads     EcoChatThread[]
 
   @@map("Item")
   @@schema("public")
@@ -282,12 +285,16 @@ model EcoUser {
   name          String?
   avatarUrl     String?
   status        String?            @default("Active")
-  notifications EcoNotification[]
-  memberships   EcoMember[]
-  boardsCreated EcoBoard[]         @relation("BoardCreatedBy")
-  itemsCreated  EcoItem[]          @relation("ItemCreatedBy")
-  auditEntries  EcoTaskAuditLog[]
-  createdAt     DateTime           @default(now())
+  notifications  EcoNotification[]
+  memberships    EcoMember[]
+  boardsCreated  EcoBoard[]         @relation("BoardCreatedBy")
+  itemsCreated   EcoItem[]          @relation("ItemCreatedBy")
+  auditEntries   EcoTaskAuditLog[]
+  emailsSent     EcoEmail[]         @relation("EmailsSent")
+  emailsReceived EcoEmail[]         @relation("EmailsReceived")
+  chatMemberships EcoChatMember[]
+  chatMessagesSent EcoChatMessage[]
+  createdAt      DateTime           @default(now())
 
   @@map("User")
   @@schema("public")
@@ -324,6 +331,35 @@ model EcoNotification {
   @@schema("public")
 }
 
+model EcoEmail {
+  id          String   @id @default(uuid())
+  senderId    String
+  sender      EcoUser  @relation("EmailsSent", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   EcoUser  @relation("EmailsReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+  subject     String
+  content     String   @default("")
+  read        Boolean  @default(false)
+  starred     Boolean  @default(false)
+  label       String?
+  isDraft     Boolean  @default(false)
+  isSent      Boolean  @default(false)
+  isStarred   Boolean  @default(false)
+  isSpam      Boolean  @default(false)
+  isDeleted   Boolean  @default(false)
+  /// Hide from main inbox (per-message in this schema; no separate thread model).
+  muted       Boolean  @default(false)
+  cc          String?
+  bcc         String?
+  attachments Json     @default("[]")
+  createdAt   DateTime @default(now())
+
+  @@index([recipientId])
+  @@index([senderId])
+  @@map("Email")
+  @@schema("public")
+}
+
 model EcoMember {
   id          String       @id @default(uuid())
   userId      String
@@ -335,5 +371,66 @@ model EcoMember {
 
   @@unique([userId, workspaceId])
   @@map("Member")
+  @@schema("public")
+}
+
+/// Group chat thread (members + messages). Names map to UI "chat" list rows.
+model EcoChatThread {
+  id        String    @id @default(uuid())
+  name      String
+  avatarUrl String?
+  ecoItemId String?
+  ecoItem   EcoItem?  @relation(fields: [ecoItemId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  members   EcoChatMember[]
+  messages  EcoChatMessage[]
+
+  @@index([ecoItemId])
+  @@map("ChatThread")
+  @@schema("public")
+}
+
+model EcoChatMember {
+  id         String        @id @default(uuid())
+  threadId   String
+  thread     EcoChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId     String
+  user       EcoUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime?
+  joinedAt   DateTime      @default(now())
+  muted      Boolean       @default(false)
+  blocked    Boolean       @default(false)
+
+  @@unique([threadId, userId])
+  @@index([userId])
+  @@map("ChatMember")
+  @@schema("public")
+}
+
+model EcoChatMessage {
+  id          String        @id @default(uuid())
+  threadId    String
+  thread      EcoChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      EcoUser       @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  text        String        @default("")
+  attachments Json          @default("[]")
+  createdAt   DateTime      @default(now())
+  editedAt    DateTime?
+  deletedAt   DateTime?
+
+  replyToMessageId String?
+  replyTo          EcoChatMessage?  @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          EcoChatMessage[] @relation("MessageReply")
+
+  forwardedFromMessageId String?
+  forwardedFrom          EcoChatMessage?  @relation("MessageForward", fields: [forwardedFromMessageId], references: [id], onDelete: SetNull)
+  forwards               EcoChatMessage[] @relation("MessageForward")
+
+  @@index([threadId])
+  @@index([replyToMessageId])
+  @@index([forwardedFromMessageId])
+  @@map("ChatMessage")
   @@schema("public")
 }

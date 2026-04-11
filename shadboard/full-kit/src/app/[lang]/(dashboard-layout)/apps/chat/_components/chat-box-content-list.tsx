@@ -19,7 +19,7 @@ export function ChatBoxContentList({
   user: UserType
   chat: ChatType
 }) {
-  const { chatState, handleSelectChat, handleSetUnreadCount } = useChatContext()
+  const { chatState, handleSelectChat, handleMarkThreadRead } = useChatContext()
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const { settings } = useSettings()
 
@@ -32,11 +32,12 @@ export function ChatBoxContentList({
     if (chat && chat !== chatState.selectedChat) {
       handleSelectChat(chat)
     }
+  }, [chat, chatState.selectedChat, handleSelectChat])
 
-    if (!!chat?.unreadCount) {
-      handleSetUnreadCount()
-    }
-  }, [chat, chatState.selectedChat, handleSelectChat, handleSetUnreadCount])
+  useEffect(() => {
+    if (!chat?.id) return
+    void handleMarkThreadRead(chat.id)
+  }, [chat?.id, handleMarkThreadRead])
 
   // A map of chat users for quick lookup
   const userMap = useMemo(
@@ -57,15 +58,31 @@ export function ChatBoxContentList({
       >
         <ul className="flex flex-col-reverse gap-y-1.5 px-6 py-3">
           {chat.messages.map((message) => {
-            const sender = userMap.get(message.senderId) as UserType
+            const sender =
+              userMap.get(message.senderId) ??
+              ({
+                id: message.senderId,
+                name: "Unknown",
+                status: "Active",
+              } satisfies UserType)
             const isByCurrentUser = message.senderId === user.id
+
+            const replyToMessage = message.replyToMessageId
+              ? chat.messages.find((m) => m.id === message.replyToMessageId)
+              : undefined
+            const replySenderName = replyToMessage
+              ? userMap.get(replyToMessage.senderId)?.name
+              : undefined
 
             return (
               <MessageBubble
                 key={message.id}
+                threadId={chat.id}
                 sender={sender}
                 message={message}
                 isByCurrentUser={isByCurrentUser}
+                replyToMessage={replyToMessage}
+                replySenderName={replySenderName}
               />
             )
           })}

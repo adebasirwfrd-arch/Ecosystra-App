@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { Image, Send } from "lucide-react"
@@ -32,9 +32,19 @@ import { MAX_IMAGES, MAX_IMAGE_SIZE } from "../constants"
 
 const formattedImageSize = formatFileSize(MAX_IMAGE_SIZE)
 
-export function ImagesUploader() {
+type ImagesUploaderProps = {
+  /** Controlled dialog — use when opening from a menu (avoid nesting Dialog inside DropdownMenuItem). */
+  dialogOpen?: boolean
+  onDialogOpenChange?: (open: boolean) => void
+}
+
+export function ImagesUploader(props: ImagesUploaderProps = {}) {
+  const { dialogOpen, onDialogOpenChange } = props
   const { handleAddImagesMessage } = useChatContext()
-  const [isOpen, setIsOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const controlled =
+    typeof dialogOpen === "boolean" && onDialogOpenChange != null
+  const open = controlled ? dialogOpen : internalOpen
 
   const form = useForm<ImagesUploaderFormType>({
     resolver: zodResolver(ImagesUploaderSchema),
@@ -43,21 +53,38 @@ export function ImagesUploader() {
 
   const { isSubmitting } = form.formState
 
-  const onSubmit = async (data: ImagesUploaderFormType) => {
-    handleAddImagesMessage(data.images)
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (controlled) {
+        onDialogOpenChange(next)
+      } else {
+        setInternalOpen(next)
+      }
+      if (!next) {
+        form.reset({ images: [] })
+        queueMicrotask(() => {
+          document.body.style.removeProperty("pointer-events")
+        })
+      }
+    },
+    [controlled, form, onDialogOpenChange]
+  )
 
-    // Reset to default
-    form.reset()
-    setIsOpen(false)
+  const onSubmit = async (data: ImagesUploaderFormType) => {
+    await handleAddImagesMessage(data.images)
+    form.reset({ images: [] })
+    handleOpenChange(false)
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <Image className="h-4 w-4" aria-label="Images" />
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {!controlled && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <Image className="h-4 w-4" aria-label="Images" />
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="rounded-lg" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Send Images</DialogTitle>

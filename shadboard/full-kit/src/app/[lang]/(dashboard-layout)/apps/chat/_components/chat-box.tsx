@@ -3,8 +3,6 @@
 import { useMemo } from "react"
 import { useParams } from "next/navigation"
 
-import type { UserType } from "../types"
-
 import { useChatContext } from "../_hooks/use-chat-context"
 import { Card } from "@/components/ui/card"
 import { ChatBoxContent } from "./chat-box-content"
@@ -12,8 +10,8 @@ import { ChatBoxFooter } from "./chat-box-footer"
 import { ChatBoxHeader } from "./chat-box-header"
 import { ChatBoxNotFound } from "./chat-box-not-found"
 
-export function ChatBox({ user }: { user: UserType }) {
-  const { chatState } = useChatContext()
+export function ChatBox() {
+  const { chatState, currentUser } = useChatContext()
   const params = useParams()
 
   const chatIdParam = params.id?.[0] // Get the chat ID from route params
@@ -34,7 +32,7 @@ export function ChatBox({ user }: { user: UserType }) {
   return (
     <Card className="grow grid">
       <ChatBoxHeader chat={chat} />
-      <ChatBoxContent user={user} chat={chat} />
+      <ChatBoxContent user={currentUser} chat={chat} />
       <ChatBoxFooter />
     </Card>
   )

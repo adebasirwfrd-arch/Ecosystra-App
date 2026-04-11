@@ -11,7 +11,7 @@ import { join } from "path"
 
 import { config } from "dotenv"
 import { endOfMonth, startOfMonth } from "date-fns"
-import { Prisma, PrismaClient } from "@prisma/client"
+import { Prisma, PrismaClient } from "../src/generated/prisma"
 
 import { CRM_LEAD_SOURCES } from "../src/lib/crm/crm-constants"
 

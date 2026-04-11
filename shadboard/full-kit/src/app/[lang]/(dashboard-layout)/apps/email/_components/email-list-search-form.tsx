@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { Search } from "lucide-react"
@@ -28,6 +29,10 @@ export function EmailListSearchForm({
       term: "",
     },
   })
+
+  useEffect(() => {
+    form.reset({ term: "" })
+  }, [filterParam, form])
 
   const onSubmit = async (data: EmailListSearchFormType) => {
     handleGetFilteredEmailsBySearchTerm(data.term, filterParam, pageQuery)

@@ -12,7 +12,7 @@ export function ChatBoxHeader({ chat }: { chat: ChatType }) {
     <CardHeader className="flex flex-row items-center space-y-0 gap-x-1.5 py-3 border-b border-border">
       <ChatMenuButton isIcon />
       <ChatHeaderInfo chat={chat} />
-      <ChatHeaderActions />
+      <ChatHeaderActions chat={chat} />
     </CardHeader>
   )
 }

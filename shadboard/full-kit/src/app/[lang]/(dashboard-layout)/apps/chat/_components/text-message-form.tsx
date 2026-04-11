@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { Send } from "lucide-react"
+import { Send, X } from "lucide-react"
 
 import type { TextMessageFormType } from "../types"
 
@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input"
 
 export function TextMessageForm() {
-  const { handleAddTextMessage } = useChatContext()
+  const { handleAddTextMessage, replyingTo, setReplyingTo } = useChatContext()
   const form = useForm<TextMessageFormType>({
     resolver: zodResolver(TextMessageSchema),
     defaultValues: {
@@ -34,16 +34,36 @@ export function TextMessageForm() {
   const isDisabled = isSubmitting || !isValid // Disable button if form is invalid or submitting
 
   const onSubmit = async (data: TextMessageFormType) => {
-    handleAddTextMessage(data.text)
-    form.reset() // Reset the form to the initial state
+    await handleAddTextMessage(data.text)
+    form.reset()
   }
 
   return (
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="w-full flex justify-center items-center gap-1.5"
+        className="w-full flex flex-col gap-1.5"
       >
+        {replyingTo && (
+          <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/50 px-2 py-1.5 text-xs">
+            <span className="truncate text-muted-foreground">
+              Replying to{" "}
+              <span className="font-medium text-foreground">
+                {(replyingTo.text?.trim() ?? "").slice(0, 80) ||
+                  (replyingTo.images?.length ? "Photo" : "Message")}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className="shrink-0 rounded p-0.5 hover:bg-muted"
+              aria-label="Cancel reply"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
+        <div className="flex w-full justify-center items-center gap-1.5">
         <EmojiPicker
           onEmojiClick={(e) => {
             form.setValue("text", text + e.emoji)
@@ -78,6 +98,7 @@ export function TextMessageForm() {
           iconClassName="me-0"
           loadingIconClassName="me-0"
         />
+        </div>
       </form>
     </Form>
   )

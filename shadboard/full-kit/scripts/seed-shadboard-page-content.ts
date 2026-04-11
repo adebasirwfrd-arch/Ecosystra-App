@@ -6,8 +6,8 @@ import { readFileSync } from "fs"
 import { join } from "path"
 
 import { config } from "dotenv"
-import type { Prisma } from "@prisma/client"
-import { PrismaClient } from "@prisma/client"
+import type { Prisma } from "../src/generated/prisma"
+import { PrismaClient } from "../src/generated/prisma"
 
 import { SHADBOARD_PAGE_MODULES } from "../src/lib/shadboard-page-modules"
 

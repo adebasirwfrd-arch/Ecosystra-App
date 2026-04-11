@@ -1,9 +1,11 @@
 import { usePathname, useRouter } from "next/navigation"
+import { useTransition } from "react"
 import { EllipsisVertical, Star } from "lucide-react"
 
 import type { KeyboardEvent } from "react"
 import type { EmailType } from "../types"
 
+import { formatStandardEmailLabel } from "../_lib/email-label-ui"
 import { cn, ensureWithSuffix, formatDate, getInitials } from "@/lib/utils"
 
 import { useEmailContext } from "../_hooks/use-email-context"
@@ -16,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
 import { TableCell, TableRow } from "@/components/ui/table"
 
 interface EmailListContentRowDesktopProps {
@@ -27,31 +30,46 @@ export function EmailListContentRowDesktop({
   email,
   isSelected,
 }: EmailListContentRowDesktopProps) {
-  const { handleToggleSelectEmail, handleToggleStarEmail, handleSetRead } =
-    useEmailContext()
+  const {
+    handleToggleSelectEmail,
+    handleToggleStarEmail,
+    handleSetRead,
+    handleArchiveEmail,
+    handleMarkEmailSpam,
+    handleDeleteEmail,
+  } = useEmailContext()
   const router = useRouter()
   const pathname = usePathname()
+  const [navPending, startTransition] = useTransition()
+  const detailHref = ensureWithSuffix(pathname, "/") + email.id
+  const labelText = formatStandardEmailLabel(email.label)
 
   const isStarred = email.starred
 
-  function handleOnKeyDown(e: KeyboardEvent) {
-    if (e.key === "Enter" || e.key === " ") {
-      handleSetRead(email)
-      router.push(ensureWithSuffix(pathname, "/") + email.id)
-    }
+  function goToDetail() {
+    handleSetRead(email)
+    startTransition(() => {
+      router.push(detailHref)
+    })
   }
 
-  function handleOnClick() {
-    handleSetRead(email)
-    router.push(ensureWithSuffix(pathname, "/") + email.id)
+  function handleOnKeyDown(e: KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      goToDetail()
+    }
   }
 
   return (
     <TableRow
       key={email.id}
-      className={cn("cursor-pointer", email.read && "bg-muted")}
-      onClick={handleOnClick}
+      className={cn(
+        "cursor-pointer",
+        email.read && "bg-muted",
+        navPending && "opacity-80"
+      )}
+      onClick={goToDetail}
       onKeyDown={handleOnKeyDown}
+      onMouseEnter={() => router.prefetch(detailHref)}
       tabIndex={0}
     >
       <TableCell className="w-10 text-center">
@@ -71,7 +89,7 @@ export function EmailListContentRowDesktop({
             e.stopPropagation()
             handleToggleStarEmail(email)
           }}
-          aria-label={isStarred ? " email email" : "Star email"}
+          aria-label={isStarred ? "Unstar email" : "Star email"}
           aria-live="polite"
         >
           <Star
@@ -95,9 +113,16 @@ export function EmailListContentRowDesktop({
         </div>
       </TableCell>
       <TableCell>
-        <span className="text-muted-foreground line-clamp-1 break-all">
-          {email.subject}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-muted-foreground line-clamp-1 break-all">
+            {email.subject}
+          </span>
+          {labelText ? (
+            <Badge variant="secondary" className="shrink-0 text-xs font-normal capitalize">
+              {labelText}
+            </Badge>
+          ) : null}
+        </div>
       </TableCell>
       <TableCell className="w-28">
         <span className="text-sm text-muted-foreground">
@@ -117,9 +142,30 @@ export function EmailListContentRowDesktop({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>Archive</DropdownMenuItem>
-            <DropdownMenuItem>Mark as spam</DropdownMenuItem>
-            <DropdownMenuItem>Delete</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleArchiveEmail(email)
+              }}
+            >
+              Archive
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleMarkEmailSpam(email)
+              }}
+            >
+              Mark as spam
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleDeleteEmail(email)
+              }}
+            >
+              Delete
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>

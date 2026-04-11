@@ -5,7 +5,11 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody } from "@/components/ui/table"
 import { EmailListContentRowDesktop } from "./email-list-row-desktop"
 
-export function EmailListContentDesktop() {
+export function EmailListContentDesktop({
+  displayedEmails,
+}: {
+  displayedEmails: EmailType[]
+}) {
   const { emailState } = useEmailContext()
 
   const selectedEmailsSet = new Set(
@@ -16,7 +20,7 @@ export function EmailListContentDesktop() {
     <ScrollArea className="h-[calc(100vh-16.5rem)]">
       <Table>
         <TableBody>
-          {emailState.emails.map((email: EmailType) => {
+          {displayedEmails.map((email: EmailType) => {
             const isSelected = selectedEmailsSet.has(email.id)
 
             return (

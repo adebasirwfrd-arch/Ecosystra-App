@@ -1,7 +1,7 @@
 import GraphQLJSON from "graphql-type-json";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma";
 import type { AuthState } from "./auth";
-import { db as prisma } from "@/lib/prisma";
+import { db as prisma, withPrismaRetry } from "@/lib/prisma";
 import { logItemFieldChange } from "./audit";
 import { enqueueTaskEmail } from "./email-queue";
 import {
@@ -29,17 +29,284 @@ function appBaseUrl(): string {
   );
 }
 
+type EcoEmailRow = {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  subject: string;
+  content: string;
+  read: boolean;
+  starred: boolean;
+  label: string | null;
+  isDraft: boolean;
+  isSent: boolean;
+  isStarred: boolean;
+  isSpam: boolean;
+  isDeleted: boolean;
+  muted: boolean;
+  cc: string | null;
+  bcc: string | null;
+  attachments: unknown;
+  createdAt: Date;
+  sender: { id: string; name: string | null; email: string; avatarUrl: string | null; status: string | null };
+};
+
+function formatAttachmentsForGql(raw: unknown): unknown[] {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) return raw;
+  return [];
+}
+
+function formatEmailRow(row: EcoEmailRow) {
+  return {
+    id: row.id,
+    sender: {
+      id: row.sender.id,
+      name: row.sender.name || row.sender.email.split("@")[0],
+      email: row.sender.email,
+      avatar: row.sender.avatarUrl || null,
+      status: row.sender.status || "Active",
+    },
+    recipientId: row.recipientId,
+    subject: row.subject,
+    content: row.content,
+    read: row.read,
+    starred: row.starred,
+    label: row.label?.trim() ? row.label.trim().toLowerCase() : null,
+    isDraft: row.isDraft,
+    isSent: row.isSent,
+    isStarred: row.isStarred,
+    isSpam: row.isSpam,
+    isDeleted: row.isDeleted,
+    muted: row.muted,
+    cc: row.cc ?? null,
+    bcc: row.bcc ?? null,
+    attachments: formatAttachmentsForGql(row.attachments),
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+const MAX_ATTACHMENT_BYTES = 500 * 1024;
+const MAX_ATTACHMENTS_TOTAL_BYTES = 2 * 1024 * 1024;
+
+function parseAddressList(s: string | null | undefined): string[] {
+  if (!s?.trim()) return [];
+  const parts = s.split(/[,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return [...new Set(parts)];
+}
+
+function normalizeAttachmentsInput(raw: unknown): Prisma.InputJsonValue {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) throw new Error("INVALID_ATTACHMENTS");
+  let total = 0;
+  const out: Array<{ fileName: string; mimeType: string; contentBase64: string }> = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) throw new Error("INVALID_ATTACHMENTS");
+    const o = item as Record<string, unknown>;
+    const fileName = String(o.fileName ?? "file").slice(0, 240);
+    const mimeType = String(o.mimeType ?? "application/octet-stream").slice(0, 120);
+    const contentBase64 = String(o.contentBase64 ?? "");
+    let size: number;
+    try {
+      size = Buffer.from(contentBase64, "base64").length;
+    } catch {
+      throw new Error("INVALID_ATTACHMENTS");
+    }
+    if (size > MAX_ATTACHMENT_BYTES) throw new Error("ATTACHMENT_TOO_LARGE");
+    total += size;
+    if (total > MAX_ATTACHMENTS_TOTAL_BYTES) throw new Error("ATTACHMENTS_TOO_LARGE");
+    out.push({ fileName, mimeType, contentBase64 });
+  }
+  return out as unknown as Prisma.InputJsonValue;
+}
+
+/** Sidebar folders personal / important / work — stored values may be mixed case from older sends. */
+function systemLabelEquals(tag: "personal" | "important" | "work"): Prisma.StringNullableFilter {
+  return { equals: tag, mode: "insensitive" };
+}
+
+function normalizeIncomingEmailLabel(label: string | null | undefined): string | null {
+  if (label == null || typeof label !== "string") return null;
+  const t = label.trim().toLowerCase();
+  if (!t) return null;
+  if (t === "personal" || t === "important" || t === "work") return t;
+  return null;
+}
+
+/**
+ * Folder counts — parallel `count()` queries (read-only) for lower latency vs sequential round-trips.
+ */
+async function aggregateEmailCountsForUser(userId: string) {
+  const [
+    inbox,
+    sent,
+    draft,
+    starred,
+    spam,
+    trash,
+    personal,
+    important,
+    work,
+  ] = await Promise.all([
+    prisma.ecoEmail.count({
+      where: {
+        recipientId: userId,
+        isSent: false,
+        isDraft: false,
+        isSpam: false,
+        isDeleted: false,
+        muted: false,
+        read: false,
+      },
+    }),
+    prisma.ecoEmail.count({
+      where: { senderId: userId, isSent: true },
+    }),
+    prisma.ecoEmail.count({
+      where: { senderId: userId, isDraft: true },
+    }),
+    prisma.ecoEmail.count({
+      where: {
+        OR: [{ recipientId: userId }, { senderId: userId }],
+        isStarred: true,
+      },
+    }),
+    prisma.ecoEmail.count({
+      where: {
+        recipientId: userId,
+        isSpam: true,
+        isDeleted: false,
+        read: false,
+      },
+    }),
+    prisma.ecoEmail.count({
+      where: {
+        OR: [{ recipientId: userId }, { senderId: userId }],
+        isDeleted: true,
+      },
+    }),
+    prisma.ecoEmail.count({
+      where: {
+        label: systemLabelEquals("personal"),
+        isSpam: false,
+        isDeleted: false,
+        read: false,
+        OR: [{ recipientId: userId }, { senderId: userId }],
+      },
+    }),
+    prisma.ecoEmail.count({
+      where: {
+        label: systemLabelEquals("important"),
+        isSpam: false,
+        isDeleted: false,
+        read: false,
+        OR: [{ recipientId: userId }, { senderId: userId }],
+      },
+    }),
+    prisma.ecoEmail.count({
+      where: {
+        label: systemLabelEquals("work"),
+        isSpam: false,
+        isDeleted: false,
+        read: false,
+        OR: [{ recipientId: userId }, { senderId: userId }],
+      },
+    }),
+  ]);
+  return {
+    inbox,
+    sent,
+    draft,
+    starred,
+    spam,
+    trash,
+    personal,
+    important,
+    work,
+  };
+}
+
+function buildEmailFilter(filter: string, userId: string): Prisma.EcoEmailWhereInput {
+  switch (filter) {
+    case "inbox":
+      return {
+        recipientId: userId,
+        isSent: false,
+        isDraft: false,
+        isSpam: false,
+        isDeleted: false,
+        muted: false,
+      };
+    case "sent":
+      return { senderId: userId, isSent: true };
+    case "draft":
+      return { senderId: userId, isDraft: true };
+    case "starred":
+      return { OR: [{ recipientId: userId }, { senderId: userId }], isStarred: true };
+    case "spam":
+      return { recipientId: userId, isSpam: true };
+    case "trash":
+      return { OR: [{ recipientId: userId }, { senderId: userId }], isDeleted: true };
+    case "personal":
+      return {
+        label: systemLabelEquals("personal"),
+        isSpam: false,
+        isDeleted: false,
+        OR: [{ recipientId: userId }, { senderId: userId }],
+      };
+    case "important":
+      return {
+        label: systemLabelEquals("important"),
+        isSpam: false,
+        isDeleted: false,
+        OR: [{ recipientId: userId }, { senderId: userId }],
+      };
+    case "work":
+      return {
+        label: systemLabelEquals("work"),
+        isSpam: false,
+        isDeleted: false,
+        OR: [{ recipientId: userId }, { senderId: userId }],
+      };
+    default:
+      return { recipientId: userId, isSpam: false, isDeleted: false, muted: false };
+  }
+}
+
 async function getViewer(ctx: GqlContext) {
   if (!ctx.auth.email) {
     throw new Error("UNAUTHORIZED");
   }
-  return prisma.ecoUser.upsert({
-    where: { email: ctx.auth.email },
-    create: {
-      email: ctx.auth.email,
-      name: ctx.auth.email.split("@")[0],
+  return withPrismaRetry(() =>
+    prisma.ecoUser.upsert({
+      where: { email: ctx.auth.email },
+      create: {
+        email: ctx.auth.email,
+        name: ctx.auth.email.split("@")[0],
+      },
+      update: {},
+    })
+  );
+}
+
+/** Resolve EcoUser by email, or create from NextAuth `User` so app email works for all signed-up accounts. */
+async function ensureEcoRecipientByEmail(to: string) {
+  const raw = to.trim();
+  if (!raw) return null;
+  const existing = await prisma.ecoUser.findFirst({
+    where: { email: { equals: raw, mode: "insensitive" } },
+  });
+  if (existing) return existing;
+  const authUser = await prisma.user.findFirst({
+    where: { email: { equals: raw, mode: "insensitive" } },
+  });
+  if (!authUser?.email) return null;
+  return prisma.ecoUser.create({
+    data: {
+      email: authUser.email,
+      name: authUser.name || authUser.email.split("@")[0],
+      avatarUrl: authUser.avatar || authUser.image,
     },
-    update: {},
   });
 }
 
@@ -330,6 +597,36 @@ export const resolvers = {
         take: 200,
       });
     },
+
+    emails: async (_: unknown, { filter }: { filter: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const where = buildEmailFilter(filter, viewer.id);
+      const rows = await withPrismaRetry(() =>
+        prisma.ecoEmail.findMany({
+          where,
+          include: { sender: true },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        })
+      );
+      return rows.map(formatEmailRow);
+    },
+
+    emailById: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await withPrismaRetry(() =>
+        prisma.ecoEmail.findFirst({
+          where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+          include: { sender: true },
+        })
+      );
+      return row ? formatEmailRow(row) : null;
+    },
+
+    emailCounts: async (_: unknown, __: unknown, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      return withPrismaRetry(() => aggregateEmailCountsForUser(viewer.id));
+    },
   },
 
   TaskAuditEntry: {
@@ -442,6 +739,33 @@ export const resolvers = {
           deepLink: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
           summary: `You were assigned to task "${item.name}"`,
         });
+
+        try {
+          const subject = `Assigned: ${item.name}`;
+          const content = `You have been assigned to task "${item.name}".\n\nOpen the task: ${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`;
+          await prisma.ecoEmail.create({
+            data: {
+              senderId: viewer.id,
+              recipientId: assignee.id,
+              subject,
+              content,
+              label: "work",
+              isSent: false,
+            },
+          });
+          await prisma.ecoEmail.create({
+            data: {
+              senderId: viewer.id,
+              recipientId: assignee.id,
+              subject,
+              content,
+              label: "work",
+              isSent: true,
+            },
+          });
+        } catch (e) {
+          console.warn("[setTaskAssignee] auto email row failed", e);
+        }
       }
 
       return updated;
@@ -671,6 +995,220 @@ export const resolvers = {
       const n = await prisma.ecoNotification.findFirst({ where: { id, userId: viewer.id } });
       if (!n) throw new Error("NOT_FOUND");
       return prisma.ecoNotification.update({ where: { id: n.id }, data: { isRead: true } });
+    },
+
+    sendEmail: async (
+      _: unknown,
+      {
+        to,
+        subject,
+        content,
+        label,
+        cc,
+        bcc,
+        attachments,
+      }: {
+        to: string;
+        subject: string;
+        content: string;
+        label?: string | null;
+        cc?: string | null;
+        bcc?: string | null;
+        attachments?: unknown | null;
+      },
+      ctx: GqlContext
+    ) => {
+      const viewer = await getViewer(ctx);
+      const recipient = await ensureEcoRecipientByEmail(to);
+      if (!recipient) throw new Error("RECIPIENT_NOT_FOUND");
+
+      const attachmentsJson = normalizeAttachmentsInput(attachments);
+      const toNorm = to.trim().toLowerCase();
+      const ccList = parseAddressList(cc ?? undefined).filter((e) => e !== toNorm);
+      const bccSet = new Set(parseAddressList(bcc ?? undefined));
+      for (const c of ccList) bccSet.delete(c);
+      const bccList = [...bccSet];
+      const ccDisplay = cc?.trim() ? cc.trim() : null;
+      const bccDisplay = bcc?.trim() ? bcc.trim() : null;
+
+      const basePayload = {
+        subject,
+        content,
+        label: normalizeIncomingEmailLabel(label ?? undefined),
+        cc: ccDisplay,
+        bcc: bccDisplay,
+        attachments: attachmentsJson,
+      };
+
+      const sentRow = await prisma.ecoEmail.create({
+        data: {
+          ...basePayload,
+          senderId: viewer.id,
+          recipientId: recipient.id,
+          isSent: true,
+        },
+        include: { sender: true },
+      });
+
+      await prisma.ecoEmail.create({
+        data: {
+          ...basePayload,
+          senderId: viewer.id,
+          recipientId: recipient.id,
+          isSent: false,
+        },
+      });
+
+      const extraEmails = [...new Set([...ccList, ...bccList])];
+      for (const addr of extraEmails) {
+        const u = await ensureEcoRecipientByEmail(addr);
+        if (!u || u.id === recipient.id) continue;
+        await prisma.ecoEmail.create({
+          data: {
+            ...basePayload,
+            senderId: viewer.id,
+            recipientId: u.id,
+            isSent: false,
+          },
+        });
+      }
+
+      try {
+        const { sendTaskNotificationEmail } = await import("./brevo-email");
+        await sendTaskNotificationEmail({
+          taskId: sentRow.id,
+          assigneeEmail: to,
+          assigneeName: recipient.name,
+          changes: {},
+          deepLink: `${appBaseUrl()}/apps/email/inbox`,
+          summary: subject,
+        });
+      } catch (e) {
+        console.warn("[sendEmail] brevo send failed", e);
+      }
+
+      return formatEmailRow(sentRow);
+    },
+
+    toggleStarEmail: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) throw new Error("NOT_FOUND");
+      const updated = await prisma.ecoEmail.update({
+        where: { id },
+        data: { starred: !row.starred, isStarred: !row.starred },
+        include: { sender: true },
+      });
+      return formatEmailRow(updated);
+    },
+
+    markEmailAsRead: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) throw new Error("NOT_FOUND");
+      const updated = await prisma.ecoEmail.update({
+        where: { id },
+        data: { read: true },
+        include: { sender: true },
+      });
+      return formatEmailRow(updated);
+    },
+
+    markEmailAsUnread: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) throw new Error("NOT_FOUND");
+      const updated = await prisma.ecoEmail.update({
+        where: { id },
+        data: { read: false },
+        include: { sender: true },
+      });
+      return formatEmailRow(updated);
+    },
+
+    archiveEmail: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) throw new Error("NOT_FOUND");
+      const updated = await prisma.ecoEmail.update({
+        where: { id },
+        data: { isDeleted: true, isSpam: false },
+        include: { sender: true },
+      });
+      return formatEmailRow(updated);
+    },
+
+    markEmailAsSpam: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) throw new Error("NOT_FOUND");
+      const updated = await prisma.ecoEmail.update({
+        where: { id },
+        data: { isSpam: true, isDeleted: false },
+        include: { sender: true },
+      });
+      return formatEmailRow(updated);
+    },
+
+    deleteEmail: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) {
+        const stillThere = await prisma.ecoEmail.findUnique({ where: { id } });
+        if (!stillThere) return true;
+        throw new Error("FORBIDDEN");
+      }
+      if (row.isDeleted) {
+        await prisma.ecoEmail.delete({ where: { id } });
+      } else {
+        await prisma.ecoEmail.update({ where: { id }, data: { isDeleted: true } });
+      }
+      return true;
+    },
+
+    setEmailLabel: async (_: unknown, { id, label }: { id: string; label: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) throw new Error("NOT_FOUND");
+      const t = label.trim().toLowerCase();
+      let next: string | null;
+      if (!t) next = null;
+      else if (t === "personal" || t === "important" || t === "work") next = t;
+      else throw new Error("INVALID_LABEL");
+      const updated = await prisma.ecoEmail.update({
+        where: { id },
+        data: { label: next },
+        include: { sender: true },
+      });
+      return formatEmailRow(updated);
+    },
+
+    toggleMuteEmail: async (_: unknown, { id }: { id: string }, ctx: GqlContext) => {
+      const viewer = await getViewer(ctx);
+      const row = await prisma.ecoEmail.findFirst({
+        where: { id, OR: [{ recipientId: viewer.id }, { senderId: viewer.id }] },
+      });
+      if (!row) throw new Error("NOT_FOUND");
+      const updated = await prisma.ecoEmail.update({
+        where: { id },
+        data: { muted: !row.muted },
+        include: { sender: true },
+      });
+      return formatEmailRow(updated);
     },
   },
 

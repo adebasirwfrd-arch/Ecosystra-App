@@ -15,6 +15,21 @@ export function ChatSidebarList() {
 
   const chats = chatState.chats
 
+  if (chats.length === 0) {
+    return (
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground",
+          "h-[calc(100vh-5.5rem)] md:h-[calc(100vh-12.5rem)]",
+          layout === "horizontal" && "md:h-[calc(100vh-15.825rem)]"
+        )}
+      >
+        <p>No conversations yet.</p>
+        <p className="text-xs">Use the new-chat button above to start a thread.</p>
+      </div>
+    )
+  }
+
   return (
     <ScrollArea
       className={cn(

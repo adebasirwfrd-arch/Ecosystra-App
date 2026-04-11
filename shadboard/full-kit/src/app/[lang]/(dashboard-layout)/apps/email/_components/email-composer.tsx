@@ -1,5 +1,7 @@
 "use client"
 
+import { Suspense } from "react"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmailComposerForm } from "./email-composer-form"
 import { EmailMenuButton } from "./email-menu-button"
@@ -12,7 +14,9 @@ export function EmailComposer() {
         <CardTitle>Compose Mail</CardTitle>
       </CardHeader>
       <CardContent className="flex-1 h-full p-0">
-        <EmailComposerForm />
+        <Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Loading…</p>}>
+          <EmailComposerForm />
+        </Suspense>
       </CardContent>
     </Card>
   )

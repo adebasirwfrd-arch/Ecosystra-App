@@ -1,23 +1,26 @@
 import { z } from "zod"
 
+/** Cc/Bcc: kosong, satu email, atau beberapa dipisah koma/semicolon. */
+const optionalAddressList = z.string().trim().refine(
+  (val) => {
+    if (val === "") return true
+    return val.split(/[,;]+/).every((part) => {
+      const t = part.trim()
+      return t === "" || z.string().email().safeParse(t).success
+    })
+  },
+  { message: "Invalid email address(es)" }
+)
+
 export const EmailComposerSchema = z.object({
   to: z
     .string()
-    .email({ message: "Invalid email address" })
-    .toLowerCase()
-    .trim(),
-  cc: z
-    .string()
-    .email({ message: "Invalid email address" })
-    .toLowerCase()
     .trim()
-    .optional(),
-  bcc: z
-    .string()
+    .min(1, { message: "Recipient is required" })
     .email({ message: "Invalid email address" })
-    .toLowerCase()
-    .trim()
-    .optional(),
+    .transform((s) => s.toLowerCase()),
+  cc: optionalAddressList,
+  bcc: optionalAddressList,
   subject: z
     .string()
     .trim()

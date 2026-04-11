@@ -19,6 +19,51 @@ export interface MediaGridProps extends ComponentProps<"ul"> {
   onMediaClick?: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
+function hasRenderableSrc(src: string | undefined): boolean {
+  return typeof src === "string" && src.trim().length > 0
+}
+
+function MediaPlaceholder({ label }: { label: string }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg px-2 text-center text-xs text-muted-foreground break-words">
+      {label}
+    </div>
+  )
+}
+
+function MediaTile({ item }: { item: MediaType }) {
+  const src = item.src?.trim() ?? ""
+  const hasSrc = hasRenderableSrc(src)
+
+  if (item.type === "VIDEO") {
+    if (!hasSrc) {
+      return <MediaPlaceholder label={item.alt || "Video"} />
+    }
+    return (
+      <video
+        src={src}
+        className="size-full rounded-lg object-cover"
+        controls
+        muted
+      />
+    )
+  }
+
+  if (!hasSrc) {
+    return <MediaPlaceholder label={item.alt || "Image"} />
+  }
+
+  return (
+    <Image
+      src={src}
+      alt={item.alt}
+      className="rounded-lg object-cover"
+      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+      fill
+    />
+  )
+}
+
 export function MediaGrid({
   data,
   limit = 4,
@@ -43,30 +88,15 @@ export function MediaGrid({
       )}
       {...props}
     >
-      {displayedMedia.map((item) => (
-        <li key={`${item.alt}-${item.src}`}>
+      {displayedMedia.map((item, index) => (
+        <li key={`${index}-${item.alt}-${item.src || "placeholder"}`}>
           <button
             type="button"
             onClick={onMediaClick}
-            className="cursor-pointer relative size-full aspect-square before:absolute before:inset-0 before:rounded-lg before:z-10 hover:before:bg-black/5"
+            className="relative aspect-square size-full cursor-pointer before:absolute before:inset-0 before:z-10 before:rounded-lg hover:before:bg-black/5"
             aria-label="Media"
           >
-            {item.type === "VIDEO" ? (
-              <video
-                src={item.src}
-                className="object-cover size-full rounded-lg"
-                controls
-                muted
-              />
-            ) : (
-              <Image
-                src={item.src}
-                alt={item.alt}
-                className="object-cover rounded-lg"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                fill
-              />
-            )}
+            <MediaTile item={item} />
           </button>
         </li>
       ))}
@@ -81,22 +111,7 @@ export function MediaGrid({
             className="cursor-pointer relative size-full aspect-square before:absolute before:inset-0 before:rounded-lg before:z-10 hover:before:bg-black/5"
             aria-label={remainingCount > 0 ? "More media" : "Media"}
           >
-            {lastMedia.type === "VIDEO" ? (
-              <video
-                src={lastMedia.src}
-                className="object-cover rounded-lg size-full"
-                controls
-                muted
-              />
-            ) : (
-              <Image
-                src={lastMedia.src}
-                alt={lastMedia.alt}
-                className="object-cover rounded-lg"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                fill
-              />
-            )}
+            <MediaTile item={lastMedia} />
             {remainingCount > 0 && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/25 text-3xl text-white font-semibold rounded-lg">
                 <span>+{remainingCount}</span>

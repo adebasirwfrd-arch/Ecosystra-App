@@ -21,7 +21,7 @@ try {
 }
 
 const initSqlJs = require("sql.js");
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient } = require("../src/generated/prisma");
 
 function candidates() {
   const env = process.env.SQLITE_MIGRATE_SOURCE;

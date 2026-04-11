@@ -38,5 +38,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Prisma client (generated to match prisma/schema.prisma — run pnpm db:generate or pnpm install)
+/src/generated/prisma
+
 # local runtime error sink (see /api/error-logs)
 /logs/

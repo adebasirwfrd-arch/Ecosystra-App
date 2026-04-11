@@ -1,9 +1,8 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
+import { redirect } from "next/navigation"
 
-import { getShadboardPageContent } from "@/lib/get-shadboard-page-content"
-
-import type { EmailSidebarItemsType, EmailType } from "./types"
+import { getSession } from "@/lib/auth"
 
 import { EmailWrapper } from "./_components/email-wrapper"
 
@@ -16,13 +15,14 @@ export default async function EmailLayout({
 }: {
   children: ReactNode
 }) {
-  const b = await getShadboardPageContent("email")
+  const session = await getSession()
+
+  if (!session?.user?.id) {
+    redirect("/sign-in")
+  }
 
   return (
-    <EmailWrapper
-      emailsData={b.emailsData as EmailType[]}
-      sidebarItemsData={b.sidebarItemsData as EmailSidebarItemsType}
-    >
+    <EmailWrapper apiAccessToken={session.apiAccessToken ?? null}>
       {children}
     </EmailWrapper>
   )

@@ -7,7 +7,11 @@ import { useSettings } from "@/hooks/use-settings"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { EmailListContentItemMoblie } from "./email-list-content-item-mobile"
 
-export function EmailListContentMobile() {
+export function EmailListContentMobile({
+  displayedEmails,
+}: {
+  displayedEmails: EmailType[]
+}) {
   const { emailState } = useEmailContext()
   const { settings } = useSettings()
 
@@ -23,7 +27,7 @@ export function EmailListContentMobile() {
           settings.layout === "horizontal" && "md:h-[calc(100vh-22.1rem)]"
         )}
       >
-        {emailState.emails.map((email: EmailType) => {
+        {displayedEmails.map((email: EmailType) => {
           const isSelected = selectedEmailsSet.has(email.id)
 
           return (

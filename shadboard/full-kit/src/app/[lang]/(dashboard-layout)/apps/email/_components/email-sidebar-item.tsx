@@ -16,13 +16,13 @@ import { DynamicIcon } from "@/components/dynamic-icon"
 
 interface EmailSidebarItemProps {
   item: EmailSidebarItemType
-  segmentParam: ParamValue
+  filterParam: ParamValue
   locale: LocaleType
 }
 
 export function EmailSidebarItem({
   item,
-  segmentParam,
+  filterParam,
   locale,
 }: EmailSidebarItemProps) {
   const { setIsEmailSidebarOpen } = useEmailContext()
@@ -33,13 +33,14 @@ export function EmailSidebarItem({
     <li>
       <Link
         href={ensureLocalizedPathname("/apps/email/" + item.name, locale)}
+        scroll={false}
         className={cn(
           buttonVariants({ variant: "ghost" }),
           "w-full justify-start",
-          segmentParam === item.name && "bg-accent" // Highlight the current email view
+          filterParam === item.name && "bg-accent"
         )}
         onClick={() => setIsEmailSidebarOpen(false)}
-        aria-current={segmentParam === item.name ? "true" : undefined}
+        aria-current={filterParam === item.name ? "true" : undefined}
       >
         <DynamicIcon name={item.iconName} className="me-2 h-4 w-4" />
         <span className="capitalize">{item.name}</span>

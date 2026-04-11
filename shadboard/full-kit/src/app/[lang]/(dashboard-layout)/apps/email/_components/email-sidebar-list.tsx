@@ -12,7 +12,7 @@ export function EmailSidebarList() {
   const params = useParams()
 
   const locale = params.lang as LocaleType
-  const segmentParam = params.segment
+  const filterParam = params.filter
 
   return (
     <ul className="p-3 pt-0">
@@ -21,7 +21,7 @@ export function EmailSidebarList() {
           <EmailSidebarItem
             key={item.name}
             item={item}
-            segmentParam={segmentParam}
+            filterParam={filterParam}
             locale={locale}
           />
         ))}
@@ -32,7 +32,7 @@ export function EmailSidebarList() {
             <EmailSidebarItem
               key={item.name}
               item={item}
-              segmentParam={segmentParam}
+              filterParam={filterParam}
               locale={locale}
             />
           ))}

@@ -17,17 +17,23 @@ import {
 import { EmailListSearchForm } from "./email-list-search-form"
 import { EmailMenuButton } from "./email-menu-button"
 
-export function EmailListHeader() {
-  const { emailState } = useEmailContext()
+interface EmailListHeaderProps {
+  totalPages: number
+  currentPage: number
+}
+
+export function EmailListHeader({ totalPages, currentPage }: EmailListHeaderProps) {
+  const { refetchEmails } = useEmailContext()
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams()
   const searchParams = useSearchParams()
 
+  const filterParam = params.filter as string
+
   const pageQuery = searchParams.get("page")
-    ? parseInt(searchParams.get("page") as string)
-    : 1 // Get the current page from the search params, default to page 1
-  const filterParam = params.segment as string
+    ? parseInt(searchParams.get("page") as string, 10) || 1
+    : 1
 
   return (
     <CardHeader className="flex-row justify-between items-center gap-x-1.5 space-y-0 px-3 pb-0">
@@ -37,7 +43,10 @@ export function EmailListHeader() {
         variant="ghost"
         size="icon"
         className="ms-auto"
-        onClick={() => router.refresh()}
+        type="button"
+        onClick={() => {
+          void refetchEmails()
+        }}
         aria-label="Refresh emails"
       >
         <RotateCw className="h-4 w-4" />
@@ -48,11 +57,12 @@ export function EmailListHeader() {
             <Button
               variant="ghost"
               size="icon"
+              type="button"
               onClick={() => {
-                router.push(`${pathname}?page=${pageQuery - 1}`)
+                router.push(`${pathname}?page=${Math.max(1, currentPage - 1)}`)
               }}
               aria-label="Go to previous page"
-              disabled={pageQuery <= 1}
+              disabled={currentPage <= 1}
             >
               <ChevronLeft className="h-4 w-4 rtl:-scale-100" />
             </Button>
@@ -61,11 +71,14 @@ export function EmailListHeader() {
             <Button
               variant="ghost"
               size="icon"
+              type="button"
               onClick={() => {
-                router.push(`${pathname}?page=${pageQuery + 1}`)
+                router.push(
+                  `${pathname}?page=${Math.min(totalPages, currentPage + 1)}`
+                )
               }}
               aria-label="Go to next page"
-              disabled={pageQuery >= emailState.totalPages}
+              disabled={currentPage >= totalPages}
             >
               <ChevronRight className="h-4 w-4 rtl:-scale-100" />
             </Button>

@@ -1,21 +1,32 @@
 "use client"
 
-import { useEmailContext } from "../_hooks/use-email-context"
+import { PAGE_SIZE } from "../constants"
 import { CardFooter } from "@/components/ui/card"
 
-export function EmailListFooter() {
-  const { emailState } = useEmailContext()
+interface EmailListFooterProps {
+  filteredCount: number
+  page: number
+  totalPages: number
+}
 
-  const emailCount = emailState.emails.length // Count of emails currently displayed.
-  const totalEmails = emailState.totalEmails.toLocaleString()
+export function EmailListFooter({
+  filteredCount,
+  page,
+  totalPages,
+}: EmailListFooterProps) {
+  const rangeStart =
+    filteredCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd =
+    filteredCount === 0 ? 0 : Math.min(page * PAGE_SIZE, filteredCount)
 
   return (
     <CardFooter className="justify-center py-3 border-t border-border">
       <p className="text-muted-foreground" role="status" aria-live="polite">
-        {/* Display email count or a message when no emails are available. */}
-        {emailCount
-          ? `1-${emailCount} of ${totalEmails}`
-          : "No emails available"}
+        {filteredCount === 0
+          ? "No emails available"
+          : `${rangeStart}-${rangeEnd} of ${filteredCount.toLocaleString()}${
+              totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""
+            }`}
       </p>
     </CardFooter>
   )
