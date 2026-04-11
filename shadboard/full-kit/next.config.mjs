@@ -5,6 +5,9 @@ import createMDX from "@next/mdx"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// pnpm workspace root — shared node_modules live here so Next.js can trace them
+const workspaceRoot = path.join(__dirname, "../..")
+
 /**
  * `redirects()` entry for `source: "/:lang"` must keep a `:lang` segment in
  * `destination`. A bare `/dashboards/...` breaks the route tree and can
@@ -23,8 +26,8 @@ const homeRedirectDest = localizedHomeDestination()
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Monorepo: pnpm workspace lockfile may live at repo root — trace files from there
-  outputFileTracingRoot: path.join(__dirname, "../.."),
+  // pnpm workspace: node_modules are hoisted to workspace root, trace from there
+  outputFileTracingRoot: workspaceRoot,
 
   // Configure `pageExtensions` to include markdown and MDX files
   pageExtensions: ["js", "jsx", "md", "mdx", "ts", "tsx"],

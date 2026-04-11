@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.19.0",
   "scripts": {
-    "build": "pnpm --filter shadboard-nextjs-full-kit run build && node scripts/copy-next-output.cjs"
+    "build": "pnpm --filter shadboard-nextjs-full-kit run build"
   },
   "devDependencies": {
     "next": "15.5.15"
