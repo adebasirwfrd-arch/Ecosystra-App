@@ -1,4 +1,9 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
 import createMDX from "@next/mdx"
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /**
  * `redirects()` entry for `source: "/:lang"` must keep a `:lang` segment in
@@ -18,6 +23,9 @@ const homeRedirectDest = localizedHomeDestination()
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Monorepo: pnpm workspace lockfile may live at repo root — trace files from there
+  outputFileTracingRoot: path.join(__dirname, "../.."),
+
   // Configure `pageExtensions` to include markdown and MDX files
   pageExtensions: ["js", "jsx", "md", "mdx", "ts", "tsx"],
 

@@ -1,0 +1,8 @@
+{
+  "name": "ecosystra-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.8.1",
+  "scripts": {
+    "build": "pnpm --filter shadboard-nextjs-full-kit run build"
+  }
+}
