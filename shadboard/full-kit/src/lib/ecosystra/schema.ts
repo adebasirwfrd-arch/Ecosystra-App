@@ -128,6 +128,8 @@ export const typeDefs = `#graphql
     createItem(name: String!, boardId: ID!, groupId: ID, parentItemId: ID, dynamicData: JSON): Item!
     updateItemDynamicData(id: ID!, dynamicData: JSON!): Item!
     updateItem(id: ID!, name: String!): Item!
+    """Move a top-level board task to another group on the same board."""
+    moveItemToGroup(id: ID!, groupId: ID!): Item!
     addItemUpdate(id: ID!, text: String!): Item!
     createGroup(name: String!, boardId: ID!, color: String): Group!
     updateGroup(id: ID!, name: String, color: String): Group!

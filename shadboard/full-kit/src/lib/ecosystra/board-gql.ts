@@ -95,6 +95,15 @@ export const UPDATE_ITEM = gql`
   }
 `
 
+export const MOVE_ITEM_TO_GROUP = gql`
+  mutation MoveItemToGroup($id: ID!, $groupId: ID!) {
+    moveItemToGroup(id: $id, groupId: $groupId) {
+      id
+      groupId
+    }
+  }
+`
+
 export const UPDATE_ITEM_DYNAMIC_DATA = gql`
   mutation UpdateItemDynamicData($id: ID!, $dynamicData: JSON!) {
     updateItemDynamicData(id: $id, dynamicData: $dynamicData) {

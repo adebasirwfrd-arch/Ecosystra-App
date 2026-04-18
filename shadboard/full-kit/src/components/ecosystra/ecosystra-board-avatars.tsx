@@ -235,26 +235,65 @@ export function EcosystraRelativeTime({
   return <span className={className}>{label}</span>
 }
 
-/** Optional wrapper for last-updated row: avatar + trailing text. */
+/**
+ * Last updated column: shadcn `Avatar` + relative time from server `updatedAt`
+ * (fallback to `dynamicData.lastUpdatedLabel` when ISO is missing).
+ */
 export function EcosystraBoardLastUpdatedCell({
   byName,
   avatarUrl,
   updatedAt,
+  fallbackTimeLabel,
   className,
 }: {
   byName: string
   avatarUrl?: string | null
+  /** Server field — source of truth for “time ago”. */
   updatedAt?: string | null
+  /** e.g. `dynamicData.lastUpdatedLabel` when `updatedAt` is absent or invalid. */
+  fallbackTimeLabel?: string | null
   className?: string
 }) {
   const by = byName.trim() || "User"
+  const iso = updatedAt?.trim()
+  const parsed = iso ? parseISO(iso) : undefined
+  const hasValidTime = parsed && isValid(parsed)
+  const fallback = fallbackTimeLabel?.trim()
+
   return (
-    <div className={cn("flex min-w-0 items-center gap-2", className)}>
-      <EcosystraBoardAvatar name={by} avatarUrl={avatarUrl} title={by} />
-      <EcosystraRelativeTime
-        date={updatedAt ?? undefined}
-        className="truncate text-xs text-muted-foreground"
-      />
+    <div
+      className={cn("flex min-w-0 items-center gap-2.5", className)}
+      title={
+        hasValidTime && parsed
+          ? `${by} · ${parsed.toLocaleString()}`
+          : by
+      }
+    >
+      <Avatar
+        className="h-8 w-8 shrink-0 rounded-full border border-border/80 bg-muted text-xs font-medium text-foreground"
+        aria-label={by}
+      >
+        {avatarUrl ? (
+          <AvatarImage
+            src={avatarUrl}
+            alt=""
+            className="rounded-full object-cover"
+          />
+        ) : null}
+        <AvatarFallback className="rounded-full bg-muted/95 text-[10px] font-semibold">
+          {getInitials(by)}
+        </AvatarFallback>
+      </Avatar>
+      {hasValidTime ? (
+        <EcosystraRelativeTime
+          date={updatedAt ?? undefined}
+          className="min-w-0 truncate text-xs leading-snug text-muted-foreground"
+        />
+      ) : (
+        <span className="min-w-0 truncate text-xs leading-snug text-muted-foreground">
+          {fallback || "—"}
+        </span>
+      )}
     </div>
   )
 }

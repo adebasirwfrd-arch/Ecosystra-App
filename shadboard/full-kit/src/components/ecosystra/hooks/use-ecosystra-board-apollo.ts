@@ -20,6 +20,7 @@ import {
   UPDATE_BOARD,
   UPDATE_BOARD_METADATA,
   UPDATE_GROUP,
+  MOVE_ITEM_TO_GROUP,
   UPDATE_ITEM,
   UPDATE_ITEM_DYNAMIC_DATA,
   WORKSPACE_USERS,
@@ -225,6 +226,28 @@ export function sortItemsByOrder<T extends { id: string }>(
   return out
 }
 
+/** Apply persisted `groupOrder` (board metadata) to API group list. */
+function mergeGroupOrder<T extends { id: string }>(
+  groups: T[],
+  order: string[] | undefined
+): T[] {
+  if (!order?.length) return groups
+  const map = new Map(groups.map((g) => [g.id, g]))
+  const out: T[] = []
+  const seen = new Set<string>()
+  for (const id of order) {
+    const g = map.get(id)
+    if (g) {
+      out.push(g)
+      seen.add(id)
+    }
+  }
+  for (const g of groups) {
+    if (!seen.has(g.id)) out.push(g)
+  }
+  return out
+}
+
 /** Insert `owner` before `assignee` for boards saved before Owner column existed. */
 function ensureOwnerColumnInOrder(order: string[]): string[] {
   if (order.includes("owner")) return order
@@ -246,6 +269,52 @@ export const DEFAULT_DUE_PRIORITY_LABELS: DuePriorityLabel[] = [
   { id: "none", label: "", color: "#C4C4C4" },
 ]
 
+/** Main-table Status column — values persisted as `taskStatus` label text. */
+export const DEFAULT_TASK_STATUS_LABELS: DuePriorityLabel[] = [
+  { id: "working-on-it", label: "Working on it", color: "#FDAB3D" },
+  { id: "done", label: "Done", color: "#00C875" },
+  { id: "stuck", label: "Stuck", color: "#E2445C" },
+  { id: "not-started", label: "Not started", color: "#C4C4C4" },
+]
+
+/** Main-table Priority column — `priority` field stores label text. */
+export const DEFAULT_PRIORITY_LABELS: DuePriorityLabel[] = [
+  { id: "low", label: "Low", color: "#579BFC" },
+  { id: "medium", label: "Medium", color: "#0073EA" },
+  { id: "high", label: "High", color: "#E2445C" },
+]
+
+/** Main-table Notes category — `notesCategory` stores label text. */
+export const DEFAULT_NOTES_CATEGORY_LABELS: DuePriorityLabel[] = [
+  { id: "general-note", label: "General Note", color: "#E442BB" },
+  { id: "action-item", label: "Action Item", color: "#FF6900" },
+  { id: "meeting-summary", label: "Meeting Summary", color: "#7F5347" },
+]
+
+function parseLabelArray(
+  raw: unknown,
+  fallback: DuePriorityLabel[]
+): DuePriorityLabel[] {
+  if (!Array.isArray(raw)) return [...fallback]
+  const out: DuePriorityLabel[] = []
+  for (const x of raw) {
+    if (
+      x &&
+      typeof x === "object" &&
+      typeof (x as { id?: unknown }).id === "string" &&
+      typeof (x as { label?: unknown }).label === "string" &&
+      typeof (x as { color?: unknown }).color === "string"
+    ) {
+      out.push({
+        id: (x as { id: string }).id,
+        label: (x as { label: string }).label,
+        color: (x as { color: string }).color,
+      })
+    }
+  }
+  return out.length > 0 ? out : [...fallback]
+}
+
 export function parseBoardTableUiMetadata(
   meta: Record<string, unknown> | null | undefined
 ): {
@@ -263,6 +332,14 @@ export function parseBoardTableUiMetadata(
   tableColumnTitles: Record<string, string>
   /** Custom label text and colors for the 'duePriority' column (persisted `duePriorityLabels`). */
   duePriorityLabels: DuePriorityLabel[]
+  /** Status column options (`statusLabels`). */
+  statusLabels: DuePriorityLabel[]
+  /** Priority column options (`priorityLabels`). */
+  priorityLabels: DuePriorityLabel[]
+  /** Notes category column options (`notesCategoryLabels`). */
+  notesCategoryLabels: DuePriorityLabel[]
+  /** Top-level group row order (`groupOrder` in board metadata). */
+  groupOrder: string[]
 } {
   const rawHidden = meta?.hiddenTableColumnIds
   const hidden = Array.isArray(rawHidden)
@@ -362,6 +439,24 @@ export function parseBoardTableUiMetadata(
     duePriorityLabels.push(...DEFAULT_DUE_PRIORITY_LABELS)
   }
 
+  const statusLabels = parseLabelArray(
+    meta?.statusLabels,
+    DEFAULT_TASK_STATUS_LABELS
+  )
+  const priorityLabels = parseLabelArray(
+    meta?.priorityLabels,
+    DEFAULT_PRIORITY_LABELS
+  )
+  const notesCategoryLabels = parseLabelArray(
+    meta?.notesCategoryLabels,
+    DEFAULT_NOTES_CATEGORY_LABELS
+  )
+
+  const rawGroupOrder = meta?.groupOrder
+  const groupOrder = Array.isArray(rawGroupOrder)
+    ? rawGroupOrder.filter((x): x is string => typeof x === "string")
+    : []
+
   return {
     hiddenColumnIds: hidden,
     groupBy,
@@ -371,6 +466,10 @@ export function parseBoardTableUiMetadata(
     groupItemOrders,
     tableColumnTitles,
     duePriorityLabels,
+    statusLabels,
+    priorityLabels,
+    notesCategoryLabels,
+    groupOrder,
   }
 }
 
@@ -380,9 +479,11 @@ export function defaultTaskDynamicData(): Record<string, unknown> {
   const d = new Date()
   const m = d.toLocaleString("en-US", { month: "short" })
   const day = d.getDate()
+  const dueDateIso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
   return {
     taskStatus: "Working on it",
     dueDate: `${m} ${day}`,
+    dueDateIso,
     lastUpdatedLabel: "1 week ago",
     lastUpdatedBy: "User",
     filesCount: 0,
@@ -444,6 +545,9 @@ export function useEcosystraBoardApollo() {
   const [deleteItem] = useMutation(DELETE_ITEM, {
     refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
   })
+  const [moveItemToGroupMutation] = useMutation(MOVE_ITEM_TO_GROUP, {
+    refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
+  })
   const [createGroup] = useMutation(CREATE_GROUP, {
     refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
   })
@@ -472,11 +576,14 @@ export function useEcosystraBoardApollo() {
     }
   )
 
-  const groups = useMemo(() => board?.groups ?? [], [board?.groups])
-
   const tableUi = useMemo(
     () => parseBoardTableUiMetadata(board?.metadata ?? undefined),
     [board?.metadata]
+  )
+
+  const groups = useMemo(
+    () => mergeGroupOrder(board?.groups ?? [], tableUi.groupOrder),
+    [board?.groups, tableUi.groupOrder]
   )
 
   const mergedOpen = useMemo(() => {
@@ -609,6 +716,20 @@ export function useEcosystraBoardApollo() {
     [deleteItem, toastMsg.taskDeleted]
   )
 
+  const moveItemToGroup = useCallback(
+    async (itemId: string, targetGroupId: string) => {
+      try {
+        await moveItemToGroupMutation({
+          variables: { id: itemId, groupId: targetGroupId },
+        })
+      } catch (e) {
+        toast.error(gqlErrorMessage(e))
+        throw e
+      }
+    },
+    [moveItemToGroupMutation]
+  )
+
   const addGroup = useCallback(
     async (name: string, color?: string) => {
       if (!board?.id) return
@@ -663,6 +784,14 @@ export function useEcosystraBoardApollo() {
       tableColumnTitles?: Record<string, string>
       /** Full merged list for the main-table Due priority column */
       duePriorityLabels?: DuePriorityLabel[]
+      /** Full merged list for the Status column */
+      statusLabels?: DuePriorityLabel[]
+      /** Full merged list for the Priority column */
+      priorityLabels?: DuePriorityLabel[]
+      /** Full merged list for the Notes category column */
+      notesCategoryLabels?: DuePriorityLabel[]
+      /** Full merged top-level group id list (main table accordion order) */
+      groupOrder?: string[]
     }) => {
       if (!board?.id) return
       try {
@@ -755,6 +884,7 @@ export function useEcosystraBoardApollo() {
     patchItemField,
     renameItem,
     removeItem,
+    moveItemToGroup,
     addGroup,
     patchGroup,
     removeGroup,

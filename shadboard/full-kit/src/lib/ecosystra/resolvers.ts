@@ -16,6 +16,10 @@ import {
   syncTaskAssigneeTuples,
 } from "./permify";
 import { isSuperUserEmail } from "./superuser";
+import {
+  buildEcosystraBoardAbsoluteUrl,
+  getPublicSiteOrigin,
+} from "./app-url";
 
 import { i18n } from "@/configs/i18n";
 
@@ -24,19 +28,15 @@ export type GqlContext = {
   prismaUser: Awaited<ReturnType<typeof prisma.ecoUser.findUnique>>;
 };
 
-function appBaseUrl(): string {
-  return (
-    process.env.APP_BASE_URL ||
-    process.env.BASE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3002"
-  );
-}
-
 function ecosystraInviteLocale(): string {
   const v = process.env.NEXT_PUBLIC_ECOSYSTRA_INVITE_LOCALE?.trim();
   if (v) return v;
   return i18n.defaultLocale;
+}
+
+/** @deprecated use getPublicSiteOrigin from ./app-url */
+function appBaseUrl(): string {
+  return getPublicSiteOrigin();
 }
 
 /**
@@ -44,11 +44,7 @@ function ecosystraInviteLocale(): string {
  * Legacy `/board?…` URLs were invalid and returned 404.
  */
 function ecosystraBoardAbsoluteUrl(query: Record<string, string>): string {
-  const base = appBaseUrl().replace(/\/$/, "");
-  const locale = ecosystraInviteLocale();
-  const path = `/${locale}/apps/ecosystra/board`;
-  const qs = new URLSearchParams(query).toString();
-  return qs ? `${base}${path}?${qs}` : `${base}${path}`;
+  return buildEcosystraBoardAbsoluteUrl(query);
 }
 
 type EcoEmailRow = {
@@ -1242,6 +1238,55 @@ export const resolvers = {
         const updated = await tx.ecoItem.update({ where: { id }, data: { name } });
         if (prev?.name !== name) {
           await logItemFieldChange(tx, { itemId: id, actorUserId: viewer.id, fieldKey: "name", oldValue: prev?.name, newValue: name });
+        }
+        return updated;
+      });
+    },
+
+    moveItemToGroup: async (
+      _: unknown,
+      { id, groupId }: { id: string; groupId: string },
+      ctx: GqlContext
+    ) => {
+      const viewer = await getViewer(ctx);
+      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: id });
+      const item = await prisma.ecoItem.findUnique({
+        where: { id },
+      });
+      if (!item) throw new Error("NOT_FOUND");
+      if (item.parentItemId) {
+        throw new Error("CANNOT_MOVE_SUBITEM_GROUP");
+      }
+      const targetGroup = await prisma.ecoGroup.findUnique({
+        where: { id: groupId },
+        include: { board: true },
+      });
+      if (!targetGroup) throw new Error("NOT_FOUND");
+      if (item.boardId !== targetGroup.boardId) {
+        throw new Error("GROUP_BOARD_MISMATCH");
+      }
+      if (item.groupId === groupId) {
+        return item;
+      }
+      await assertProjectAssign({
+        prismaUserId: viewer.id,
+        email: ctx.auth.email,
+        projectBoardId: item.boardId,
+      });
+      const prevGroupId = item.groupId;
+      return prisma.$transaction(async (tx) => {
+        const updated = await tx.ecoItem.update({
+          where: { id },
+          data: { groupId },
+        });
+        if (prevGroupId !== groupId) {
+          await logItemFieldChange(tx, {
+            itemId: id,
+            actorUserId: viewer.id,
+            fieldKey: "groupId",
+            oldValue: prevGroupId,
+            newValue: groupId,
+          });
         }
         return updated;
       });

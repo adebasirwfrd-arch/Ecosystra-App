@@ -1,17 +1,13 @@
 import type { Prisma } from "@/generated/prisma"
 import { formatEmailRow, type EcoEmailRow } from "@/lib/email/email-inbox-queries"
+import { getPublicSiteOrigin } from "@/lib/ecosystra/app-url"
 import { db as prisma } from "@/lib/prisma"
 
 const MAX_ATTACHMENT_BYTES = 500 * 1024
 const MAX_ATTACHMENTS_TOTAL_BYTES = 2 * 1024 * 1024
 
 function appBaseUrl(): string {
-  return (
-    process.env.APP_BASE_URL ||
-    process.env.BASE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3002"
-  )
+  return getPublicSiteOrigin()
 }
 
 function parseAddressList(s: string | null | undefined): string[] {

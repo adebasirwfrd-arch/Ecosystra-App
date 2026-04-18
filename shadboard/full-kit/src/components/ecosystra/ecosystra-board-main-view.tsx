@@ -1,7 +1,20 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { DragDropContext } from "@hello-pangea/dnd"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type {
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+} from "@dnd-kit/core"
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core"
+import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable"
+import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd"
 import type { DropResult } from "@hello-pangea/dnd"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLazyQuery, useQuery } from "@apollo/client"
@@ -13,6 +26,7 @@ import {
   Filter,
   LayoutGrid,
   ListChecks,
+  GripVertical,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -22,7 +36,10 @@ import {
 
 import boardSurface from "./ecosystra-board-surface.module.css"
 
-import type { HidableBoardColumnId } from "./hooks/use-ecosystra-board-apollo"
+import type {
+  GqlBoardItem,
+  HidableBoardColumnId,
+} from "./hooks/use-ecosystra-board-apollo"
 
 import { SEARCH_WORKSPACE, WORKSPACE_USERS } from "@/lib/ecosystra/board-gql"
 import { cn } from "@/lib/utils"
@@ -129,6 +146,30 @@ import {
 } from "./ecosystra-grandbook"
 import { localeSegmentFromPathname } from "./ecosystra-path-utils"
 
+function findRowDragContainer(
+  id: string,
+  draft: Record<string, string[]>
+): string | undefined {
+  if (id.startsWith("board-row-drop-")) {
+    return id.slice("board-row-drop-".length)
+  }
+  for (const [gid, ids] of Object.entries(draft)) {
+    if (ids.includes(id)) return gid
+  }
+  return undefined
+}
+
+function buildRowOrderDraft(
+  groups: Array<{ id: string; items: GqlBoardItem[] }>,
+  groupItemOrders: Record<string, string[]>
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const g of groups) {
+    out[g.id] = sortItemsByOrder(g.items, groupItemOrders[g.id]).map((i) => i.id)
+  }
+  return out
+}
+
 export function EcosystraBoardMainView() {
   const dictionary = useEcosystraDictionary()
   const bt = dictionary.ecosystraApp.boardTable
@@ -154,6 +195,7 @@ export function EcosystraBoardMainView() {
     patchItemField,
     renameItem,
     removeItem,
+    moveItemToGroup,
     addGroup,
     removeGroup,
     tableUi,
@@ -263,10 +305,200 @@ export function EcosystraBoardMainView() {
     tableUi.groupItemOrders,
   ])
 
-  const columnDragGroupId = useMemo(() => {
-    const withItems = sortedGroups.find((g) => g.items.length > 0)
-    return withItems?.id ?? sortedGroups[0]?.id
+  const [rowDnDraft, setRowDnDraft] = useState<Record<string, string[]> | null>(
+    null
+  )
+  const rowDnInitialRef = useRef<Record<string, string[]> | null>(null)
+  const rowDnDraftRef = useRef<Record<string, string[]> | null>(null)
+
+  const topLevelItemById = useMemo(() => {
+    const m = new Map<string, GqlBoardItem>()
+    for (const g of sortedGroups) {
+      for (const it of g.items) {
+        m.set(it.id, it)
+      }
+    }
+    return m
   }, [sortedGroups])
+
+  const tableItemsForGroup = useCallback(
+    (groupId: string, baseItems: GqlBoardItem[]) => {
+      if (!rowDnDraft) {
+        return sortItemsByOrder(baseItems, tableUi.groupItemOrders[groupId])
+      }
+      const ids = rowDnDraft[groupId]
+      if (!ids) {
+        return sortItemsByOrder(baseItems, tableUi.groupItemOrders[groupId])
+      }
+      return ids
+        .map((id) => topLevelItemById.get(id))
+        .filter((x): x is GqlBoardItem => Boolean(x))
+    },
+    [rowDnDraft, tableUi.groupItemOrders, topLevelItemById]
+  )
+
+  const boardRowSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleBoardRowDragStart = useCallback(
+    (_e: DragStartEvent) => {
+      const draft = buildRowOrderDraft(sortedGroups, tableUi.groupItemOrders)
+      rowDnInitialRef.current = draft
+      rowDnDraftRef.current = draft
+      setRowDnDraft(draft)
+    },
+    [sortedGroups, tableUi.groupItemOrders]
+  )
+
+  const handleBoardRowDragOver = useCallback(({ active, over }: DragOverEvent) => {
+    const overId = over?.id
+    if (overId == null) return
+    const overIdS = String(overId)
+    const activeIdS = String(active.id)
+    if (activeIdS === overIdS) return
+
+    setRowDnDraft((draft) => {
+      if (!draft) return draft
+      const activeContainer = findRowDragContainer(activeIdS, draft)
+      const overContainer = findRowDragContainer(overIdS, draft)
+      if (!activeContainer || !overContainer) return draft
+      if (activeContainer === overContainer) return draft
+
+      const activeItems = [...draft[activeContainer]]
+      const overItems = [...draft[overContainer]]
+      if (!activeItems.includes(activeIdS)) return draft
+
+      const overIndexRaw = overIdS.startsWith("board-row-drop-")
+        ? overItems.length
+        : overItems.indexOf(overIdS)
+
+      let newIndex: number
+      if (overIdS.startsWith("board-row-drop-")) {
+        newIndex = overItems.length
+      } else {
+        const isBelowOverItem =
+          over &&
+          active.rect.current.translated &&
+          active.rect.current.translated.top >
+            over.rect.top + over.rect.height
+        const modifier = isBelowOverItem ? 1 : 0
+        newIndex =
+          overIndexRaw >= 0 ? overIndexRaw + modifier : overItems.length
+      }
+
+      const next: Record<string, string[]> = {
+        ...draft,
+        [activeContainer]: activeItems.filter((id) => id !== activeIdS),
+        [overContainer]: [
+          ...overItems.slice(0, newIndex),
+          activeIdS,
+          ...overItems.slice(newIndex),
+        ],
+      }
+      rowDnDraftRef.current = next
+      return next
+    })
+  }, [])
+
+  const handleBoardRowDragCancel = useCallback(() => {
+    rowDnInitialRef.current = null
+    rowDnDraftRef.current = null
+    setRowDnDraft(null)
+  }, [])
+
+  const handleBoardRowDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const initial = rowDnInitialRef.current
+      const cleanup = () => {
+        rowDnInitialRef.current = null
+        rowDnDraftRef.current = null
+        setRowDnDraft(null)
+      }
+
+      if (!initial) {
+        cleanup()
+        return
+      }
+
+      const { active, over } = event
+      if (!over) {
+        cleanup()
+        return
+      }
+
+      const activeId = String(active.id)
+      const overId = String(over.id)
+      if (activeId === overId) {
+        cleanup()
+        return
+      }
+
+      const finalDraft = rowDnDraftRef.current ?? initial
+
+      const ac = findRowDragContainer(activeId, initial)
+      const oc = findRowDragContainer(overId, finalDraft)
+      if (!ac || !oc) {
+        cleanup()
+        return
+      }
+
+      if (ac === oc) {
+        const list = [...initial[ac]]
+        const oldI = list.indexOf(activeId)
+        let newI: number
+        if (overId.startsWith("board-row-drop-")) {
+          newI = Math.max(0, list.length - 1)
+        } else {
+          newI = list.indexOf(overId)
+        }
+        if (oldI < 0 || newI < 0) {
+          cleanup()
+          return
+        }
+        if (oldI !== newI) {
+          const next = arrayMove(list, oldI, newI)
+          void patchBoardTableUi({
+            groupItemOrders: {
+              ...tableUi.groupItemOrders,
+              [ac]: next,
+            },
+          })
+        }
+        cleanup()
+        return
+      }
+
+      if (JSON.stringify(initial) === JSON.stringify(finalDraft)) {
+        cleanup()
+        return
+      }
+
+      const fromG = findRowDragContainer(activeId, initial)
+      const toG = findRowDragContainer(activeId, finalDraft)
+      if (fromG && toG && fromG !== toG) {
+        try {
+          await moveItemToGroup(activeId, toG)
+        } catch {
+          cleanup()
+          return
+        }
+      }
+
+      const nextOrders: Record<string, string[]> = {
+        ...tableUi.groupItemOrders,
+      }
+      for (const gid of Object.keys(finalDraft)) {
+        nextOrders[gid] = finalDraft[gid]
+      }
+      void patchBoardTableUi({ groupItemOrders: nextOrders })
+      cleanup()
+    },
+    [moveItemToGroup, patchBoardTableUi, tableUi.groupItemOrders]
+  )
 
   const addCustomBoardColumn = useCallback(
     (kind: HidableBoardColumnId) => {
@@ -392,6 +624,13 @@ export function EcosystraBoardMainView() {
       )
         return
 
+      if (type === "BOARD_GROUP") {
+        const ids = sortedGroups.map((g) => g.id)
+        const next = reorderArray(ids, source.index, destination.index)
+        void patchBoardTableUi({ groupOrder: next })
+        return
+      }
+
       if (type === "COLUMN") {
         const full = tableUi.tableColumnOrder
         const hidden = new Set<string>(tableUi.hiddenColumnIds)
@@ -409,21 +648,10 @@ export function EcosystraBoardMainView() {
     },
     [
       patchBoardTableUi,
+      sortedGroups,
       tableUi.hiddenColumnIds,
       tableUi.tableColumnOrder,
     ]
-  )
-
-  const onRowOrderCommit = useCallback(
-    (groupId: string, orderedItemIds: string[]) => {
-      void patchBoardTableUi({
-        groupItemOrders: {
-          ...tableUi.groupItemOrders,
-          [groupId]: orderedItemIds,
-        },
-      })
-    },
-    [patchBoardTableUi, tableUi.groupItemOrders]
   )
 
   const taskCount = useMemo(
@@ -431,7 +659,16 @@ export function EcosystraBoardMainView() {
     [sortedGroups]
   )
 
-  const allRowsEmpty = taskCount === 0 && filteredGroups.length > 0
+  /** True only when filters/search hide every row — still show groups when the board is simply empty. */
+  const hasActiveRowFilters =
+    searchQuery.trim().length > 0 ||
+    unassignedOnly ||
+    notesFilter.trim().length > 0
+
+  const allRowsEmpty =
+    taskCount === 0 &&
+    filteredGroups.length > 0 &&
+    hasActiveRowFilters
 
   const openAccordionGroupIds = useMemo(
     () => sortedGroups.filter((g) => openByGroupId[g.id]).map((g) => g.id),
@@ -1483,100 +1720,149 @@ export function EcosystraBoardMainView() {
                 />
               ) : null}
               {!allRowsEmpty ? (
-                <DragDropContext onDragEnd={handleBoardDragEnd}>
+                <DndContext
+                  sensors={boardRowSensors}
+                  onDragStart={handleBoardRowDragStart}
+                  onDragOver={handleBoardRowDragOver}
+                  onDragEnd={handleBoardRowDragEnd}
+                  onDragCancel={handleBoardRowDragCancel}
+                >
+                  <DragDropContext onDragEnd={handleBoardDragEnd}>
                   <EcosystraAccordion
                     id="eco-board-groups-accordion"
                     type="multiple"
                     aria-label={bt.boardGroupsAccordion}
-                    className="flex min-h-0 flex-1 flex-col gap-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-12)] md:gap-[var(--vibe-space-16)]"
+                    className="flex min-h-0 flex-1 flex-col"
                     value={openAccordionGroupIds}
                     onValueChange={(vals) =>
                       setGroupsOpenFromAccordion(vals, accordionKnownGroupIds)
                     }
                   >
-                    {sortedGroups.map((group) => (
-                    <EcosystraAccordionItem
-                      key={group.id}
-                      value={group.id}
-                      id={`eco-board-group-${group.id}`}
-                      className="rounded-lg border !border-b-0 border-[color:var(--eco-board-outer-border)] bg-[color:var(--eco-board-card-bg)] shadow-none sm:rounded-xl data-[state=open]:shadow-[0_1px_0_rgba(0,0,0,0.06)]"
-                    >
-                      <div
-                        className="flex items-stretch border-s-4"
-                        style={{
-                          borderColor: group.color
-                            ? group.color
-                            : "var(--eco-group-todo)",
-                        }}
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-1.5 py-[var(--vibe-space-4)] ps-[var(--vibe-space-8)] pe-1 sm:gap-2 sm:py-[var(--vibe-space-8)] sm:ps-[var(--vibe-space-12)] sm:pe-2">
-                          <EcosystraBoardGroupColorButton
-                            color={group.color}
-                            ariaLabel={bt.groupColorPickerAria}
-                            onPick={(hex) =>
-                              void patchGroup(group.id, undefined, hex)
-                            }
-                          />
-                          <EcosystraBoardGroupEditableName
-                            name={group.name}
-                            groupColor={group.color}
-                            onCommit={(next) =>
-                              void patchGroup(group.id, next, undefined)
-                            }
-                          />
-                        </div>
-                        <EcosystraBoardGroupAccordionTrigger
-                          className="hover:no-underline inline-flex shrink-0 items-center justify-center self-stretch px-2 py-[var(--vibe-space-8)]"
-                          aria-label={
-                            openByGroupId[group.id]
-                              ? `${bt.collapseGroup}: ${group.name}`
-                              : `${bt.expandGroup}: ${group.name}`
-                          }
+                    <Droppable droppableId="board-groups" type="BOARD_GROUP">
+                      {(dropProvided) => (
+                        <div
+                          ref={dropProvided.innerRef}
+                          {...dropProvided.droppableProps}
+                          className="flex min-h-0 flex-1 flex-col gap-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-12)] md:gap-[var(--vibe-space-16)]"
                         >
-                          <span className="sr-only">
-                            {openByGroupId[group.id]
-                              ? `${bt.collapseGroup}: ${group.name}`
-                              : `${bt.expandGroup}: ${group.name}`}
-                          </span>
-                        </EcosystraBoardGroupAccordionTrigger>
-                        <div className="flex shrink-0 items-center pe-2">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 shrink-0"
-                                aria-label={bt.groupRowMenu}
-                              >
-                                <MoreHorizontal
-                                  className="size-4"
-                                  aria-hidden
-                                />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onSelect={() =>
-                                  setDeleteTarget({
-                                    kind: "group",
-                                    id: group.id,
-                                  })
-                                }
-                              >
-                                {bt.deleteGroupMenu}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                      <AccordionContent className="px-[var(--vibe-space-4)] pb-[var(--vibe-space-8)] pt-0 sm:px-[var(--vibe-space-8)] md:px-[var(--vibe-space-12)] md:pb-[var(--vibe-space-12)]">
+                          {sortedGroups.map((group, groupIndex) => (
+                            <Draggable
+                              key={group.id}
+                              draggableId={`board-group-${group.id}`}
+                              index={groupIndex}
+                            >
+                              {(dragProvided, snapshot) => (
+                                <div
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  style={dragProvided.draggableProps.style}
+                                  className={cn(
+                                    snapshot.isDragging &&
+                                      "rounded-xl shadow-lg ring-2 ring-primary/25"
+                                  )}
+                                >
+                                  <EcosystraAccordionItem
+                                    value={group.id}
+                                    id={`eco-board-group-${group.id}`}
+                                    className="rounded-lg border !border-b-0 border-[color:var(--eco-board-outer-border)] bg-[color:var(--eco-board-card-bg)] shadow-none sm:rounded-xl data-[state=open]:shadow-[0_1px_0_rgba(0,0,0,0.06)]"
+                                  >
+                                    <div
+                                      className="group/group-row flex items-stretch border-s-4"
+                                      style={{
+                                        borderColor: group.color
+                                          ? group.color
+                                          : "var(--eco-group-todo)",
+                                      }}
+                                    >
+                                      <div className="flex min-w-0 flex-1 items-center gap-1.5 py-[var(--vibe-space-4)] ps-[var(--vibe-space-8)] pe-1 sm:gap-2 sm:py-[var(--vibe-space-8)] sm:ps-[var(--vibe-space-12)] sm:pe-2">
+                                        <EcosystraBoardGroupColorButton
+                                          color={group.color}
+                                          ariaLabel={bt.groupColorPickerAria}
+                                          onPick={(hex) =>
+                                            void patchGroup(
+                                              group.id,
+                                              undefined,
+                                              hex
+                                            )
+                                          }
+                                        />
+                                        <EcosystraBoardGroupEditableName
+                                          name={group.name}
+                                          groupColor={group.color}
+                                          onCommit={(next) =>
+                                            void patchGroup(
+                                              group.id,
+                                              next,
+                                              undefined
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                      <div className="flex shrink-0 items-stretch">
+                                        <button
+                                          type="button"
+                                          className="inline-flex size-8 shrink-0 items-center justify-center self-stretch rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover/group-row:opacity-100 focus-visible:opacity-100"
+                                          aria-label={bt.groupDragReorderAria}
+                                          {...dragProvided.dragHandleProps}
+                                        >
+                                          <GripVertical
+                                            className="size-4"
+                                            aria-hidden
+                                          />
+                                        </button>
+                                        <EcosystraBoardGroupAccordionTrigger
+                                          className="hover:no-underline inline-flex shrink-0 items-center justify-center self-stretch px-2 py-[var(--vibe-space-8)]"
+                                          aria-label={
+                                            openByGroupId[group.id]
+                                              ? `${bt.collapseGroup}: ${group.name}`
+                                              : `${bt.expandGroup}: ${group.name}`
+                                          }
+                                        >
+                                          <span className="sr-only">
+                                            {openByGroupId[group.id]
+                                              ? `${bt.collapseGroup}: ${group.name}`
+                                              : `${bt.expandGroup}: ${group.name}`}
+                                          </span>
+                                        </EcosystraBoardGroupAccordionTrigger>
+                                      </div>
+                                      <div className="flex shrink-0 items-center pe-2">
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon"
+                                              className="size-8 shrink-0"
+                                              aria-label={bt.groupRowMenu}
+                                            >
+                                              <MoreHorizontal
+                                                className="size-4"
+                                                aria-hidden
+                                              />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem
+                                              className="text-destructive focus:text-destructive"
+                                              onSelect={() =>
+                                                setDeleteTarget({
+                                                  kind: "group",
+                                                  id: group.id,
+                                                })
+                                              }
+                                            >
+                                              {bt.deleteGroupMenu}
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </div>
+                                    </div>
+                                    <AccordionContent className="px-[var(--vibe-space-4)] pb-[var(--vibe-space-8)] pt-0 sm:px-[var(--vibe-space-8)] md:px-[var(--vibe-space-12)] md:pb-[var(--vibe-space-12)]">
                         <EcosystraBoardGroupTable
                           groupId={group.id}
                           groupName={group.name}
                           workspaceId={board.workspaceId}
-                          items={group.items}
+                          items={tableItemsForGroup(group.id, group.items)}
                           rowDensityScale={rowDensity[0]}
                           t={t}
                           expandedSubitemRowId={expandedSubitemRowId}
@@ -1604,8 +1890,7 @@ export function EcosystraBoardMainView() {
                       onColumnWidthCommit={onColumnWidthCommit}
                           tableColumnOrder={tableUi.tableColumnOrder}
                           tableCustomColumns={tableUi.tableCustomColumns}
-                          enableColumnDrag={group.id === columnDragGroupId}
-                          onRowOrderCommit={onRowOrderCommit}
+                          enableColumnDrag
                           onAddBoardColumn={addCustomBoardColumn}
                           onDuplicateBoardColumn={duplicateBoardColumn}
                           onDeleteBoardColumn={deleteBoardColumn}
@@ -1616,13 +1901,24 @@ export function EcosystraBoardMainView() {
                           tableColumnTitles={tableUi.tableColumnTitles}
                           onColumnTitleCommit={commitColumnTitle}
                           duePriorityLabels={tableUi.duePriorityLabels}
+                          statusLabels={tableUi.statusLabels}
+                          priorityLabels={tableUi.priorityLabels}
+                          notesCategoryLabels={tableUi.notesCategoryLabels}
                           patchBoardTableUi={patchBoardTableUi}
                         />
-                      </AccordionContent>
-                    </EcosystraAccordionItem>
-                  ))}
+                                    </AccordionContent>
+                                  </EcosystraAccordionItem>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {dropProvided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
                   </EcosystraAccordion>
                 </DragDropContext>
+                </DndContext>
               ) : null}
             </>
           )}

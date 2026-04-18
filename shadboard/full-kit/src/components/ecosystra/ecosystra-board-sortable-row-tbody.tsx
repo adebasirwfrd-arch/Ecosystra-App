@@ -15,10 +15,13 @@ import { cn } from "@/lib/utils"
 export function SortableBoardRowTbody({
   id,
   disabled,
+  groupId,
   children,
 }: {
   id: string
   disabled?: boolean
+  /** Passed to `@dnd-kit` for multi-list row drag (board-level `DndContext`). */
+  groupId?: string
   children: (args: { listeners: DraggableSyntheticListeners }) => ReactNode
 }) {
   const {
@@ -28,7 +31,11 @@ export function SortableBoardRowTbody({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id, disabled: disabled ?? false })
+  } = useSortable({
+    id,
+    disabled: disabled ?? false,
+    data: groupId ? { groupId } : undefined,
+  })
 
   const style = {
     transform: CSS.Transform.toString(transform),

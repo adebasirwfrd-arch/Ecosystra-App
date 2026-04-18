@@ -3,20 +3,8 @@
 import { Fragment, forwardRef, memo, useCallback, useEffect, useMemo, useState } from "react"
 import { useMedia } from "react-use"
 import { useApolloClient } from "@apollo/client"
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core"
-import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable"
+import { useDroppable } from "@dnd-kit/core"
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { Draggable, Droppable } from "@hello-pangea/dnd"
 import { differenceInDays, format, isValid } from "date-fns"
 import type { DateRange } from "react-day-picker"
@@ -38,15 +26,10 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import bookmark from "./ecosystra-board-bookmark.module.css"
 import boardSurface from "./ecosystra-board-surface.module.css"
 
 import type { TableColumn } from "@/components/ui/ecosystra-table"
-import type {
-  DragEndEvent,
-  DraggableSyntheticListeners,
-  SensorDescriptor,
-} from "@dnd-kit/core"
+import type { DraggableSyntheticListeners } from "@dnd-kit/core"
 import type {
   DraggableProvidedDragHandleProps,
   DraggableProvidedDraggableProps,
@@ -59,6 +42,7 @@ import type {
   HidableBoardColumnId,
   TableCustomColumnDef,
 } from "./hooks/use-ecosystra-board-apollo"
+import { BoardColumnLabelPicker } from "./board-column-label-picker"
 
 import { WORKSPACE_USERS } from "@/lib/ecosystra/board-gql"
 import { cn, getInitials } from "@/lib/utils"
@@ -139,27 +123,26 @@ function normalizeNotesCategory(v: unknown): string {
     : "General Note"
 }
 
-function notesCategoryStyle(category: string): {
-  backgroundColor: string
-  color: string
-} {
-  const c = normalizeNotesCategory(category)
-  if (c.includes("Action")) {
-    return {
-      backgroundColor: "var(--eco-mono-notes-action-bg)",
-      color: "var(--eco-mono-notes-action-fg)",
-    }
-  }
-  if (c.includes("Meeting")) {
-    return {
-      backgroundColor: "var(--eco-mono-notes-meeting-bg)",
-      color: "var(--eco-mono-notes-meeting-fg)",
-    }
-  }
-  return {
-    backgroundColor: "var(--eco-mono-notes-general-bg)",
-    color: "var(--eco-mono-notes-general-fg)",
-  }
+function resolveTaskStatusDisplayLabel(
+  raw: unknown,
+  labels: DuePriorityLabel[]
+): string {
+  const s = String(raw ?? "")
+  const hit = labels.find((l) => l.label === s || l.id === s)
+  if (hit) return hit.label
+  const norm = normalizeSubitemStatus(s)
+  return labels.find((l) => l.label === norm)?.label ?? norm
+}
+
+function resolveNotesCategoryDisplayLabel(
+  raw: unknown,
+  labels: DuePriorityLabel[]
+): string {
+  const s = String(raw ?? "")
+  const hit = labels.find((l) => l.label === s || l.id === s)
+  if (hit) return hit.label
+  const norm = normalizeNotesCategory(s)
+  return labels.find((l) => l.label === norm)?.label ?? norm
 }
 
 function formatTimelineRange(range: DateRange | undefined): string {
@@ -633,23 +616,43 @@ type RowSeg =
   | { type: "header"; key: string; label: string }
   | { type: "row"; key: string; item: GqlBoardItem }
 
+function resolvePriorityBucketLabel(
+  d: Record<string, unknown>,
+  priorityLabels: DuePriorityLabel[]
+): string {
+  const raw = String(d.priority ?? "")
+  const hit = priorityLabels.find(
+    (l) => l.label === raw || l.id === raw
+  )
+  if (hit) return hit.label
+  const leg = itemPriority(d)
+  return priorityLabels.find((l) => l.label === leg)?.label ?? leg
+}
+
 function buildRowSegments(
   items: GqlBoardItem[],
-  groupByPriority: boolean
+  groupByPriority: boolean,
+  priorityLabels: DuePriorityLabel[]
 ): RowSeg[] {
   if (!groupByPriority) {
     return items.map((item) => ({ type: "row", key: item.id, item }))
   }
-  const order: ("High" | "Medium" | "Low")[] = ["High", "Medium", "Low"]
+  const orderLabels = [...priorityLabels]
+    .map((l) => l.label)
+    .filter(Boolean)
+  const rank = (d: Record<string, unknown>) => {
+    const lab = resolvePriorityBucketLabel(d, priorityLabels)
+    const i = orderLabels.indexOf(lab)
+    return i >= 0 ? i : orderLabels.length
+  }
   const sorted = [...items].sort(
     (a, b) =>
-      order.indexOf(itemPriority(a.dynamicData || {})) -
-      order.indexOf(itemPriority(b.dynamicData || {}))
+      rank(a.dynamicData || {}) - rank(b.dynamicData || {})
   )
   const out: RowSeg[] = []
   let last = ""
   for (const item of sorted) {
-    const p = itemPriority(item.dynamicData || {})
+    const p = resolvePriorityBucketLabel(item.dynamicData || {}, priorityLabels)
     if (p !== last) {
       out.push({ type: "header", key: `hdr-${p}-${item.id}`, label: p })
       last = p
@@ -936,32 +939,25 @@ function AssigneePicker({
   )
 }
 
-/**
- * Keeps `@dnd-kit`’s hidden accessibility nodes out of `<table>` (invalid HTML / hydration).
- */
-function BoardRowDndContext({
-  enabled,
+/** Drop target when a group has no rows — parent `DndContext` moves tasks into this group. */
+function BoardRowEmptyGroupDropTarget({
   groupId,
-  sensors,
-  onDragEnd,
   children,
 }: {
-  enabled: boolean
   groupId: string
-  sensors: SensorDescriptor<any>[]
-  onDragEnd: (e: DragEndEvent) => void
   children: ReactNode
 }) {
-  if (!enabled) return children
+  const { setNodeRef, isOver } = useDroppable({
+    id: `board-row-drop-${groupId}`,
+    data: { type: "board-row-list", groupId },
+  })
   return (
-    <DndContext
-      id={`board-rows-${groupId}`}
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={onDragEnd}
+    <div
+      ref={setNodeRef}
+      className={cn(isOver && "rounded-xl ring-2 ring-primary/25 ring-offset-2")}
     >
       {children}
-    </DndContext>
+    </div>
   )
 }
 
@@ -999,10 +995,8 @@ type Props = {
   tableColumnOrder: string[]
   /** User-added columns (`c_…` ids) from board metadata (`tableCustomColumns`). */
   tableCustomColumns: Record<string, TableCustomColumnDef>
-  /** Only one group should expose draggable column headers (see main view). */
+  /** When true, column headers participate in board-level column drag (`DragDropContext`). */
   enableColumnDrag?: boolean
-  /** Persist row order for this group (`groupItemOrders` metadata). */
-  onRowOrderCommit?: (groupId: string, orderedItemIds: string[]) => void
   /** Append a new column instance (`c_…`) before the + column. */
   onAddBoardColumn?: (kind: HidableBoardColumnId) => void
   /** Create a copy of the given column (props + title override). */
@@ -1029,9 +1023,18 @@ type Props = {
   ) => void
   /** Board metadata `duePriorityLabels` — options for the Due priority column. */
   duePriorityLabels: DuePriorityLabel[]
-  /** Persist due-priority label edits (board metadata). */
+  /** Board metadata `statusLabels` — Status column options. */
+  statusLabels: DuePriorityLabel[]
+  /** Board metadata `priorityLabels` — Priority column options. */
+  priorityLabels: DuePriorityLabel[]
+  /** Board metadata `notesCategoryLabels` — Notes category column options. */
+  notesCategoryLabels: DuePriorityLabel[]
+  /** Persist board-table label sets (metadata). */
   patchBoardTableUi: (partial: {
-    duePriorityLabels: DuePriorityLabel[]
+    duePriorityLabels?: DuePriorityLabel[]
+    statusLabels?: DuePriorityLabel[]
+    priorityLabels?: DuePriorityLabel[]
+    notesCategoryLabels?: DuePriorityLabel[]
   }) => void | Promise<void>
 }
 
@@ -1058,7 +1061,6 @@ export function EcosystraBoardGroupTable({
   tableColumnOrder,
   tableCustomColumns,
   enableColumnDrag = false,
-  onRowOrderCommit,
   onAddBoardColumn,
   onRowSelectionChange,
   selectionClearVersion = 0,
@@ -1067,6 +1069,9 @@ export function EcosystraBoardGroupTable({
   onDuplicateBoardColumn,
   onDeleteBoardColumn,
   duePriorityLabels,
+  statusLabels,
+  priorityLabels,
+  notesCategoryLabels,
   patchBoardTableUi,
 }: Props) {
   const isDesktop = useMedia("(min-width: 640px)", false)
@@ -1299,8 +1304,8 @@ export function EcosystraBoardGroupTable({
   )
 
   const rowSegments = useMemo(
-    () => buildRowSegments(items, groupByPriority),
-    [items, groupByPriority]
+    () => buildRowSegments(items, groupByPriority, priorityLabels),
+    [items, groupByPriority, priorityLabels]
   )
 
   const rowIdsForSort = useMemo(
@@ -1311,38 +1316,17 @@ export function EcosystraBoardGroupTable({
     [rowSegments]
   )
 
-  const rowDndSensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
-
-  const handleRowDndEnd = useCallback(
-    (event: DragEndEvent) => {
-      if (!onRowOrderCommit) return
-      const { active, over } = event
-      if (!over || active.id === over.id) return
-      const ids = rowIdsForSort
-      const oldIndex = ids.indexOf(String(active.id))
-      const newIndex = ids.indexOf(String(over.id))
-      if (oldIndex < 0 || newIndex < 0) return
-      const next = arrayMove(ids, oldIndex, newIndex)
-      onRowOrderCommit(groupId, next)
-    },
-    [groupId, onRowOrderCommit, rowIdsForSort]
-  )
-
   const colSpan = visibleColumns.length
 
-  const emptyState = (
-    <div className="p-8 text-center text-sm text-muted-foreground">
-      {t.emptyGroup}
+  /**
+   * Unused when `items.length === 0` — we render empty groups **outside** `Table` so the CTA is
+   * never lost to `ecosystra-table`’s `isEmpty` early return. Kept for `errorState` typing.
+   */
+  const tableErrorFallback = (
+    <div className="p-6 text-center text-sm text-muted-foreground">
+      Unable to load this table.
     </div>
   )
-  const errorState = emptyState
 
   const budgetSum = items.reduce(
     (acc, it) => acc + budgetNumber(it.dynamicData || {}),
@@ -1592,38 +1576,28 @@ export function EcosystraBoardGroupTable({
       const fk = ecoCcFieldKey(col.id)
       switch (customDef.kind) {
         case "status": {
-          const status = normalizeSubitemStatus(d[fk])
-          const pill = taskStatusPillStyle(status)
+          const statusVal = resolveTaskStatusDisplayLabel(d[fk], statusLabels)
+          const isDone = statusVal === "Done"
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
-              <div className="flex min-w-0 max-w-full items-center gap-1">
-                <Select
-                  value={status}
-                  onValueChange={(v) => onPatchItem(row.id, { [fk]: v })}
-                >
-                  <SelectTrigger
-                    size="sm"
-                    className="h-8 min-w-[120px] max-w-[180px] flex-1 rounded-full border-0 font-semibold shadow-none hover:opacity-95"
-                    style={pill}
-                    aria-label={t.colStatus}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SUBITEM_STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {status === "Done" ? (
-                  <Check
-                    className="size-4 shrink-0 text-emerald-600"
-                    aria-label={t.statusDoneHint}
-                  />
-                ) : null}
-              </div>
+              <BoardColumnLabelPicker
+                variant="status"
+                labels={statusLabels}
+                value={String(d[fk] ?? "")}
+                onSelect={(next) => onPatchItem(row.id, { [fk]: next })}
+                onUpdateLabels={(next) =>
+                  void patchBoardTableUi({ statusLabels: next })
+                }
+                ariaLabel={t.colStatus}
+                trailing={
+                  isDone ? (
+                    <Check
+                      className="size-4 shrink-0 text-emerald-600"
+                      aria-label={t.statusDoneHint}
+                    />
+                  ) : null
+                }
+              />
             </TableCell>
           )
         }
@@ -1663,7 +1637,10 @@ export function EcosystraBoardGroupTable({
           )
         }
         case "lastUpdated": {
-          const by = row.lastUpdatedBy?.name || "User"
+          const by =
+            row.lastUpdatedBy?.name?.trim() ||
+            (typeof d.lastUpdatedBy === "string" ? d.lastUpdatedBy.trim() : "") ||
+            "User"
           const avatarUrl = row.lastUpdatedBy?.avatarUrl || null
           const updatedAt = row.updatedAt
           return (
@@ -1672,6 +1649,11 @@ export function EcosystraBoardGroupTable({
                 byName={by}
                 avatarUrl={avatarUrl}
                 updatedAt={updatedAt}
+                fallbackTimeLabel={
+                  typeof d.lastUpdatedLabel === "string"
+                    ? d.lastUpdatedLabel
+                    : null
+                }
               />
             </TableCell>
           )
@@ -1781,31 +1763,18 @@ export function EcosystraBoardGroupTable({
           )
         }
         case "priority": {
-          const priority = itemPriority({ priority: d[fk] } as Record<
-            string,
-            unknown
-          >)
-          const pill = priorityPillStyle(priority)
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
-              <Select
-                value={priority}
-                onValueChange={(v) => onPatchItem(row.id, { [fk]: v })}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="h-8 w-[120px] rounded-full border-0 font-semibold shadow-none hover:opacity-95"
-                  style={pill}
-                  aria-label={t.colPriority}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Low">Low</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                </SelectContent>
-              </Select>
+              <BoardColumnLabelPicker
+                variant="priority"
+                labels={priorityLabels}
+                value={String(d[fk] ?? "")}
+                onSelect={(next) => onPatchItem(row.id, { [fk]: next })}
+                onUpdateLabels={(next) =>
+                  void patchBoardTableUi({ priorityLabels: next })
+                }
+                ariaLabel={t.colPriority}
+              />
             </TableCell>
           )
         }
@@ -1826,9 +1795,15 @@ export function EcosystraBoardGroupTable({
         case "duePriority":
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
-              <DuePill
-                label={String(d[fk] ?? "—")}
-                duePriorityLabel={t.dueDatePriorityLabel}
+              <DuePriorityPicker
+                value={String(d[fk] ?? "")}
+                labels={duePriorityLabels}
+                onSelect={(labelId) =>
+                  onPatchItem(row.id, { [fk]: labelId })
+                }
+                onUpdateLabels={(newLabels) =>
+                  void patchBoardTableUi({ duePriorityLabels: newLabels })
+                }
               />
             </TableCell>
           )
@@ -1845,33 +1820,18 @@ export function EcosystraBoardGroupTable({
             </TableCell>
           )
         case "notesCategory": {
-          const cat = normalizeNotesCategory(d[fk])
-          const st = notesCategoryStyle(cat)
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
-              <Select
-                value={cat}
-                onValueChange={(v) => onPatchItem(row.id, { [fk]: v })}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className={cn(
-                    bookmark.bookmarkSelectTrigger,
-                    "max-w-[200px] border-0 font-semibold shadow-none hover:opacity-95"
-                  )}
-                  style={st}
-                  aria-label={t.colNotesCategory}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {NOTES_CATEGORY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <BoardColumnLabelPicker
+                variant="notesCategory"
+                labels={notesCategoryLabels}
+                value={String(d[fk] ?? "")}
+                onSelect={(next) => onPatchItem(row.id, { [fk]: next })}
+                onUpdateLabels={(next) =>
+                  void patchBoardTableUi({ notesCategoryLabels: next })
+                }
+                ariaLabel={t.colNotesCategory}
+              />
             </TableCell>
           )
         }
@@ -2032,38 +1992,28 @@ export function EcosystraBoardGroupTable({
         )
       }
       case "status": {
-        const status = normalizeSubitemStatus(d.taskStatus)
-        const pill = taskStatusPillStyle(status)
+        const statusVal = resolveTaskStatusDisplayLabel(d.taskStatus, statusLabels)
+        const isDone = statusVal === "Done"
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <div className="flex min-w-0 max-w-full items-center gap-1">
-              <Select
-                value={status}
-                onValueChange={(v) => onPatchItem(row.id, { taskStatus: v })}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="h-8 min-w-[120px] max-w-[180px] flex-1 rounded-full border-0 font-semibold shadow-none hover:opacity-95"
-                  style={pill}
-                  aria-label={t.colStatus}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUBITEM_STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {status === "Done" ? (
-                <Check
-                  className="size-4 shrink-0 text-emerald-600"
-                  aria-label={t.statusDoneHint}
-                />
-              ) : null}
-            </div>
+            <BoardColumnLabelPicker
+              variant="status"
+              labels={statusLabels}
+              value={String(d.taskStatus ?? "")}
+              onSelect={(next) => onPatchItem(row.id, { taskStatus: next })}
+              onUpdateLabels={(next) =>
+                void patchBoardTableUi({ statusLabels: next })
+              }
+              ariaLabel={t.colStatus}
+              trailing={
+                isDone ? (
+                  <Check
+                    className="size-4 shrink-0 text-emerald-600"
+                    aria-label={t.statusDoneHint}
+                  />
+                ) : null
+              }
+            />
           </TableCell>
         )
       }
@@ -2092,7 +2042,10 @@ export function EcosystraBoardGroupTable({
                   mode="single"
                   onSelect={(date) => {
                     if (!date) return
-                    onPatchItem(row.id, { dueDate: format(date, "MMM d") })
+                    onPatchItem(row.id, {
+                      dueDate: format(date, "MMM d"),
+                      dueDateIso: format(date, "yyyy-MM-dd"),
+                    })
                   }}
                 />
               </PopoverContent>
@@ -2101,7 +2054,10 @@ export function EcosystraBoardGroupTable({
         )
       }
       case "lastUpdated": {
-        const by = row.lastUpdatedBy?.name || "User"
+        const by =
+          row.lastUpdatedBy?.name?.trim() ||
+          (typeof d.lastUpdatedBy === "string" ? d.lastUpdatedBy.trim() : "") ||
+          "User"
         const avatarUrl = row.lastUpdatedBy?.avatarUrl || null
         const updatedAt = row.updatedAt
         return (
@@ -2110,6 +2066,11 @@ export function EcosystraBoardGroupTable({
               byName={by}
               avatarUrl={avatarUrl}
               updatedAt={updatedAt}
+              fallbackTimeLabel={
+                typeof d.lastUpdatedLabel === "string"
+                  ? d.lastUpdatedLabel
+                  : null
+              }
             />
           </TableCell>
         )
@@ -2205,28 +2166,18 @@ export function EcosystraBoardGroupTable({
         )
       }
       case "priority": {
-        const priority = itemPriority(d)
-        const pill = priorityPillStyle(priority)
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <Select
-              value={priority}
-              onValueChange={(v) => onPatchItem(row.id, { priority: v })}
-            >
-              <SelectTrigger
-                size="sm"
-                className="h-8 w-[120px] rounded-full border-0 font-semibold shadow-none hover:opacity-95"
-                style={pill}
-                aria-label={t.colPriority}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Low">Low</SelectItem>
-                <SelectItem value="Medium">Medium</SelectItem>
-                <SelectItem value="High">High</SelectItem>
-              </SelectContent>
-            </Select>
+            <BoardColumnLabelPicker
+              variant="priority"
+              labels={priorityLabels}
+              value={String(d.priority ?? "")}
+              onSelect={(next) => onPatchItem(row.id, { priority: next })}
+              onUpdateLabels={(next) =>
+                void patchBoardTableUi({ priorityLabels: next })
+              }
+              ariaLabel={t.colPriority}
+            />
           </TableCell>
         )
       }
@@ -2269,33 +2220,18 @@ export function EcosystraBoardGroupTable({
           </TableCell>
         )
       case "notesCategory": {
-        const cat = normalizeNotesCategory(d.notesCategory)
-        const st = notesCategoryStyle(cat)
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <Select
-              value={cat}
-              onValueChange={(v) => onPatchItem(row.id, { notesCategory: v })}
-            >
-              <SelectTrigger
-                size="sm"
-                className={cn(
-                  bookmark.bookmarkSelectTrigger,
-                  "max-w-[200px] border-0 font-semibold shadow-none hover:opacity-95"
-                )}
-                style={st}
-                aria-label={t.colNotesCategory}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {NOTES_CATEGORY_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
-                    {opt}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <BoardColumnLabelPicker
+              variant="notesCategory"
+              labels={notesCategoryLabels}
+              value={String(d.notesCategory ?? "")}
+              onSelect={(next) => onPatchItem(row.id, { notesCategory: next })}
+              onUpdateLabels={(next) =>
+                void patchBoardTableUi({ notesCategoryLabels: next })
+              }
+              ariaLabel={t.colNotesCategory}
+            />
           </TableCell>
         )
       }
@@ -2520,20 +2456,55 @@ export function EcosystraBoardGroupTable({
     )
   }
 
-  return (
-    <BoardRowDndContext
-      enabled={!groupByPriority && items.length > 0}
-      groupId={groupId}
-      sensors={rowDndSensors}
-      onDragEnd={handleRowDndEnd}
+  const emptyGroupBody = (
+    <div
+      className={cn(
+        boardSurface.monoTableWrap,
+        "w-full min-w-0 overflow-hidden rounded-lg border border-[color:var(--eco-board-outer-border)] bg-[color:var(--eco-board-card-bg)] text-sm"
+      )}
+      data-ecosystra-group-empty=""
     >
+      <p className="sr-only">
+        {t.tableCaptionGroup.replace("{name}", groupName)}
+      </p>
+      <div
+        className="flex min-h-[min(280px,45vh)] w-full flex-col items-center justify-center gap-4 px-6 py-12 text-center"
+        role="region"
+        aria-label={t.emptyGroup}
+      >
+        <button
+          type="button"
+          data-testid="ecosystra-group-add-task"
+          className="inline-flex h-11 min-w-[160px] cursor-pointer items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold shadow-md outline-none ring-offset-2 transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[#0073ea] focus-visible:ring-offset-2"
+          style={{ backgroundColor: "#0073ea", color: "#ffffff" }}
+          onClick={() => onAddTask(groupId)}
+        >
+          <Plus className="size-4 shrink-0" strokeWidth={2} aria-hidden />
+          {t.addTask}
+        </button>
+        <p className="max-w-sm text-sm text-muted-foreground">{t.emptyGroup}</p>
+      </div>
+    </div>
+  )
+
+  return (
+    <>
+      {items.length === 0 ? (
+        !groupByPriority ? (
+          <BoardRowEmptyGroupDropTarget groupId={groupId}>
+            {emptyGroupBody}
+          </BoardRowEmptyGroupDropTarget>
+        ) : (
+          emptyGroupBody
+        )
+      ) : (
       <Table
         id={`ecosystra-board-table-${groupId}`}
         columns={visibleColumns}
         columnWidthsPx={mergedWidths}
-        emptyState={emptyState}
-        errorState={errorState}
-        isEmpty={items.length === 0}
+        emptyState={tableErrorFallback}
+        errorState={tableErrorFallback}
+        isEmpty={false}
         size={tableSize}
         className={cn(boardSurface.monoTableWrap, "bg-transparent")}
       >
@@ -2543,7 +2514,7 @@ export function EcosystraBoardGroupTable({
         <TableHeader>
           {enableColumnDrag ? (
             <Droppable
-              droppableId="board-columns"
+              droppableId={`board-columns-${groupId}`}
               direction="horizontal"
               type="COLUMN"
             >
@@ -2556,7 +2527,7 @@ export function EcosystraBoardGroupTable({
                   {visibleColumns.map((col, hi) => (
                     <Draggable
                       key={col.id}
-                      draggableId={`col-${col.id}`}
+                      draggableId={`g-${groupId}-col-${col.id}`}
                       index={hi}
                       isDragDisabled={col.id === "add"}
                     >
@@ -2653,12 +2624,12 @@ export function EcosystraBoardGroupTable({
               {rowSegments.map((seg) => {
                 if (seg.type !== "row") return null
                 const row = seg.item
-                const rowSortDisabled = !onRowOrderCommit
                 return (
                   <SortableBoardRowTbody
                     key={seg.key}
                     id={row.id}
-                    disabled={rowSortDisabled}
+                    disabled={false}
+                    groupId={groupId}
                   >
                     {({ listeners }) => (
                       <>
@@ -2668,12 +2639,7 @@ export function EcosystraBoardGroupTable({
                           highlighted={selectedRowIds.has(row.id)}
                         >
                           {visibleColumns.map((col, ci) =>
-                            renderBodyCell(
-                              col,
-                              row,
-                              ci,
-                              !rowSortDisabled ? listeners : undefined
-                            )
+                            renderBodyCell(col, row, ci, listeners)
                           )}
                         </TableRow>
                         {renderExpandedSubitemsRow(row)}
@@ -2722,14 +2688,15 @@ export function EcosystraBoardGroupTable({
                   )
                 }
                 if (col.id === "status") {
-                  const segs = SUBITEM_STATUS_OPTIONS.map((opt) => ({
+                  const segs = statusLabels.map((l) => ({
                     flex: items.filter(
                       (it) =>
-                        normalizeSubitemStatus(
-                          (it.dynamicData || {}).taskStatus
-                        ) === opt
+                        resolveTaskStatusDisplayLabel(
+                          (it.dynamicData || {}).taskStatus,
+                          statusLabels
+                        ) === l.label
                     ).length,
-                    color: taskStatusPillStyle(opt).backgroundColor,
+                    color: l.color,
                   }))
                   return (
                     <TableCell
@@ -2745,12 +2712,15 @@ export function EcosystraBoardGroupTable({
                   )
                 }
                 if (col.id === "priority") {
-                  const order = ["Low", "Medium", "High"] as const
-                  const segs = order.map((p) => ({
+                  const segs = priorityLabels.map((l) => ({
                     flex: items.filter(
-                      (it) => itemPriority(it.dynamicData || {}) === p
+                      (it) =>
+                        resolvePriorityBucketLabel(
+                          it.dynamicData || {},
+                          priorityLabels
+                        ) === l.label
                     ).length,
-                    color: priorityPillStyle(p).backgroundColor,
+                    color: l.color,
                   }))
                   return (
                     <TableCell
@@ -2785,15 +2755,15 @@ export function EcosystraBoardGroupTable({
                   )
                 }
                 if (col.id === "notesCategory") {
-                  const order = [...NOTES_CATEGORY_OPTIONS]
-                  const segs = order.map((lab) => ({
+                  const segs = notesCategoryLabels.map((l) => ({
                     flex: items.filter(
                       (it) =>
-                        normalizeNotesCategory(
-                          (it.dynamicData || {}).notesCategory
-                        ) === lab
+                        resolveNotesCategoryDisplayLabel(
+                          (it.dynamicData || {}).notesCategory,
+                          notesCategoryLabels
+                        ) === l.label
                     ).length,
-                    color: notesCategoryStyle(lab).backgroundColor,
+                    color: l.color,
                   }))
                   return (
                     <TableCell
@@ -2855,6 +2825,7 @@ export function EcosystraBoardGroupTable({
           </TableFooter>
         ) : null}
       </Table>
-    </BoardRowDndContext>
+      )}
+    </>
   )
 }

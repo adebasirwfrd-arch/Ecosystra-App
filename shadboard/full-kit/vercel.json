@@ -3,5 +3,11 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "pnpm run build",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/cron/due-date-reminders",
+      "schedule": "0 7 * * *"
+    }
+  ]
 }
