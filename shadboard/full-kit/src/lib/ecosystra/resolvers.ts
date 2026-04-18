@@ -17,6 +17,8 @@ import {
 } from "./permify";
 import { isSuperUserEmail } from "./superuser";
 
+import { i18n } from "@/configs/i18n";
+
 export type GqlContext = {
   auth: AuthState;
   prismaUser: Awaited<ReturnType<typeof prisma.ecoUser.findUnique>>;
@@ -29,6 +31,24 @@ function appBaseUrl(): string {
     process.env.NEXT_PUBLIC_APP_URL ||
     "http://localhost:3002"
   );
+}
+
+function ecosystraInviteLocale(): string {
+  const v = process.env.NEXT_PUBLIC_ECOSYSTRA_INVITE_LOCALE?.trim();
+  if (v) return v;
+  return i18n.defaultLocale;
+}
+
+/**
+ * Deep links to the Ecosystra board view (`/[lang]/apps/ecosystra/board`).
+ * Legacy `/board?…` URLs were invalid and returned 404.
+ */
+function ecosystraBoardAbsoluteUrl(query: Record<string, string>): string {
+  const base = appBaseUrl().replace(/\/$/, "");
+  const locale = ecosystraInviteLocale();
+  const path = `/${locale}/apps/ecosystra/board`;
+  const qs = new URLSearchParams(query).toString();
+  return qs ? `${base}${path}?${qs}` : `${base}${path}`;
 }
 
 type EcoEmailRow = {
@@ -543,7 +563,7 @@ async function executeSetTaskAssignees(
           title: `Assigned: ${updated.name}`,
           message: `${actorLabel} assigned you to this task.`,
           type: "task_assigned",
-          link: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
+          link: ecosystraBoardAbsoluteUrl({ task: itemId }),
         },
       });
     } catch (e) {
@@ -555,12 +575,12 @@ async function executeSetTaskAssignees(
         assigneeEmail: assignee.email,
         assigneeName: assignee.name,
         changes: { assignee: { old: prev.assignee, new: assignee.name || assignee.email } },
-        deepLink: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
+        deepLink: ecosystraBoardAbsoluteUrl({ task: itemId }),
         summary: `You were assigned to task "${updated.name}"`,
       });
       try {
         const subject = `Assigned: ${updated.name}`;
-        const content = `You have been assigned to task "${updated.name}".\n\nOpen: ${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`;
+        const content = `You have been assigned to task "${updated.name}".\n\nOpen: ${ecosystraBoardAbsoluteUrl({ task: itemId })}`;
         await prisma.ecoEmail.create({
           data: {
             senderId: viewer.id,
@@ -582,7 +602,7 @@ async function executeSetTaskAssignees(
       toEmail: inv.email,
       taskName: updated.name,
       inviterName: actorLabel,
-      acceptUrl: `${appBaseUrl()}/board?acceptAssignee=${encodeURIComponent(inv.token)}`,
+      acceptUrl: ecosystraBoardAbsoluteUrl({ acceptAssignee: inv.token }),
     });
   }
 
@@ -1165,7 +1185,7 @@ export const resolvers = {
           await enqueueTaskEmail({
             taskId: id, assigneeEmail,
             changes: { status: { old: statusOld, new: statusNew } },
-            deepLink: `${appBaseUrl()}/board?task=${encodeURIComponent(id)}`,
+            deepLink: ecosystraBoardAbsoluteUrl({ task: id }),
             summary: `Task "${currentItem?.name || ""}" status updated`,
           });
         }

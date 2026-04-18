@@ -80,9 +80,16 @@ export async function middleware(request: NextRequest) {
     if (!isAuthenticated && isProtected) {
       let redirectPathname = "/sign-in"
 
-      // Maintain the original path for redirection
+      // Maintain the original path (including ?query) for post-login return — e.g. acceptAssignee token
       if (pathnameWithoutLocale !== "") {
-        redirectPathname = ensureRedirectPathname(redirectPathname, pathname)
+        const pathWithSearch =
+          request.nextUrl.search.length > 0
+            ? `${pathname}${request.nextUrl.search}`
+            : pathname
+        redirectPathname = ensureRedirectPathname(
+          redirectPathname,
+          pathWithSearch
+        )
       }
 
       return redirect(redirectPathname, request)

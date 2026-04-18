@@ -89,6 +89,12 @@ const nextConfig = {
         destination: "/:path*",
         permanent: false,
       },
+      /** Legacy invite / task deep links used `/board?…` (404). Forward query to real Ecosystra route. */
+      {
+        source: "/board",
+        destination: "/en/apps/ecosystra/board",
+        permanent: false,
+      },
       // ⚠️ Important:
       // Always list more specific static paths before dynamic ones like "/:lang"
       // to prevent Next.js from incorrectly matching static routes as dynamic parameters.
