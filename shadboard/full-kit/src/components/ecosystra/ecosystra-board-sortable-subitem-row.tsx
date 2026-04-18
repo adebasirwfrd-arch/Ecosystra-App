@@ -1,7 +1,6 @@
 "use client"
 
 import { useSortable } from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
 
 import type { RowSize } from "@/components/ui/ecosystra-table"
 import type { DraggableSyntheticListeners } from "@dnd-kit/core"
@@ -23,24 +22,11 @@ export function SortableSubitemTableRow({
   highlighted?: boolean
   children: (listeners: DraggableSyntheticListeners | undefined) => ReactNode
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
+  const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id })
 
   return (
     <TableRow
       ref={setNodeRef}
-      style={style}
       size={size}
       highlighted={highlighted}
       className={cn("group/row", isDragging && "opacity-60")}

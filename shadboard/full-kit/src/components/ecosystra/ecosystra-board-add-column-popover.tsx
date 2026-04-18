@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import {
   AlertTriangle,
   Calendar,
+  CalendarDays,
   ChevronDown,
   CircleDot,
   Clock,
@@ -44,6 +45,7 @@ const ESSENTIALS: {
   { id: "assignee", icon: Users, iconClass: "bg-sky-400" },
   { id: "notesCategory", icon: ChevronDown, iconClass: "bg-emerald-600" },
   { id: "dueDate", icon: Calendar, iconClass: "bg-violet-500" },
+  { id: "date", icon: CalendarDays, iconClass: "bg-sky-600" },
   { id: "budget", icon: Hash, iconClass: "bg-amber-500" },
   { id: "rating", icon: Star, iconClass: "bg-amber-300" },
 ]
@@ -68,6 +70,7 @@ function pickerLabel(
   const keyMap: Record<HidableBoardColumnId, string> = {
     status: "hideColStatus",
     dueDate: "hideColDueDate",
+    date: "hideColDate",
     lastUpdated: "hideColLastUpdated",
     files: "hideColFiles",
     owner: "hideColOwner",

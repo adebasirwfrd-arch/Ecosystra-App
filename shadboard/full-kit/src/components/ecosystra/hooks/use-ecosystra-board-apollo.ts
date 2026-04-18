@@ -27,7 +27,13 @@ import {
   WORKSPACE_USERS,
 } from "@/lib/ecosystra/board-gql"
 
+import {
+  parseTableGroupBySuite,
+  type BoardGroupBySuite,
+} from "../ecosystra-board-group-by-engine"
 import { useOptionalEcosystraDictionary } from "../ecosystra-dictionary-context"
+
+export type { BoardGroupBySuite }
 
 function boardToastMessages(dict: DictionaryType | null) {
   const m = dict?.ecosystraApp?.boardTable as Record<string, string> | undefined
@@ -96,6 +102,7 @@ export type BoardTableGroupBy = "none" | "priority"
 export const HIDABLE_COLUMN_IDS = [
   "status",
   "dueDate",
+  "date",
   "lastUpdated",
   "files",
   "owner",
@@ -277,12 +284,39 @@ export function ensureAddColumnLastInOrder(order: string[]): string[] {
 export const SUBITEM_DEFAULT_BOARD_COLUMN_IDS: readonly string[] =
   BOARD_TABLE_COLUMN_IDS
 
+/** Main and sub-item tables always pin these on horizontal scroll. */
+export const ALWAYS_STICKY_BOARD_COLUMN_IDS = ["select", "task"] as const
+
+/** Extra pinned column ids (not including `select` / `task`), ordered by `columnOrder`. */
+export function normalizePinnedColumnIds(
+  raw: unknown,
+  columnOrder: readonly string[]
+): string[] {
+  const locked = new Set<string>(ALWAYS_STICKY_BOARD_COLUMN_IDS)
+  const rawArr = Array.isArray(raw)
+    ? raw.filter((x): x is string => typeof x === "string")
+    : []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const id of columnOrder) {
+    if (id === "add") continue
+    if (locked.has(id)) continue
+    if (!rawArr.includes(id)) continue
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
+}
+
 export type SubitemBoardTableUi = {
   hiddenColumnIds: HidableBoardColumnId[]
   columnWidthsPx: Record<string, number>
   tableColumnOrder: string[]
   tableCustomColumns: Record<string, TableCustomColumnDef>
   tableColumnTitles: Record<string, string>
+  /** Extra sticky column ids for the nested sub-item table (excluding select + task). */
+  pinnedColumnIds: string[]
   /** Per parent task id: ordered sub-item ids for drag-reorder within the nested table. */
   itemOrdersByParent: Record<string, string[]>
 }
@@ -375,12 +409,17 @@ export function parseSubitemBoardTableUi(raw: unknown): SubitemBoardTableUi {
       }
     }
   }
+  const pinnedColumnIds = normalizePinnedColumnIds(
+    base.pinnedColumnIds,
+    tableColumnOrder
+  )
   return {
     hiddenColumnIds: hidden,
     columnWidthsPx,
     tableColumnOrder,
     tableCustomColumns,
     tableColumnTitles,
+    pinnedColumnIds,
     itemOrdersByParent,
   }
 }
@@ -394,6 +433,7 @@ export function serializeSubitemBoardTableUi(
     tableColumnOrder: ui.tableColumnOrder,
     tableCustomColumns: ui.tableCustomColumns,
     tableColumnTitles: ui.tableColumnTitles,
+    pinnedColumnIds: ui.pinnedColumnIds,
     itemOrdersByParent: ui.itemOrdersByParent,
   }
 }
@@ -457,11 +497,50 @@ function parseLabelArray(
   return out.length > 0 ? out : [...fallback]
 }
 
+/** Saved filter “views” for the main board toolbar (JSON payload). */
+export type BoardSavedFilterViewRow = {
+  id: string
+  name: string
+  createdAt: string
+  /** JSON: `{ personUserIds, personIncludeUnassigned, quick, advancedRoot }` */
+  payload: string
+}
+
+/** Multi-column sort rules persisted as `tableSortRules` in board metadata. */
+export type BoardTableSortRule = {
+  id: string
+  columnId: string | null
+  direction: "asc" | "desc"
+}
+
+function parseTableSortRules(raw: unknown): BoardTableSortRule[] {
+  if (!Array.isArray(raw)) return []
+  const out: BoardTableSortRule[] = []
+  for (const x of raw) {
+    if (!x || typeof x !== "object" || Array.isArray(x)) continue
+    const o = x as Record<string, unknown>
+    const id = typeof o.id === "string" ? o.id.trim() : ""
+    if (!id) continue
+    const direction: "asc" | "desc" =
+      o.direction === "desc" ? "desc" : "asc"
+    let columnId: string | null = null
+    if (typeof o.columnId === "string" && o.columnId.trim()) {
+      columnId = o.columnId.trim()
+    } else if (o.columnId === null) {
+      columnId = null
+    }
+    out.push({ id, columnId, direction })
+  }
+  return out
+}
+
 export function parseBoardTableUiMetadata(
   meta: Record<string, unknown> | null | undefined
 ): {
   hiddenColumnIds: HidableBoardColumnId[]
+  /** @deprecated Use `groupBySuite` — kept for compatibility (`"priority"` means any grouping active). */
   groupBy: BoardTableGroupBy
+  groupBySuite: BoardGroupBySuite | null
   /** Persisted column widths (px) from `tableColumnWidthsPx` */
   columnWidthsPx: Record<string, number>
   /** Full column id order (persisted `tableColumnOrder`). */
@@ -482,6 +561,12 @@ export function parseBoardTableUiMetadata(
   notesCategoryLabels: DuePriorityLabel[]
   /** Top-level group row order (`groupOrder` in board metadata). */
   groupOrder: string[]
+  /** Named toolbar filter presets (`savedFilterViews` in board metadata). */
+  savedFilterViews: BoardSavedFilterViewRow[]
+  /** Multi-level column sort (`tableSortRules` in board metadata). */
+  sortRules: BoardTableSortRule[]
+  /** Extra horizontally sticky column ids (always includes select + task). */
+  tablePinnedColumnIds: string[]
 } {
   const rawHidden = meta?.hiddenTableColumnIds
   const hidden = Array.isArray(rawHidden)
@@ -489,8 +574,6 @@ export function parseBoardTableUiMetadata(
         HIDABLE_COLUMN_IDS.includes(id as HidableBoardColumnId)
       )
     : []
-  const gb = meta?.tableGroupBy
-  const groupBy: BoardTableGroupBy = gb === "priority" ? "priority" : "none"
   const rawW = meta?.tableColumnWidthsPx
   const columnWidthsPx: Record<string, number> = {}
   if (
@@ -530,6 +613,9 @@ export function parseBoardTableUiMetadata(
     }
   }
   const customColumnIds = Object.keys(tableCustomColumns)
+
+  const groupBySuite = parseTableGroupBySuite(meta, tableCustomColumns)
+  const groupBy: BoardTableGroupBy = groupBySuite ? "priority" : "none"
 
   const rawOrder = meta?.tableColumnOrder
   const rawOrderArr = Array.isArray(rawOrder)
@@ -616,9 +702,34 @@ export function parseBoardTableUiMetadata(
     ? rawGroupOrder.filter((x): x is string => typeof x === "string")
     : []
 
+  const savedFilterViews: BoardSavedFilterViewRow[] = []
+  const rawViews = meta?.savedFilterViews
+  if (Array.isArray(rawViews)) {
+    for (const x of rawViews) {
+      if (!x || typeof x !== "object" || Array.isArray(x)) continue
+      const o = x as Record<string, unknown>
+      const id = typeof o.id === "string" ? o.id.trim() : ""
+      const name = typeof o.name === "string" ? o.name.trim() : ""
+      const createdAt =
+        typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString()
+      const payload = typeof o.payload === "string" ? o.payload : ""
+      if (id && name && payload) {
+        savedFilterViews.push({ id, name, createdAt, payload })
+      }
+    }
+  }
+
+  const sortRules = parseTableSortRules(meta?.tableSortRules)
+
+  const tablePinnedColumnIds = normalizePinnedColumnIds(
+    meta?.tablePinnedColumnIds,
+    tableColumnOrder
+  )
+
   return {
     hiddenColumnIds: hidden,
     groupBy,
+    groupBySuite,
     columnWidthsPx,
     tableColumnOrder,
     tableCustomColumns,
@@ -629,6 +740,9 @@ export function parseBoardTableUiMetadata(
     priorityLabels,
     notesCategoryLabels,
     groupOrder,
+    savedFilterViews,
+    sortRules,
+    tablePinnedColumnIds,
   }
 }
 
@@ -954,18 +1068,24 @@ export function useEcosystraBoardApollo() {
       tableCustomColumns?: Record<string, TableCustomColumnDef>
       tableColumnTitles?: Record<string, string>
       itemOrdersByParent?: Record<string, string[]>
+      pinnedColumnIds?: string[]
     }) => {
       if (!board?.id) return
       const cur = parseSubitemBoardTableUi(board.subitemColumns)
+      const nextOrder = ensureAddColumnLastInOrder(
+        partial.tableColumnOrder ?? cur.tableColumnOrder
+      )
       const next: SubitemBoardTableUi = {
         hiddenColumnIds: partial.hiddenTableColumnIds ?? cur.hiddenColumnIds,
         columnWidthsPx: partial.tableColumnWidthsPx ?? cur.columnWidthsPx,
-        tableColumnOrder: ensureAddColumnLastInOrder(
-          partial.tableColumnOrder ?? cur.tableColumnOrder
-        ),
+        tableColumnOrder: nextOrder,
         tableCustomColumns:
           partial.tableCustomColumns ?? cur.tableCustomColumns,
         tableColumnTitles: partial.tableColumnTitles ?? cur.tableColumnTitles,
+        pinnedColumnIds:
+          partial.pinnedColumnIds != null
+            ? normalizePinnedColumnIds(partial.pinnedColumnIds, nextOrder)
+            : cur.pinnedColumnIds,
         itemOrdersByParent:
           partial.itemOrdersByParent ?? cur.itemOrdersByParent,
       }
@@ -1016,6 +1136,8 @@ export function useEcosystraBoardApollo() {
     async (partial: {
       hiddenTableColumnIds?: HidableBoardColumnId[]
       tableGroupBy?: BoardTableGroupBy
+      /** Main-table row grouping (`tableGroupBySuite` in board metadata). */
+      tableGroupBySuite?: BoardGroupBySuite | null
       /** Full merged map — shallow-merged server-side into board metadata */
       tableColumnWidthsPx?: Record<string, number>
       /** Full merged column id list */
@@ -1036,8 +1158,14 @@ export function useEcosystraBoardApollo() {
       notesCategoryLabels?: DuePriorityLabel[]
       /** Full merged top-level group id list (main table accordion order) */
       groupOrder?: string[]
-    }) => {
-      if (!board?.id) return
+      /** Named filter views for the board toolbar */
+      savedFilterViews?: BoardSavedFilterViewRow[]
+      /** Multi-column sort rules (`tableSortRules` in board metadata) */
+      tableSortRules?: BoardTableSortRule[]
+      /** Extra sticky column ids for horizontal scroll (`tablePinnedColumnIds`). */
+      tablePinnedColumnIds?: string[]
+    }): Promise<boolean> => {
+      if (!board?.id) return false
       try {
         await updateBoardMetadata({
           variables: {
@@ -1045,8 +1173,10 @@ export function useEcosystraBoardApollo() {
             metadata: partial,
           },
         })
+        return true
       } catch (e) {
         toast.error(gqlErrorMessage(e))
+        return false
       }
     },
     [board?.id, updateBoardMetadata]

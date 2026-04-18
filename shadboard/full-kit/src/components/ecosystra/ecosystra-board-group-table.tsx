@@ -61,6 +61,7 @@ import type { CSSProperties, ReactNode, Ref } from "react"
 import type { DateRange } from "react-day-picker"
 import type {
   DuePriorityLabel,
+  GqlBoardGroup,
   GqlBoardItem,
   HidableBoardColumnId,
   SubitemBoardTableUi,
@@ -70,7 +71,10 @@ import type {
 import { WORKSPACE_USERS } from "@/lib/ecosystra/board-gql"
 import { cn, getInitials } from "@/lib/utils"
 
-import { sortItemsByOrder } from "./hooks/use-ecosystra-board-apollo"
+import {
+  ALWAYS_STICKY_BOARD_COLUMN_IDS,
+  sortItemsByOrder,
+} from "./hooks/use-ecosystra-board-apollo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -116,6 +120,13 @@ import {
   EcosystraBoardAvatarGroup,
   EcosystraBoardLastUpdatedCell,
 } from "./ecosystra-board-avatars"
+import type {
+  BoardFacetLabels,
+  BoardFilterColumnMeta,
+} from "./ecosystra-board-filter-engine"
+import { buildBoardGroupRowSegments } from "./ecosystra-board-group-by-engine"
+import type { BoardGroupBySuite } from "./ecosystra-board-group-by-engine"
+import { ecoCcFieldKey } from "./ecosystra-board-cc-field-key"
 import { EcosystraBoardEditableColumnHeader } from "./ecosystra-board-editable-column-header"
 import { formatIdr } from "./ecosystra-board-format-idr"
 import { SortableBoardRowTbody } from "./ecosystra-board-sortable-row-tbody"
@@ -127,11 +138,6 @@ const NOTES_CATEGORY_OPTIONS = [
   "Action Item",
   "Meeting Summary",
 ] as const
-
-/** Per-cell value for user-added columns (`tableCustomColumns`) — shallow-safe keys in `dynamicData`. */
-export function ecoCcFieldKey(columnId: string): string {
-  return `ecoCc__${columnId}`
-}
 
 function normalizeNotesCategory(v: unknown): string {
   const s = String(v ?? "General Note")
@@ -616,10 +622,6 @@ function InlineTaskTitle({
   )
 }
 
-type RowSeg =
-  | { type: "header"; key: string; label: string }
-  | { type: "row"; key: string; item: GqlBoardItem }
-
 function resolvePriorityBucketLabel(
   d: Record<string, unknown>,
   priorityLabels: DuePriorityLabel[]
@@ -629,36 +631,6 @@ function resolvePriorityBucketLabel(
   if (hit) return hit.label
   const leg = itemPriority(d)
   return priorityLabels.find((l) => l.label === leg)?.label ?? leg
-}
-
-function buildRowSegments(
-  items: GqlBoardItem[],
-  groupByPriority: boolean,
-  priorityLabels: DuePriorityLabel[]
-): RowSeg[] {
-  if (!groupByPriority) {
-    return items.map((item) => ({ type: "row", key: item.id, item }))
-  }
-  const orderLabels = [...priorityLabels].map((l) => l.label).filter(Boolean)
-  const rank = (d: Record<string, unknown>) => {
-    const lab = resolvePriorityBucketLabel(d, priorityLabels)
-    const i = orderLabels.indexOf(lab)
-    return i >= 0 ? i : orderLabels.length
-  }
-  const sorted = [...items].sort(
-    (a, b) => rank(a.dynamicData || {}) - rank(b.dynamicData || {})
-  )
-  const out: RowSeg[] = []
-  let last = ""
-  for (const item of sorted) {
-    const p = resolvePriorityBucketLabel(item.dynamicData || {}, priorityLabels)
-    if (p !== last) {
-      out.push({ type: "header", key: `hdr-${p}-${item.id}`, label: p })
-      last = p
-    }
-    out.push({ type: "row", key: item.id, item })
-  }
-  return out
 }
 
 type AssigneeDisplay = {
@@ -986,7 +958,12 @@ type Props = {
   expandedSubitemRowId: string | null
   setExpandedSubitemRowId: (id: string | null) => void
   hiddenColumnIds: readonly HidableBoardColumnId[]
-  groupByPriority: boolean
+  groupBySuite: BoardGroupBySuite | null
+  /** Resolved column meta for `groupBySuite.columnId` (parent derives from visible columns). */
+  groupByColumn: BoardFilterColumnMeta | null
+  groupByLabels: BoardFacetLabels
+  workspaceUsersForGroupBy: { id: string; name: string | null; email: string }[]
+  groupByUnassignedLabel: string
   onPersonToolbarTarget: (itemId: string) => void
   onAddTask: (groupId: string) => void
   onAddSubitem: (parentItemId: string) => void
@@ -1006,6 +983,8 @@ type Props = {
   onColumnWidthCommit?: (columnId: string, widthPx: number) => void
   /** Full merged column order from board metadata (`tableColumnOrder`). */
   tableColumnOrder: string[]
+  /** Extra sticky column ids (`tablePinnedColumnIds` in board metadata). */
+  tablePinnedColumnIds: readonly string[]
   /** User-added columns (`c_…` ids) from board metadata (`tableCustomColumns`). */
   tableCustomColumns: Record<string, TableCustomColumnDef>
   /** When true, column headers participate in board-level column drag (`DragDropContext`). */
@@ -1067,7 +1046,7 @@ type Props = {
     statusLabels?: DuePriorityLabel[]
     priorityLabels?: DuePriorityLabel[]
     notesCategoryLabels?: DuePriorityLabel[]
-  }) => void | Promise<void>
+  }) => void | Promise<void | boolean>
 }
 
 export function EcosystraBoardGroupTable({
@@ -1079,7 +1058,11 @@ export function EcosystraBoardGroupTable({
   expandedSubitemRowId,
   setExpandedSubitemRowId,
   hiddenColumnIds,
-  groupByPriority,
+  groupBySuite,
+  groupByColumn,
+  groupByLabels,
+  workspaceUsersForGroupBy,
+  groupByUnassignedLabel,
   onPersonToolbarTarget,
   onAddTask,
   onAddSubitem,
@@ -1091,6 +1074,7 @@ export function EcosystraBoardGroupTable({
   columnWidthsPx: columnWidthsPxProp,
   onColumnWidthCommit,
   tableColumnOrder,
+  tablePinnedColumnIds,
   tableCustomColumns,
   enableColumnDrag = false,
   onAddBoardColumn,
@@ -1194,6 +1178,12 @@ export function EcosystraBoardGroupTable({
         infoContent: t.colDueDateInfo,
       },
       {
+        id: "date",
+        title: t.colDate,
+        loadingStateType: "medium-text",
+        infoContent: t.colDateInfo,
+      },
+      {
         id: "lastUpdated",
         title: t.colLastUpdated,
         loadingStateType: "medium-text",
@@ -1270,7 +1260,9 @@ export function EcosystraBoardGroupTable({
 
   const visibleColumns = useMemo(() => {
     const byId = new Map(allColumns.map((c) => [c.id, c]))
-    return tableColumnOrder
+    const lockedSticky = new Set<string>(ALWAYS_STICKY_BOARD_COLUMN_IDS)
+    const extraSticky = new Set(tablePinnedColumnIds)
+    const base = tableColumnOrder
       .map((id) => {
         const built = byId.get(id)
         if (built) return built
@@ -1287,14 +1279,21 @@ export function EcosystraBoardGroupTable({
         } satisfies TableColumn
       })
       .filter(
-        (c): c is TableColumn =>
-          !!c && !hidden.has(c.id as HidableBoardColumnId)
-      )
-  }, [allColumns, hidden, tableColumnOrder, tableCustomColumns])
+        (c) => !!c && !hidden.has(c.id as HidableBoardColumnId)
+      ) as TableColumn[]
+    return base.map(
+      (c): TableColumn => ({
+        ...c,
+        sticky: lockedSticky.has(c.id) || extraSticky.has(c.id),
+      })
+    )
+  }, [allColumns, hidden, tableColumnOrder, tableCustomColumns, tablePinnedColumnIds])
 
   const subVisibleColumns = useMemo(() => {
     const byId = new Map(allColumns.map((c) => [c.id, c]))
-    return subitemTableUi.tableColumnOrder
+    const lockedSticky = new Set<string>(ALWAYS_STICKY_BOARD_COLUMN_IDS)
+    const extraSticky = new Set(subitemTableUi.pinnedColumnIds)
+    const base = subitemTableUi.tableColumnOrder
       .map((id) => {
         const built = byId.get(id)
         if (built) {
@@ -1315,9 +1314,14 @@ export function EcosystraBoardGroupTable({
         } satisfies TableColumn
       })
       .filter(
-        (c): c is TableColumn =>
-          !!c && !subHidden.has(c.id as HidableBoardColumnId)
-      )
+        (c) => !!c && !subHidden.has(c.id as HidableBoardColumnId)
+      ) as TableColumn[]
+    return base.map(
+      (c): TableColumn => ({
+        ...c,
+        sticky: lockedSticky.has(c.id) || extraSticky.has(c.id),
+      })
+    )
   }, [allColumns, subHidden, subitemTableUi])
 
   const columnWidthsPx = columnWidthsPxProp
@@ -1470,15 +1474,46 @@ export function EcosystraBoardGroupTable({
     })
   )
 
+  const groupByActive = Boolean(groupBySuite?.columnId && groupByColumn)
+
+  const groupStub: GqlBoardGroup = useMemo(
+    () => ({
+      id: groupId,
+      name: groupName,
+      color: groupColor ?? null,
+      items,
+    }),
+    [groupColor, groupId, groupName, items]
+  )
+
   const rowSegments = useMemo(
-    () => buildRowSegments(items, groupByPriority, priorityLabels),
-    [items, groupByPriority, priorityLabels]
+    () =>
+      buildBoardGroupRowSegments(
+        items,
+        groupStub,
+        groupBySuite,
+        groupByColumn,
+        tableCustomColumns,
+        groupByLabels,
+        workspaceUsersForGroupBy,
+        groupByUnassignedLabel
+      ),
+    [
+      groupByColumn,
+      groupByLabels,
+      groupBySuite,
+      groupStub,
+      items,
+      tableCustomColumns,
+      workspaceUsersForGroupBy,
+      groupByUnassignedLabel,
+    ]
   )
 
   const rowIdsForSort = useMemo(
     () =>
       rowSegments
-        .filter((s): s is Extract<RowSeg, { type: "row" }> => s.type === "row")
+        .filter((s) => s.type === "row")
         .map((s) => s.item.id),
     [rowSegments]
   )
@@ -1983,6 +2018,47 @@ export function EcosystraBoardGroupTable({
                       if (!date) return
                       onPatchItem(row.id, {
                         [fk]: format(date, "MMM d"),
+                      })
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </TableCell>
+          )
+        }
+        case "date": {
+          const isoKey = `${fk}Iso`
+          const label = String(d[fk] ?? "—")
+          return (
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-0 px-2 font-normal shadow-none hover:bg-muted/50"
+                    aria-label={`${t.colDate}: ${label}`}
+                  >
+                    <Check
+                      className="size-3.5 shrink-0 text-emerald-600"
+                      aria-hidden
+                    />
+                    <span className="truncate">{label}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    onSelect={(date) => {
+                      if (!date) return
+                      onPatchItem(row.id, {
+                        [fk]: format(date, "MMM d"),
+                        [isoKey]: format(date, "yyyy-MM-dd"),
                       })
                     }}
                   />
@@ -2775,6 +2851,43 @@ export function EcosystraBoardGroupTable({
             </div>
           )
         }
+        case "date": {
+          const isoKey = `${fk}Iso`
+          const label = String(sd[fk] ?? "—")
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-0 px-2 font-normal shadow-none hover:bg-muted/50"
+                    aria-label={`${t.colDate}: ${label}`}
+                  >
+                    <Check
+                      className="size-3.5 shrink-0 text-emerald-600"
+                      aria-hidden
+                    />
+                    <span className="truncate">{label}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    onSelect={(date) => {
+                      if (!date) return
+                      onPatchItem(s.id, {
+                        [fk]: format(date, "MMM d"),
+                        [isoKey]: format(date, "yyyy-MM-dd"),
+                      })
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          )
+        }
         case "notes":
           return (
             <div key={col.id} className="min-w-0 px-0.5">
@@ -3510,7 +3623,7 @@ export function EcosystraBoardGroupTable({
   return (
     <>
       {items.length === 0 ? (
-        !groupByPriority ? (
+        !groupByActive ? (
           <BoardRowEmptyGroupDropTarget groupId={groupId}>
             {emptyGroupBody}
           </BoardRowEmptyGroupDropTarget>
@@ -3571,7 +3684,7 @@ export function EcosystraBoardGroupTable({
               </TableRow>
             )}
           </TableHeader>
-          {groupByPriority ? (
+          {groupByActive ? (
             <TableBody>
               {rowSegments.map((seg) => {
                 if (seg.type === "header") {
@@ -3585,7 +3698,11 @@ export function EcosystraBoardGroupTable({
                         scope="colgroup"
                         className="px-3 py-2 text-start text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                       >
-                        {t.groupByPriorityHeading}: {seg.label}
+                        {groupByColumn
+                          ? t.groupByBucketHeader
+                              .replace("{column}", groupByColumn.title)
+                              .replace("{value}", seg.label)
+                          : seg.label}
                       </th>
                     </TableRow>
                   )

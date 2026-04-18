@@ -23,6 +23,7 @@ import {
   ListChecks,
   Loader2,
   MoreHorizontal,
+  Pin,
   Plus,
   Search,
   User,
@@ -33,6 +34,8 @@ import boardSurface from "./ecosystra-board-surface.module.css"
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core"
 import type { DropResult } from "@hello-pangea/dnd"
 import type {
+  BoardGroupBySuite,
+  BoardTableSortRule,
   GqlBoardItem,
   HidableBoardColumnId,
 } from "./hooks/use-ecosystra-board-apollo"
@@ -44,12 +47,41 @@ import {
   HIDABLE_COLUMN_IDS,
   ensureAddColumnLastInOrder,
   newCustomTableColumnId,
+  normalizePinnedColumnIds,
   orderWithColumnBeforeAdd,
   readAssigneeUserIdsFromDynamic,
   reorderArray,
   sortItemsByOrder,
   useEcosystraBoardApollo,
 } from "./hooks/use-ecosystra-board-apollo"
+import {
+  BoardAdvancedFiltersDialog,
+  BoardPersonFilterPopover,
+  BoardQuickFiltersPanel,
+} from "./ecosystra-board-filter-toolbar"
+import {
+  GROUP_FACET_COLUMN_ID,
+  advancedTreeIsActive,
+  buildBoardFilterColumns,
+  compareForBoardSort,
+  itemMatchesAdvancedRoot,
+  itemMatchesQuickSelections,
+  itemPersonMatch,
+  safeParseAdvancedRoot,
+  type AdvancedFilterNode,
+  type BoardFilterColumnMeta,
+} from "./ecosystra-board-filter-engine"
+import {
+  coerceGroupByOrder,
+  groupColumnMetaStub,
+} from "./ecosystra-board-group-by-engine"
+import { EcosystraBoardGroupBySuiteContent } from "./ecosystra-board-group-by-suite"
+import {
+  EcosystraBoardPinColumnsContent,
+  type BoardPinColumnRow,
+} from "./ecosystra-board-pin-columns-content"
+import { EcosystraBoardHideSuiteContent } from "./ecosystra-board-hide-suite"
+import { EcosystraBoardSortSuiteContent } from "./ecosystra-board-sort-suite"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -63,20 +95,11 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
 import {
   Dialog,
   DialogContent,
@@ -101,7 +124,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -112,10 +134,8 @@ import {
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { Toggle } from "@/components/ui/toggle"
 import {
   AccordionContent,
   EcosystraAccordion,
@@ -127,10 +147,8 @@ import {
   EcosystraBoardGroupColorButton,
   EcosystraBoardGroupEditableName,
 } from "./ecosystra-board-group-header"
-import {
-  EcosystraBoardGroupTable,
-  ecoCcFieldKey,
-} from "./ecosystra-board-group-table"
+import { ecoCcFieldKey } from "./ecosystra-board-cc-field-key"
+import { EcosystraBoardGroupTable } from "./ecosystra-board-group-table"
 import { EcosystraBoardKanbanView } from "./ecosystra-board-kanban-view"
 import { useEcosystraDictionary } from "./ecosystra-dictionary-context"
 import {
@@ -253,14 +271,24 @@ export function EcosystraBoardMainView() {
   const [newGroupNotes, setNewGroupNotes] = useState("")
   const [apiSearchDetailsOpen, setApiSearchDetailsOpen] = useState(false)
   const [apiMigrationOpen, setApiMigrationOpen] = useState(false)
-  const [unassignedOnly, setUnassignedOnly] = useState(false)
-  const [compactToolbar, setCompactToolbar] = useState(false)
-  const [notesFilter, setNotesFilter] = useState("")
+  const [personFilterUserIds, setPersonFilterUserIds] = useState<string[]>([])
+  const [personIncludeUnassigned, setPersonIncludeUnassigned] =
+    useState(false)
+  const [boardFilterQuick, setBoardFilterQuick] = useState<
+    Record<string, string[]>
+  >({})
+  const [advancedFilterRoot, setAdvancedFilterRoot] =
+    useState<AdvancedFilterNode | null>(null)
+  const [saveFilterViewOpen, setSaveFilterViewOpen] = useState(false)
+  const [pinColumnsDialogOpen, setPinColumnsDialogOpen] = useState(false)
+  const [saveViewNameDraft, setSaveViewNameDraft] = useState("")
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false)
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false)
+  const [personQuery, setPersonQuery] = useState("")
   const [attentionDismissed, setAttentionDismissed] = useState(false)
   const [sheetActivityOpen, setSheetActivityOpen] = useState(false)
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false)
   const [deleteReason, setDeleteReason] = useState("")
-  const [rowDensity, setRowDensity] = useState([1])
   const [kanbanCardScale, setKanbanCardScale] = useState([100])
   const [boardAnnouncement, setBoardAnnouncement] = useState("")
   const [newGroupNameError, setNewGroupNameError] = useState(false)
@@ -273,9 +301,41 @@ export function EcosystraBoardMainView() {
 
   const localeSeg = localeSegmentFromPathname(pathname)
 
-  const [sortMode, setSortMode] = useState<"none" | "nameAsc" | "nameDesc">(
-    "none"
-  )
+  const [sortRules, setSortRules] = useState<BoardTableSortRule[]>([])
+
+  useEffect(() => {
+    setSortRules(tableUi.sortRules)
+  }, [board?.id, tableUi.sortRules])
+
+  const { data: peopleData } = useQuery(WORKSPACE_USERS, {
+    variables: {
+      workspaceId: board?.workspaceId ?? "",
+      query: personQuery || ".",
+      take: 8,
+    },
+    skip: !board?.workspaceId,
+    fetchPolicy: "cache-and-network",
+  })
+
+  const { data: boardRosterUsers } = useQuery(WORKSPACE_USERS, {
+    variables: {
+      workspaceId: board?.workspaceId ?? "",
+      query: ".",
+      take: 80,
+    },
+    skip: !board?.workspaceId,
+    fetchPolicy: "cache-and-network",
+  })
+
+  const mergedWorkspaceUsers = useMemo(() => {
+    const m = new Map<
+      string,
+      { id: string; name: string | null; email: string }
+    >()
+    for (const u of boardRosterUsers?.workspaceUsers ?? []) m.set(u.id, u)
+    for (const u of peopleData?.workspaceUsers ?? []) m.set(u.id, u)
+    return [...m.values()]
+  }, [boardRosterUsers?.workspaceUsers, peopleData?.workspaceUsers])
 
   const onColumnWidthCommit = useCallback(
     (columnId: string, widthPx: number) => {
@@ -301,23 +361,505 @@ export function EcosystraBoardMainView() {
     [patchSubitemBoardTableUi, subitemTableUi.columnWidthsPx]
   )
 
+  const filterLabels = useMemo(
+    () => ({
+      statusLabels: tableUi.statusLabels,
+      priorityLabels: tableUi.priorityLabels,
+      notesCategoryLabels: tableUi.notesCategoryLabels,
+      duePriorityLabels: tableUi.duePriorityLabels,
+    }),
+    [
+      tableUi.duePriorityLabels,
+      tableUi.notesCategoryLabels,
+      tableUi.priorityLabels,
+      tableUi.statusLabels,
+    ]
+  )
+
+  const filterableColumns = useMemo(
+    () =>
+      buildBoardFilterColumns({
+        tableColumnOrder: tableUi.tableColumnOrder,
+        hiddenColumnIds: tableUi.hiddenColumnIds,
+        tableCustomColumns: tableUi.tableCustomColumns,
+        tableColumnTitles: tableUi.tableColumnTitles,
+        dict: t,
+      }),
+    [
+      t,
+      tableUi.hiddenColumnIds,
+      tableUi.tableColumnOrder,
+      tableUi.tableCustomColumns,
+      tableUi.tableColumnTitles,
+    ]
+  )
+
+  const groupByToolbarColumns = useMemo(
+    () => filterableColumns.filter((c) => c.id !== GROUP_FACET_COLUMN_ID),
+    [filterableColumns]
+  )
+
+  const groupByColumnMeta = useMemo(() => {
+    const id = tableUi.groupBySuite?.columnId
+    if (!id) return null
+    return groupByToolbarColumns.find((c) => c.id === id) ?? null
+  }, [groupByToolbarColumns, tableUi.groupBySuite?.columnId])
+
+  const commitGroupBySuite = useCallback(
+    (next: BoardGroupBySuite | null) => {
+      void patchBoardTableUi({
+        tableGroupBySuite: next,
+        tableGroupBy: "none",
+      })
+    },
+    [patchBoardTableUi]
+  )
+
+  const activeGroupByRuleCount = tableUi.groupBySuite ? 1 : 0
+
+  const pinColumnsExtraCount =
+    tableUi.tablePinnedColumnIds.length + subitemTableUi.pinnedColumnIds.length
+
+  const itemPinRows = useMemo((): BoardPinColumnRow[] => {
+    const hidden = new Set(tableUi.hiddenColumnIds)
+    const cols = buildBoardFilterColumns({
+      tableColumnOrder: tableUi.tableColumnOrder,
+      hiddenColumnIds: [],
+      tableCustomColumns: tableUi.tableCustomColumns,
+      tableColumnTitles: tableUi.tableColumnTitles,
+      dict: t,
+    })
+    const metaById = new Map(
+      cols
+        .filter((c) => c.id !== GROUP_FACET_COLUMN_ID)
+        .map((c) => [c.id, c] as const)
+    )
+    const rows: BoardPinColumnRow[] = []
+    for (const id of tableUi.tableColumnOrder) {
+      if (id === "add") continue
+      if (id === "select") {
+        rows.push({
+          id: "select",
+          title: bt.colSelect,
+          kind: "task",
+          locked: true,
+        })
+        continue
+      }
+      if (hidden.has(id as HidableBoardColumnId)) continue
+      const m = metaById.get(id)
+      if (!m) continue
+      rows.push({
+        id,
+        title: m.title,
+        kind: m.kind,
+        locked: id === "task",
+      })
+    }
+    return rows
+  }, [
+    bt.colSelect,
+    t,
+    tableUi.hiddenColumnIds,
+    tableUi.tableColumnOrder,
+    tableUi.tableCustomColumns,
+    tableUi.tableColumnTitles,
+  ])
+
+  const subitemPinRows = useMemo((): BoardPinColumnRow[] => {
+    const hidden = new Set(subitemTableUi.hiddenColumnIds)
+    const cols = buildBoardFilterColumns({
+      tableColumnOrder: subitemTableUi.tableColumnOrder,
+      hiddenColumnIds: [],
+      tableCustomColumns: subitemTableUi.tableCustomColumns,
+      tableColumnTitles: subitemTableUi.tableColumnTitles,
+      dict: t,
+    })
+    const metaById = new Map(
+      cols
+        .filter((c) => c.id !== GROUP_FACET_COLUMN_ID)
+        .map((c) => [c.id, c] as const)
+    )
+    const rows: BoardPinColumnRow[] = []
+    for (const id of subitemTableUi.tableColumnOrder) {
+      if (id === "add") continue
+      if (id === "select") {
+        rows.push({
+          id: "select",
+          title: bt.colSelect,
+          kind: "task",
+          locked: true,
+        })
+        continue
+      }
+      if (hidden.has(id as HidableBoardColumnId)) continue
+      const m = metaById.get(id)
+      if (!m) continue
+      rows.push({
+        id,
+        title: m.title,
+        kind: m.kind,
+        locked: id === "task",
+      })
+    }
+    return rows
+  }, [
+    bt.colSelect,
+    t,
+    subitemTableUi.hiddenColumnIds,
+    subitemTableUi.tableColumnOrder,
+    subitemTableUi.tableCustomColumns,
+    subitemTableUi.tableColumnTitles,
+  ])
+
+  const toggleTablePinnedColumn = useCallback(
+    (columnId: string, checked: boolean) => {
+      if (columnId === "select" || columnId === "task") return
+      const cur = new Set(tableUi.tablePinnedColumnIds)
+      if (checked) cur.add(columnId)
+      else cur.delete(columnId)
+      void patchBoardTableUi({
+        tablePinnedColumnIds: normalizePinnedColumnIds(
+          [...cur],
+          tableUi.tableColumnOrder
+        ),
+      })
+    },
+    [patchBoardTableUi, tableUi.tableColumnOrder, tableUi.tablePinnedColumnIds]
+  )
+
+  const toggleSubitemPinnedColumn = useCallback(
+    (columnId: string, checked: boolean) => {
+      if (columnId === "select" || columnId === "task") return
+      const cur = new Set(subitemTableUi.pinnedColumnIds)
+      if (checked) cur.add(columnId)
+      else cur.delete(columnId)
+      void patchSubitemBoardTableUi({
+        pinnedColumnIds: normalizePinnedColumnIds(
+          [...cur],
+          subitemTableUi.tableColumnOrder
+        ),
+      })
+    },
+    [
+      patchSubitemBoardTableUi,
+      subitemTableUi.pinnedColumnIds,
+      subitemTableUi.tableColumnOrder,
+    ]
+  )
+
+  const openSaveFilterViewDialog = useCallback(() => {
+    setSaveViewNameDraft("")
+    setSaveFilterViewOpen(true)
+  }, [])
+
+  const confirmSaveFilterView = useCallback(async () => {
+    const name = saveViewNameDraft.trim()
+    if (!name) {
+      toast.error(bt.saveViewNameRequired)
+      return
+    }
+    const payload = JSON.stringify({
+      personUserIds: personFilterUserIds,
+      personIncludeUnassigned,
+      quick: boardFilterQuick,
+      advancedRoot: advancedFilterRoot,
+      sortRules,
+      groupBySuite: tableUi.groupBySuite,
+      tablePinnedColumnIds: tableUi.tablePinnedColumnIds,
+      subitemPinnedColumnIds: subitemTableUi.pinnedColumnIds,
+    })
+    const ok = await patchBoardTableUi({
+      savedFilterViews: [
+        ...tableUi.savedFilterViews,
+        {
+          id: crypto.randomUUID(),
+          name,
+          createdAt: new Date().toISOString(),
+          payload,
+        },
+      ],
+    })
+    if (ok) {
+      setSaveFilterViewOpen(false)
+      toast.success(bt.saveViewSaved)
+    }
+  }, [
+    saveViewNameDraft,
+    personFilterUserIds,
+    personIncludeUnassigned,
+    boardFilterQuick,
+    advancedFilterRoot,
+    sortRules,
+    patchBoardTableUi,
+    tableUi.groupBySuite,
+    tableUi.tablePinnedColumnIds,
+    subitemTableUi.pinnedColumnIds,
+    tableUi.savedFilterViews,
+    bt.saveViewNameRequired,
+    bt.saveViewSaved,
+  ])
+
+  const applySavedFilterView = useCallback(
+    (id: string) => {
+      const v = tableUi.savedFilterViews.find((x) => x.id === id)
+      if (!v) return
+      try {
+        const p = JSON.parse(v.payload) as {
+          personUserIds?: unknown
+          personIncludeUnassigned?: unknown
+          quick?: unknown
+          advancedRoot?: unknown
+          sortRules?: unknown
+          groupBySuite?: unknown
+          tablePinnedColumnIds?: unknown
+          subitemPinnedColumnIds?: unknown
+        }
+        setPersonFilterUserIds(
+          Array.isArray(p.personUserIds)
+            ? (p.personUserIds as string[])
+            : []
+        )
+        setPersonIncludeUnassigned(!!p.personIncludeUnassigned)
+        if (
+          p.quick &&
+          typeof p.quick === "object" &&
+          !Array.isArray(p.quick)
+        ) {
+          setBoardFilterQuick(p.quick as Record<string, string[]>)
+        } else {
+          setBoardFilterQuick({})
+        }
+        const ar =
+          p.advancedRoot != null
+            ? safeParseAdvancedRoot(p.advancedRoot)
+            : null
+        setAdvancedFilterRoot(ar)
+        if (Array.isArray(p.sortRules)) {
+          const nextSort: BoardTableSortRule[] = []
+          for (const x of p.sortRules) {
+            if (!x || typeof x !== "object" || Array.isArray(x)) continue
+            const o = x as Record<string, unknown>
+            const id = typeof o.id === "string" ? o.id.trim() : ""
+            if (!id) continue
+            const direction: "asc" | "desc" =
+              o.direction === "desc" ? "desc" : "asc"
+            let columnId: string | null = null
+            if (typeof o.columnId === "string" && o.columnId.trim()) {
+              columnId = o.columnId.trim()
+            } else if (o.columnId === null) columnId = null
+            nextSort.push({ id, columnId, direction })
+          }
+          setSortRules(nextSort)
+          void patchBoardTableUi({ tableSortRules: nextSort })
+        }
+        const rawGb = p.groupBySuite
+        if (
+          rawGb &&
+          typeof rawGb === "object" &&
+          !Array.isArray(rawGb)
+        ) {
+          const o = rawGb as Record<string, unknown>
+          const columnId =
+            typeof o.columnId === "string" ? o.columnId.trim() : ""
+          if (columnId) {
+            const col = groupColumnMetaStub(
+              columnId,
+              tableUi.tableCustomColumns
+            )
+            const order = coerceGroupByOrder(
+              col,
+              tableUi.tableCustomColumns,
+              typeof o.order === "string" ? o.order : ""
+            )
+            void patchBoardTableUi({
+              tableGroupBySuite: {
+                columnId,
+                order,
+                showEmpty: o.showEmpty === true,
+              },
+              tableGroupBy: "none",
+            })
+          }
+        } else if (p.groupBySuite === null) {
+          void patchBoardTableUi({
+            tableGroupBySuite: null,
+            tableGroupBy: "none",
+          })
+        }
+        if (Array.isArray(p.tablePinnedColumnIds)) {
+          void patchBoardTableUi({
+            tablePinnedColumnIds: normalizePinnedColumnIds(
+              p.tablePinnedColumnIds,
+              tableUi.tableColumnOrder
+            ),
+          })
+        }
+        if (Array.isArray(p.subitemPinnedColumnIds)) {
+          void patchSubitemBoardTableUi({
+            pinnedColumnIds: normalizePinnedColumnIds(
+              p.subitemPinnedColumnIds,
+              subitemTableUi.tableColumnOrder
+            ),
+          })
+        }
+        setFilterPopoverOpen(false)
+        setAdvancedFilterOpen(false)
+      } catch {
+        toast.error(bt.saveViewApplyError)
+      }
+    },
+    [
+      tableUi.savedFilterViews,
+      tableUi.tableColumnOrder,
+      tableUi.tableCustomColumns,
+      subitemTableUi.tableColumnOrder,
+      bt.saveViewApplyError,
+      patchBoardTableUi,
+      patchSubitemBoardTableUi,
+    ]
+  )
+
+  const renameSavedFilterView = useCallback(
+    async (id: string, name: string) => {
+      const n = name.trim()
+      if (!n) {
+        toast.error(bt.saveViewNameRequired)
+        return
+      }
+      const next = tableUi.savedFilterViews.map((v) =>
+        v.id === id ? { ...v, name: n } : v
+      )
+      const ok = await patchBoardTableUi({ savedFilterViews: next })
+      if (ok) toast.success(bt.savedViewRenamed)
+    },
+    [
+      patchBoardTableUi,
+      tableUi.savedFilterViews,
+      bt.saveViewNameRequired,
+      bt.savedViewRenamed,
+    ]
+  )
+
+  const deleteSavedFilterView = useCallback(
+    async (id: string) => {
+      const next = tableUi.savedFilterViews.filter((v) => v.id !== id)
+      const ok = await patchBoardTableUi({ savedFilterViews: next })
+      if (ok) toast.success(bt.savedViewDeleted)
+    },
+    [patchBoardTableUi, tableUi.savedFilterViews, bt.savedViewDeleted]
+  )
+
+  const onFilterAiApply = useCallback(
+    async (prompt: string) => {
+      const columns = filterableColumns.map((c) => ({
+        id: c.id,
+        title: c.title,
+        valueKind: c.valueKind,
+        kind: String(c.kind),
+      }))
+      try {
+        const res = await fetch("/api/ecosystra/board-filter-ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, columns }),
+        })
+        const data = (await res.json()) as {
+          root?: unknown
+          error?: string
+          warning?: string
+        }
+        if (!res.ok) {
+          toast.error(data.error ?? bt.filterAiFailed)
+          return
+        }
+        if (data.warning) toast.warning(data.warning)
+        const parsed =
+          data.root != null ? safeParseAdvancedRoot(data.root) : null
+        if (!parsed) {
+          toast.error(bt.filterAiInvalid)
+          return
+        }
+        setAdvancedFilterRoot(parsed)
+        toast.success(bt.filterAiApplied)
+      } catch {
+        toast.error(bt.filterAiFailed)
+      }
+    },
+    [filterableColumns, bt.filterAiFailed, bt.filterAiInvalid, bt.filterAiApplied]
+  )
+
+  const commitSortRules = useCallback(
+    (next: BoardTableSortRule[]) => {
+      const ids = new Set(filterableColumns.map((c) => c.id))
+      const cleaned = next.map((r) => ({
+        ...r,
+        columnId: r.columnId && ids.has(r.columnId) ? r.columnId : null,
+      }))
+      setSortRules(cleaned)
+      void patchBoardTableUi({ tableSortRules: cleaned })
+    },
+    [patchBoardTableUi, filterableColumns]
+  )
+
+  const sortColumnIdSet = useMemo(
+    () => new Set(filterableColumns.map((c) => c.id)),
+    [filterableColumns]
+  )
+
+  const activeSortRules = useMemo(
+    () =>
+      sortRules.filter(
+        (r) => r.columnId && sortColumnIdSet.has(r.columnId)
+      ),
+    [sortRules, sortColumnIdSet]
+  )
+
+  const activeSortRuleCount = activeSortRules.length
+
+  const resolveUserSortLabel = useCallback(
+    (userId: string) => {
+      const u = mergedWorkspaceUsers.find((x) => x.id === userId)
+      return (u?.name || u?.email || userId).trim()
+    },
+    [mergedWorkspaceUsers]
+  )
+
   const sortedGroups = useMemo(() => {
-    const qNotes = notesFilter.trim().toLowerCase()
     const base = filteredGroups.map((g) => ({
       ...g,
       items: g.items.filter((it) => {
-        if (unassignedOnly) {
-          const d = it.dynamicData || {}
-          const a =
-            String(d.assignee ?? "").trim() ||
-            String(d.assigneeEmail ?? "").trim()
-          if (a) return false
-        }
-        if (qNotes) {
-          const d = it.dynamicData || {}
-          const cat = String(d.notesCategory ?? "").toLowerCase()
-          if (!cat.includes(qNotes)) return false
-        }
+        if (
+          !itemPersonMatch(
+            it,
+            personFilterUserIds,
+            personIncludeUnassigned
+          )
+        )
+          return false
+        if (
+          !itemMatchesQuickSelections(
+            it,
+            g,
+            boardFilterQuick,
+            filterableColumns,
+            tableUi.tableCustomColumns,
+            filterLabels
+          )
+        )
+          return false
+        if (
+          advancedTreeIsActive(advancedFilterRoot) &&
+          !itemMatchesAdvancedRoot(
+            it,
+            g,
+            advancedFilterRoot,
+            filterableColumns,
+            tableUi.tableCustomColumns,
+            filterLabels
+          )
+        )
+          return false
         return true
       }),
     }))
@@ -325,20 +867,40 @@ export function EcosystraBoardMainView() {
       ...g,
       items: sortItemsByOrder(g.items, tableUi.groupItemOrders[g.id]),
     }))
-    if (sortMode === "none") return ordered
+    if (activeSortRules.length === 0) return ordered
     return ordered.map((g) => ({
       ...g,
       items: [...g.items].sort((a, b) => {
-        const cmp = a.name.localeCompare(b.name)
-        return sortMode === "nameAsc" ? cmp : -cmp
+        const bundleA = { item: a, group: g }
+        const bundleB = { item: b, group: g }
+        for (const rule of activeSortRules) {
+          if (!rule.columnId) continue
+          const cmp = compareForBoardSort(
+            bundleA,
+            bundleB,
+            rule.columnId,
+            filterableColumns,
+            tableUi.tableCustomColumns,
+            filterLabels,
+            resolveUserSortLabel
+          )
+          if (cmp !== 0) return rule.direction === "desc" ? -cmp : cmp
+        }
+        return 0
       }),
     }))
   }, [
     filteredGroups,
-    sortMode,
-    unassignedOnly,
-    notesFilter,
+    activeSortRules,
+    resolveUserSortLabel,
+    personFilterUserIds,
+    personIncludeUnassigned,
+    boardFilterQuick,
+    advancedFilterRoot,
+    filterableColumns,
+    filterLabels,
     tableUi.groupItemOrders,
+    tableUi.tableCustomColumns,
   ])
 
   const [rowDnDraft, setRowDnDraft] = useState<Record<string, string[]> | null>(
@@ -636,6 +1198,10 @@ export function EcosystraBoardMainView() {
         void patchSubitemBoardTableUi({
           tableColumnOrder: nextOrder,
           tableCustomColumns: nextCustom,
+          pinnedColumnIds: normalizePinnedColumnIds(
+            subitemTableUi.pinnedColumnIds.filter((id) => id !== columnId),
+            nextOrder
+          ),
         })
       } else {
         const nextHidden = [
@@ -643,6 +1209,10 @@ export function EcosystraBoardMainView() {
         ]
         void patchSubitemBoardTableUi({
           hiddenTableColumnIds: nextHidden,
+          pinnedColumnIds: normalizePinnedColumnIds(
+            subitemTableUi.pinnedColumnIds.filter((id) => id !== columnId),
+            tableColumnOrder
+          ),
         })
       }
     },
@@ -737,6 +1307,10 @@ export function EcosystraBoardMainView() {
         void patchBoardTableUi({
           tableColumnOrder: nextOrder,
           tableCustomColumns: nextCustom,
+          tablePinnedColumnIds: normalizePinnedColumnIds(
+            tableUi.tablePinnedColumnIds.filter((id) => id !== columnId),
+            nextOrder
+          ),
         })
       } else {
         const nextHidden = [
@@ -744,6 +1318,10 @@ export function EcosystraBoardMainView() {
         ]
         void patchBoardTableUi({
           hiddenTableColumnIds: nextHidden,
+          tablePinnedColumnIds: normalizePinnedColumnIds(
+            tableUi.tablePinnedColumnIds.filter((id) => id !== columnId),
+            tableColumnOrder
+          ),
         })
       }
     },
@@ -817,11 +1395,31 @@ export function EcosystraBoardMainView() {
     [sortedGroups]
   )
 
+  const baseTaskCount = useMemo(
+    () => filteredGroups.reduce((n, g) => n + g.items.length, 0),
+    [filteredGroups]
+  )
+
+  const boardItemsForLookup = useMemo(
+    () => filteredGroups.flatMap((g) => g.items),
+    [filteredGroups]
+  )
+
+  const personTaskNameForToolbar = useMemo(() => {
+    if (!personTargetItemId) return ""
+    return (
+      boardItemsForLookup.find((i) => i.id === personTargetItemId)?.name ??
+      personTargetItemId
+    )
+  }, [boardItemsForLookup, personTargetItemId])
+
   /** True only when filters/search hide every row — still show groups when the board is simply empty. */
   const hasActiveRowFilters =
     searchQuery.trim().length > 0 ||
-    unassignedOnly ||
-    notesFilter.trim().length > 0
+    personFilterUserIds.length > 0 ||
+    personIncludeUnassigned ||
+    Object.values(boardFilterQuick).some((a) => a && a.length > 0) ||
+    advancedTreeIsActive(advancedFilterRoot)
 
   const allRowsEmpty =
     taskCount === 0 && filteredGroups.length > 0 && hasActiveRowFilters
@@ -964,6 +1562,7 @@ export function EcosystraBoardMainView() {
       const m: Record<HidableBoardColumnId, string> = {
         status: bt.hideColStatus,
         dueDate: bt.hideColDueDate,
+        date: bt.hideColDate,
         lastUpdated: bt.hideColLastUpdated,
         files: bt.hideColFiles,
         owner: bt.hideColOwner,
@@ -988,6 +1587,58 @@ export function EcosystraBoardMainView() {
       void patchBoardTableUi({ hiddenTableColumnIds: next })
     },
     [patchBoardTableUi, tableUi.hiddenColumnIds]
+  )
+
+  const setAllHidableColumnsVisible = useCallback(
+    (visible: boolean) => {
+      if (visible) {
+        void patchBoardTableUi({ hiddenTableColumnIds: [] })
+      } else {
+        void patchBoardTableUi({
+          hiddenTableColumnIds: [...HIDABLE_COLUMN_IDS],
+        })
+      }
+    },
+    [patchBoardTableUi]
+  )
+
+  const hideSuiteColumns = useMemo((): BoardFilterColumnMeta[] => {
+    const all = buildBoardFilterColumns({
+      tableColumnOrder: tableUi.tableColumnOrder,
+      hiddenColumnIds: [],
+      tableCustomColumns: tableUi.tableCustomColumns,
+      tableColumnTitles: tableUi.tableColumnTitles,
+      dict: t,
+    })
+    const order = new Map(
+      tableUi.tableColumnOrder.map((id, i) => [id, i] as const)
+    )
+    const rows = HIDABLE_COLUMN_IDS.map((id) => {
+      const hit = all.find((c) => c.id === id)
+      if (hit) return hit
+      return {
+        id,
+        kind: id,
+        title: hideColumnLabel(id),
+        valueKind: "text" as const,
+      }
+    })
+    rows.sort(
+      (a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999)
+    )
+    return rows
+  }, [
+    hideColumnLabel,
+    tableUi.tableColumnOrder,
+    tableUi.tableCustomColumns,
+    tableUi.tableColumnTitles,
+    t,
+  ])
+
+  const hasHiddenHidableColumn = useMemo(
+    () =>
+      HIDABLE_COLUMN_IDS.some((id) => tableUi.hiddenColumnIds.includes(id)),
+    [tableUi.hiddenColumnIds]
   )
 
   const commitColumnTitle = useCallback(
@@ -1034,22 +1685,11 @@ export function EcosystraBoardMainView() {
     void runSearch({ variables: { query: q } })
   }, [runSearch, searchQuery, bt.searchMinCharsToast])
 
-  const [personQuery, setPersonQuery] = useState("")
   useEffect(() => {
     if (!boardAnnouncement.trim()) return
     const timer = window.setTimeout(() => setBoardAnnouncement(""), 4000)
     return () => window.clearTimeout(timer)
   }, [boardAnnouncement])
-
-  const { data: peopleData } = useQuery(WORKSPACE_USERS, {
-    variables: {
-      workspaceId: board?.workspaceId ?? "",
-      query: personQuery || ".",
-      take: 8,
-    },
-    skip: !board?.workspaceId,
-    fetchPolicy: "cache-and-network",
-  })
 
   const pageLang = localeSeg === "ar" ? "ar" : "en"
 
@@ -1366,38 +2006,12 @@ export function EcosystraBoardMainView() {
             </Card>
           ) : (
             <>
-              <Separator className="bg-[color:var(--eco-board-row-divider)]" />
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <Toggle
-                  pressed={compactToolbar}
-                  onPressedChange={setCompactToolbar}
-                  variant="outline"
-                  size="sm"
-                  aria-label={bt.compactToolbar}
-                >
-                  {bt.compactToolbar}
-                </Toggle>
-                <div className="flex min-w-[100px] max-w-[160px] flex-1 flex-col gap-1 sm:min-w-[140px] sm:max-w-[200px]">
-                  <Label className="text-[10px] uppercase text-muted-foreground">
-                    {bt.toolbarDensityLabel}
-                  </Label>
-                  <Slider
-                    value={rowDensity}
-                    onValueChange={setRowDensity}
-                    min={1}
-                    max={3}
-                    step={1}
-                    aria-label={bt.toolbarDensityLabel}
-                  />
-                </div>
-              </div>
               <div
                 role="toolbar"
                 aria-label={bt.searchLabel}
                 className={cn(
                   "flex flex-wrap items-center gap-[var(--vibe-space-4)] pb-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-8)] sm:pb-[var(--vibe-space-12)]",
-                  boardSurface.boardToolbarActions,
-                  compactToolbar && "gap-1.5 pb-1.5 sm:gap-2 sm:pb-2"
+                  boardSurface.boardToolbarActions
                 )}
               >
                 <div className="flex items-center rounded-md shadow-sm">
@@ -1584,205 +2198,150 @@ export function EcosystraBoardMainView() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-1"
+                      className={cn(
+                        "gap-1",
+                        (personFilterUserIds.length > 0 ||
+                          personIncludeUnassigned) &&
+                          "border-primary/50 bg-primary/5"
+                      )}
                     >
                       <User className="size-4" aria-hidden />
                       {bt.person}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[calc(100vw-32px)] p-0 sm:w-80"
-                    align="start"
-                  >
-                    <div className="border-b border-border/60 p-3 text-xs text-muted-foreground">
-                      {bt.personToolbarHint}
-                    </div>
-                    {personTargetItemId ? (
-                      <div className="border-b border-border/60 px-3 py-2 text-xs font-medium text-foreground">
-                        {bt.personTaskLabel}{" "}
-                        {(() => {
-                          const hit = kanbanFlatItems.find(
-                            (i) => i.id === personTargetItemId
-                          )
-                          return hit?.name ?? personTargetItemId
-                        })()}
-                      </div>
-                    ) : null}
-                    <Command shouldFilter={false} className="max-h-72">
-                      <CommandInput
-                        placeholder={bt.personFilterPlaceholder}
-                        value={personQuery}
-                        onValueChange={setPersonQuery}
-                        aria-label={bt.personWorkspaceUsers}
-                      />
-                      <CommandList>
-                        <CommandEmpty>{bt.personNoResults}</CommandEmpty>
-                        <CommandGroup heading={bt.personWorkspaceUsers}>
-                          {(peopleData?.workspaceUsers ?? []).map(
-                            (u: {
-                              id: string
-                              name: string | null
-                              email: string
-                            }) => (
-                              <CommandItem
-                                key={u.id}
-                                value={u.id}
-                                className="flex flex-col gap-2 py-2"
-                                onSelect={() => {
-                                  if (!personTargetItemId) return
-                                  addPersonAsAssignee(personTargetItemId, u.id)
-                                }}
-                              >
-                                <span className="truncate font-medium">
-                                  {u.name || u.email}
-                                </span>
-                                <div className="flex gap-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={!personTargetItemId}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (!personTargetItemId) return
-                                      addPersonAsAssignee(
-                                        personTargetItemId,
-                                        u.id
-                                      )
-                                    }}
-                                  >
-                                    {bt.personAssignToolbar}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={!personTargetItemId}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (!personTargetItemId) return
-                                      void setTaskOwner(
-                                        personTargetItemId,
-                                        u.id
-                                      )
-                                    }}
-                                  >
-                                    {bt.personOwnerToolbar}
-                                  </Button>
-                                </div>
-                              </CommandItem>
-                            )
-                          )}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
+                  <BoardPersonFilterPopover
+                    dict={t}
+                    groups={filteredGroups}
+                    workspaceUsers={mergedWorkspaceUsers}
+                    selectedUserIds={personFilterUserIds}
+                    includeUnassigned={personIncludeUnassigned}
+                    onChange={(ids, inc) => {
+                      setPersonFilterUserIds(ids)
+                      setPersonIncludeUnassigned(inc)
+                    }}
+                    personTargetItemId={personTargetItemId}
+                    personTaskName={personTaskNameForToolbar}
+                    personQuery={personQuery}
+                    onPersonQueryChange={setPersonQuery}
+                    workspaceUsersForAssign={peopleData?.workspaceUsers ?? []}
+                    onPickAssignee={(userId) => {
+                      if (!personTargetItemId) return
+                      addPersonAsAssignee(personTargetItemId, userId)
+                    }}
+                    onPickOwner={(userId) => {
+                      if (!personTargetItemId) return
+                      void setTaskOwner(personTargetItemId, userId)
+                    }}
+                    onSaveView={openSaveFilterViewDialog}
+                  />
                 </Popover>
-                <Popover>
+                <Popover
+                  open={filterPopoverOpen}
+                  onOpenChange={setFilterPopoverOpen}
+                >
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-1"
+                      className={cn(
+                        "gap-1",
+                        (Object.values(boardFilterQuick).some(
+                          (s) => s && s.length > 0
+                        ) ||
+                          advancedTreeIsActive(advancedFilterRoot)) &&
+                          "border-primary/50 bg-primary/5"
+                      )}
                     >
                       <Filter className="size-4" aria-hidden />
                       {bt.filter}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[calc(100vw-32px)] border-2 border-border/80 p-[var(--vibe-space-12)] shadow-md sm:w-72"
-                    align="start"
-                  >
-                    <p className="mb-1 text-sm font-medium text-foreground">
-                      {bt.filterPopoverTitle}
-                    </p>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      {bt.filterClientHint}
-                    </p>
-                    <Separator className="mb-3" />
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <Label htmlFor="eco-unassigned" className="text-sm">
-                        {bt.filterUnassignedOnly}
-                      </Label>
-                      <Switch
-                        id="eco-unassigned"
-                        checked={unassignedOnly}
-                        onCheckedChange={setUnassignedOnly}
-                      />
-                    </div>
-                    <Label className="text-xs text-muted-foreground">
-                      {bt.colNotesCategory}
-                    </Label>
-                    <Textarea
-                      className="mt-1 min-h-[72px] text-sm"
-                      value={notesFilter}
-                      onChange={(e) => setNotesFilter(e.target.value)}
-                      placeholder={bt.searchThisBoard}
-                      aria-label={bt.colNotesCategory}
-                    />
-                    <Separator className="my-3" />
-                    <div
-                      role="search"
-                      aria-label={bt.searchThisBoard}
-                      className="relative"
-                    >
-                      <Search
-                        className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                        aria-hidden
-                      />
-                      <Input
-                        className="ps-9"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={bt.searchThisBoard}
-                        aria-label={bt.searchThisBoard}
-                      />
-                    </div>
-                  </PopoverContent>
+                  <BoardQuickFiltersPanel
+                    dict={t}
+                    groups={filteredGroups}
+                    tableUi={{
+                      tableColumnOrder: tableUi.tableColumnOrder,
+                      hiddenColumnIds: tableUi.hiddenColumnIds,
+                      tableCustomColumns: tableUi.tableCustomColumns,
+                      tableColumnTitles: tableUi.tableColumnTitles,
+                      statusLabels: tableUi.statusLabels,
+                      priorityLabels: tableUi.priorityLabels,
+                      notesCategoryLabels: tableUi.notesCategoryLabels,
+                      duePriorityLabels: tableUi.duePriorityLabels,
+                    }}
+                    workspaceUsers={mergedWorkspaceUsers}
+                    selections={boardFilterQuick}
+                    onSelectionsChange={setBoardFilterQuick}
+                    onOpenAdvanced={() => {
+                      setFilterPopoverOpen(false)
+                      setAdvancedFilterOpen(true)
+                    }}
+                    filteredTaskCount={taskCount}
+                    totalTaskCount={baseTaskCount}
+                    onSaveView={openSaveFilterViewDialog}
+                    savedFilterViews={tableUi.savedFilterViews}
+                    onApplySavedView={applySavedFilterView}
+                    onRenameSavedView={renameSavedFilterView}
+                    onDeleteSavedView={deleteSavedFilterView}
+                  />
                 </Popover>
+                <BoardAdvancedFiltersDialog
+                  open={advancedFilterOpen}
+                  onOpenChange={setAdvancedFilterOpen}
+                  dict={t}
+                  groups={filteredGroups}
+                  tableUi={{
+                    tableColumnOrder: tableUi.tableColumnOrder,
+                    hiddenColumnIds: tableUi.hiddenColumnIds,
+                    tableCustomColumns: tableUi.tableCustomColumns,
+                    tableColumnTitles: tableUi.tableColumnTitles,
+                    statusLabels: tableUi.statusLabels,
+                    priorityLabels: tableUi.priorityLabels,
+                    notesCategoryLabels: tableUi.notesCategoryLabels,
+                    duePriorityLabels: tableUi.duePriorityLabels,
+                  }}
+                  workspaceUsers={mergedWorkspaceUsers}
+                  filterRoot={advancedFilterRoot}
+                  onFilterRootChange={setAdvancedFilterRoot}
+                  onSaveView={openSaveFilterViewDialog}
+                  savedFilterViews={tableUi.savedFilterViews}
+                  onApplySavedView={applySavedFilterView}
+                  onRenameSavedView={renameSavedFilterView}
+                  onDeleteSavedView={deleteSavedFilterView}
+                  onFilterAiApply={onFilterAiApply}
+                />
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-1"
+                      className={cn(
+                        "gap-1",
+                        activeSortRuleCount > 0 &&
+                          "border-primary/50 bg-primary/5"
+                      )}
                     >
                       <ArrowUpDown className="size-4" aria-hidden />
-                      {bt.sort}
+                      {activeSortRuleCount > 0
+                        ? (bt.sortWithCount?.replace(
+                            "{n}",
+                            String(activeSortRuleCount)
+                          ) ?? `Sort / ${activeSortRuleCount}`)
+                        : bt.sort}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-56 p-3" align="start">
-                    <RadioGroup
-                      value={sortMode}
-                      onValueChange={(v) =>
-                        setSortMode(v as "none" | "nameAsc" | "nameDesc")
-                      }
-                      aria-label={bt.sortRadioLabel}
-                      className="gap-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="none" id="eco-sort-none" />
-                        <Label htmlFor="eco-sort-none" className="font-normal">
-                          {bt.sortNone}
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="nameAsc" id="eco-sort-asc" />
-                        <Label htmlFor="eco-sort-asc" className="font-normal">
-                          {bt.sortNameAsc}
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="nameDesc" id="eco-sort-desc" />
-                        <Label htmlFor="eco-sort-desc" className="font-normal">
-                          {bt.sortNameDesc}
-                        </Label>
-                      </div>
-                    </RadioGroup>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <div className="p-3">
+                      <EcosystraBoardSortSuiteContent
+                        dict={t}
+                        columns={filterableColumns}
+                        sortRules={sortRules}
+                        onSortRulesChange={commitSortRules}
+                        onSaveView={openSaveFilterViewDialog}
+                      />
+                    </div>
                   </PopoverContent>
                 </Popover>
                 <Popover>
@@ -1791,77 +2350,96 @@ export function EcosystraBoardMainView() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-1"
+                      className={cn(
+                        "gap-1",
+                        hasHiddenHidableColumn &&
+                          "border-primary/50 bg-primary/5"
+                      )}
                     >
                       <EyeOff className="size-4" aria-hidden />
                       {bt.hide}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-72 text-sm" align="start">
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      {bt.hideColumnsHelp}
-                    </p>
-                    <ul className="space-y-2">
-                      {HIDABLE_COLUMN_IDS.map((id) => (
-                        <li key={id} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`eco-hide-${id}`}
-                            checked={!tableUi.hiddenColumnIds.includes(id)}
-                            onCheckedChange={() => toggleHiddenColumn(id)}
-                            aria-label={hideColumnLabel(id)}
-                          />
-                          <Label
-                            htmlFor={`eco-hide-${id}`}
-                            className="cursor-pointer font-normal leading-none"
-                          >
-                            {hideColumnLabel(id)}
-                          </Label>
-                        </li>
-                      ))}
-                    </ul>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <div className="p-3">
+                      <EcosystraBoardHideSuiteContent
+                        dict={t}
+                        columns={hideSuiteColumns}
+                        hiddenColumnIds={tableUi.hiddenColumnIds}
+                        onToggleColumn={toggleHiddenColumn}
+                        onSetAllHidableVisible={setAllHidableColumnsVisible}
+                        onSaveView={openSaveFilterViewDialog}
+                      />
+                    </div>
                   </PopoverContent>
                 </Popover>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                    >
-                      <LayoutGrid className="size-4" aria-hidden />
-                      {bt.groupBy}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-56 p-3 text-sm" align="start">
-                    <RadioGroup
-                      value={tableUi.groupBy}
-                      onValueChange={(v) =>
-                        void patchBoardTableUi({
-                          tableGroupBy: v as "none" | "priority",
-                        })
-                      }
-                      aria-label={bt.groupByRadioLabel}
-                      className="gap-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="none" id="eco-gb-none" />
-                        <Label htmlFor="eco-gb-none" className="font-normal">
-                          {bt.groupByNone}
-                        </Label>
+                <div className="flex items-center gap-0.5">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "gap-1",
+                          activeGroupByRuleCount > 0 &&
+                            "border-primary/50 bg-primary/5"
+                        )}
+                        aria-label={bt.groupByRadioLabel}
+                      >
+                        <LayoutGrid className="size-4" aria-hidden />
+                        {activeGroupByRuleCount > 0
+                          ? bt.groupByWithCount.replace(
+                              "{n}",
+                              String(activeGroupByRuleCount)
+                            )
+                          : bt.groupBy}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="p-3">
+                        <EcosystraBoardGroupBySuiteContent
+                          dict={t}
+                          columns={groupByToolbarColumns}
+                          suite={tableUi.groupBySuite}
+                          tableCustomColumns={tableUi.tableCustomColumns}
+                          onSuiteChange={commitGroupBySuite}
+                          onSaveView={openSaveFilterViewDialog}
+                        />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="priority" id="eco-gb-priority" />
-                        <Label
-                          htmlFor="eco-gb-priority"
-                          className="font-normal"
-                        >
-                          {bt.groupByPriorityOption}
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </PopoverContent>
-                </Popover>
+                    </PopoverContent>
+                  </Popover>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className={cn(
+                          "size-8 shrink-0",
+                          pinColumnsExtraCount > 0 &&
+                            "border-primary/50 bg-primary/5"
+                        )}
+                        aria-label={bt.boardTableMoreOptionsAria}
+                      >
+                        <MoreHorizontal className="size-4" aria-hidden />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setPinColumnsDialogOpen(true)
+                        }}
+                      >
+                        <Pin className="me-2 size-4" aria-hidden />
+                        {bt.pinColumnsMenu.replace(
+                          "{n}",
+                          String(pinColumnsExtraCount)
+                        )}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 {selectionTotalCount > 0 ? (
                   <Button
                     type="button"
@@ -1912,8 +2490,11 @@ export function EcosystraBoardMainView() {
                   actionLabel={bt.emptyFilteredClear}
                   onAction={() => {
                     setSearchQuery("")
-                    setNotesFilter("")
-                    setUnassignedOnly(false)
+                    setPersonFilterUserIds([])
+                    setPersonIncludeUnassigned(false)
+                    setBoardFilterQuick({})
+                    setAdvancedFilterRoot(null)
+                    commitSortRules([])
                   }}
                 />
               ) : null}
@@ -2065,7 +2646,7 @@ export function EcosystraBoardMainView() {
                                             group.id,
                                             group.items
                                           )}
-                                          rowDensityScale={rowDensity[0]}
+                                          rowDensityScale={1}
                                           t={t}
                                           expandedSubitemRowId={
                                             expandedSubitemRowId
@@ -2076,8 +2657,14 @@ export function EcosystraBoardMainView() {
                                           hiddenColumnIds={
                                             tableUi.hiddenColumnIds
                                           }
-                                          groupByPriority={
-                                            tableUi.groupBy === "priority"
+                                          groupBySuite={tableUi.groupBySuite}
+                                          groupByColumn={groupByColumnMeta}
+                                          groupByLabels={filterLabels}
+                                          workspaceUsersForGroupBy={
+                                            mergedWorkspaceUsers
+                                          }
+                                          groupByUnassignedLabel={
+                                            bt.assigneeUnassigned
                                           }
                                           onPersonToolbarTarget={(id) =>
                                             setPersonTargetItemId(id)
@@ -2122,6 +2709,9 @@ export function EcosystraBoardMainView() {
                                           }
                                           tableColumnOrder={
                                             tableUi.tableColumnOrder
+                                          }
+                                          tablePinnedColumnIds={
+                                            tableUi.tablePinnedColumnIds
                                           }
                                           tableCustomColumns={
                                             tableUi.tableCustomColumns
@@ -2364,6 +2954,70 @@ export function EcosystraBoardMainView() {
                   </Button>
                 )}
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={saveFilterViewOpen}
+            onOpenChange={setSaveFilterViewOpen}
+          >
+            <DialogContent className="w-[calc(100vw-16px)] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>{bt.saveViewDialogTitle}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2 py-2">
+                <Label htmlFor="eco-save-view-name">
+                  {bt.saveViewNameLabel}
+                </Label>
+                <Input
+                  id="eco-save-view-name"
+                  value={saveViewNameDraft}
+                  onChange={(e) => setSaveViewNameDraft(e.target.value)}
+                  placeholder={bt.saveViewNamePlaceholder}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void confirmSaveFilterView()
+                  }}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSaveFilterViewOpen(false)}
+                >
+                  {bt.dialogCancel}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void confirmSaveFilterView()}
+                >
+                  {bt.saveViewSave}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={pinColumnsDialogOpen}
+            onOpenChange={setPinColumnsDialogOpen}
+          >
+            <DialogContent className="w-[calc(100vw-16px)] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>{bt.pinColumnsDialogTitle}</DialogTitle>
+              </DialogHeader>
+              <EcosystraBoardPinColumnsContent
+                dict={t}
+                itemRows={itemPinRows}
+                subitemRows={subitemPinRows}
+                pinnedItemIds={tableUi.tablePinnedColumnIds}
+                pinnedSubitemIds={subitemTableUi.pinnedColumnIds}
+                onToggleItemPin={toggleTablePinnedColumn}
+                onToggleSubitemPin={toggleSubitemPinnedColumn}
+                onSaveView={() => {
+                  setPinColumnsDialogOpen(false)
+                  openSaveFilterViewDialog()
+                }}
+              />
             </DialogContent>
           </Dialog>
 
