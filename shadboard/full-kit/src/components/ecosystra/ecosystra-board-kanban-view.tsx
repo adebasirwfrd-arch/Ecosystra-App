@@ -53,14 +53,14 @@ export function EcosystraBoardKanbanView({
 
   return (
     <div
-      className="grid grid-cols-1 gap-4 lg:grid-cols-3"
+      className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 lg:grid-cols-3 lg:gap-4"
       role="region"
       aria-label={t.kanbanRegionLabel}
     >
       {cols.map((c) => (
         <section
           key={c.id}
-          className="max-h-[min(70vh,560px)] overflow-y-auto overflow-x-hidden rounded-lg border border-border/60 bg-card/80 p-3 [contain:content]"
+          className="max-h-[min(70vh,560px)] overflow-y-auto overflow-x-hidden rounded-lg border border-border/60 bg-card/80 p-2 sm:p-3 [contain:content]"
           aria-labelledby={`eco-kanban-${c.id}`}
         >
           <h2

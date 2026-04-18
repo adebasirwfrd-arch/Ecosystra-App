@@ -546,7 +546,7 @@ export function EcosystraBoardMainView() {
       lang={pageLang}
       className={cn(
         boardSurface.boardRoot,
-        "flex min-h-0 flex-1 flex-col gap-[var(--vibe-space-12)] overflow-auto p-[var(--vibe-space-16)] md:gap-[var(--vibe-space-16)] md:px-[var(--vibe-space-24)] md:pb-[var(--vibe-space-24)] md:pt-[var(--vibe-space-12)]"
+        "flex min-h-0 flex-1 flex-col gap-[var(--vibe-space-8)] overflow-auto p-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-12)] sm:p-[var(--vibe-space-12)] md:gap-[var(--vibe-space-16)] md:px-[var(--vibe-space-24)] md:pb-[var(--vibe-space-24)] md:pt-[var(--vibe-space-12)]"
       )}
       data-ecosystra-embedded="true"
       data-ecosystra-board="true"
@@ -591,7 +591,7 @@ export function EcosystraBoardMainView() {
 
       {board ? (
         <>
-          <header className="flex flex-col gap-[var(--vibe-space-12)]">
+          <header className="flex flex-col gap-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-12)]">
             <EcosystraGrandbookTipseen
               title={bt.toolbarTipseenTitle}
               body={bt.toolbarTipseenBody}
@@ -607,14 +607,14 @@ export function EcosystraBoardMainView() {
               />
             ) : null}
             <div className="flex flex-col gap-[var(--vibe-space-8)]">
-            <div className="flex flex-wrap items-center justify-between gap-[var(--vibe-space-8)]">
-              <h1 className="m-0 max-w-md min-w-0 flex-1 text-2xl font-semibold tracking-tight">
+            <div className="flex flex-wrap items-center justify-between gap-[var(--vibe-space-4)] sm:gap-[var(--vibe-space-8)]">
+              <h1 className="m-0 min-w-0 flex-1 basis-full text-xl font-semibold tracking-tight sm:basis-auto sm:max-w-md sm:text-2xl">
                 <label htmlFor="eco-board-title-input" className="sr-only">
                   {bt.boardTitle}
                 </label>
                 <Input
                   id="eco-board-title-input"
-                  className="border-transparent px-0 text-2xl font-semibold tracking-tight shadow-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="border-transparent px-0 text-xl font-semibold tracking-tight shadow-none sm:text-2xl hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   value={titleDraft}
                   data-eco-editable-heading
                   aria-label={bt.boardTitle}
@@ -676,7 +676,7 @@ export function EcosystraBoardMainView() {
               </div>
             </div>
 
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-[var(--vibe-space-8)]">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-[var(--vibe-space-4)] sm:gap-[var(--vibe-space-8)]">
               <Tabs
                 id="ecosystra-board-views"
                 value={viewTab}
@@ -842,7 +842,7 @@ export function EcosystraBoardMainView() {
           ) : (
             <>
               <Separator className="bg-[color:var(--eco-board-row-divider)]" />
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <Toggle
                   pressed={compactToolbar}
                   onPressedChange={setCompactToolbar}
@@ -852,7 +852,7 @@ export function EcosystraBoardMainView() {
                 >
                   {bt.compactToolbar}
                 </Toggle>
-                <div className="flex min-w-[140px] max-w-[200px] flex-1 flex-col gap-1">
+                <div className="flex min-w-[100px] max-w-[160px] flex-1 flex-col gap-1 sm:min-w-[140px] sm:max-w-[200px]">
                   <Label className="text-[10px] uppercase text-muted-foreground">
                     {bt.toolbarDensityLabel}
                   </Label>
@@ -870,9 +870,9 @@ export function EcosystraBoardMainView() {
                 role="toolbar"
                 aria-label={bt.searchLabel}
                 className={cn(
-                  "flex flex-wrap items-center gap-[var(--vibe-space-8)] pb-[var(--vibe-space-12)]",
+                  "flex flex-wrap items-center gap-[var(--vibe-space-4)] pb-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-8)] sm:pb-[var(--vibe-space-12)]",
                   boardSurface.boardToolbarActions,
-                  compactToolbar && "gap-2 pb-2"
+                  compactToolbar && "gap-1.5 pb-1.5 sm:gap-2 sm:pb-2"
                 )}
               >
                 <div className="flex items-center rounded-md shadow-sm">
@@ -924,7 +924,7 @@ export function EcosystraBoardMainView() {
                 <div
                   role="search"
                   aria-label={bt.searchThisBoard}
-                  className="relative min-w-[200px] max-w-sm flex-1"
+                  className="relative min-w-0 w-full max-w-sm flex-1 sm:min-w-[200px]"
                 >
                   <EcosystraGrandbookIcon className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                     <Search className="size-4" />
@@ -947,7 +947,7 @@ export function EcosystraBoardMainView() {
                       API
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80" align="start">
+                  <PopoverContent className="w-[calc(100vw-32px)] sm:w-80" align="start">
                     <p className="mb-2 text-xs text-muted-foreground">
                       {bt.apiSearchIntro}
                     </p>
@@ -1062,7 +1062,7 @@ export function EcosystraBoardMainView() {
                       {bt.person}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80 p-0" align="start">
+                  <PopoverContent className="w-[calc(100vw-32px)] p-0 sm:w-80" align="start">
                     <div className="border-b border-border/60 p-3 text-xs text-muted-foreground">
                       {bt.personToolbarHint}
                     </div>
@@ -1162,7 +1162,7 @@ export function EcosystraBoardMainView() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
-                    className="w-72 border-2 border-border/80 p-[var(--vibe-space-12)] shadow-md"
+                    className="w-[calc(100vw-32px)] border-2 border-border/80 p-[var(--vibe-space-12)] shadow-md sm:w-72"
                     align="start"
                   >
                     <p className="mb-1 text-sm font-medium text-foreground">
@@ -1392,7 +1392,7 @@ export function EcosystraBoardMainView() {
                     id="eco-board-groups-accordion"
                     type="multiple"
                     aria-label={bt.boardGroupsAccordion}
-                    className="flex min-h-0 flex-1 flex-col gap-[var(--vibe-space-16)]"
+                    className="flex min-h-0 flex-1 flex-col gap-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-12)] md:gap-[var(--vibe-space-16)]"
                     value={openAccordionGroupIds}
                     onValueChange={(vals) =>
                       setGroupsOpenFromAccordion(vals, accordionKnownGroupIds)
@@ -1403,7 +1403,7 @@ export function EcosystraBoardMainView() {
                       key={group.id}
                       value={group.id}
                       id={`eco-board-group-${group.id}`}
-                      className="rounded-xl border !border-b-0 border-[color:var(--eco-board-outer-border)] bg-[color:var(--eco-board-card-bg)] shadow-none data-[state=open]:shadow-[0_1px_0_rgba(0,0,0,0.06)]"
+                      className="rounded-lg border !border-b-0 border-[color:var(--eco-board-outer-border)] bg-[color:var(--eco-board-card-bg)] shadow-none sm:rounded-xl data-[state=open]:shadow-[0_1px_0_rgba(0,0,0,0.06)]"
                     >
                       <div
                         className="flex items-stretch border-s-4"
@@ -1413,7 +1413,7 @@ export function EcosystraBoardMainView() {
                             : "var(--eco-group-todo)",
                         }}
                       >
-                        <div className="flex min-w-0 flex-1 items-center gap-2 py-[var(--vibe-space-8)] ps-[var(--vibe-space-12)] pe-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5 py-[var(--vibe-space-4)] ps-[var(--vibe-space-8)] pe-1 sm:gap-2 sm:py-[var(--vibe-space-8)] sm:ps-[var(--vibe-space-12)] sm:pe-2">
                           <EcosystraBoardGroupColorButton
                             color={group.color}
                             ariaLabel={bt.groupColorPickerAria}
@@ -1475,7 +1475,7 @@ export function EcosystraBoardMainView() {
                           </DropdownMenu>
                         </div>
                       </div>
-                      <AccordionContent className="px-[var(--vibe-space-12)] pb-[var(--vibe-space-12)] pt-0">
+                      <AccordionContent className="px-[var(--vibe-space-4)] pb-[var(--vibe-space-8)] pt-0 sm:px-[var(--vibe-space-8)] md:px-[var(--vibe-space-12)] md:pb-[var(--vibe-space-12)]">
                         <EcosystraBoardGroupTable
                           groupId={group.id}
                           groupName={group.name}
@@ -1540,7 +1540,7 @@ export function EcosystraBoardMainView() {
             }}
           >
             <DialogContent
-              className="max-w-md"
+              className="w-[calc(100vw-16px)] sm:max-w-md"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {
@@ -1699,7 +1699,7 @@ export function EcosystraBoardMainView() {
 
           <Sheet open={sheetActivityOpen} onOpenChange={setSheetActivityOpen}>
             <SheetContent
-              className="flex w-full flex-col sm:max-w-md"
+              className="flex w-[100vw] flex-col sm:max-w-md"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {
@@ -1718,7 +1718,7 @@ export function EcosystraBoardMainView() {
 
           <Sheet open={selectionSheetOpen} onOpenChange={setSelectionSheetOpen}>
             <SheetContent
-              className="flex w-full flex-col gap-4 sm:max-w-md"
+              className="flex w-[100vw] flex-col gap-4 sm:max-w-md"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {
@@ -1775,7 +1775,7 @@ export function EcosystraBoardMainView() {
 
           <Dialog open={mediaDialogOpen} onOpenChange={setMediaDialogOpen}>
             <DialogContent
-              className="max-w-lg"
+              className="w-[calc(100vw-16px)] sm:max-w-lg"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {

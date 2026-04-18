@@ -100,7 +100,7 @@ export function EcosystraEmbeddedRoot({
   return (
     <div
       lang={pageLang}
-      className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto bg-background p-4 md:gap-5 md:p-6"
+      className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto bg-background p-2 sm:gap-4 sm:p-4 md:gap-5 md:p-6"
       data-ecosystra-embedded="true"
     >
       <ViewCard title={title} description={description}>

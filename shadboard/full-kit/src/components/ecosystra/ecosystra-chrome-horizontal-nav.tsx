@@ -31,7 +31,7 @@ export function EcosystraChromeHorizontalNav({
         aria-label={dictionary.ecosystraApp.chrome.mainNavLabel}
         className={cn(
           /* Flex spacing — related toolbar items: small→medium (space-8) */
-          "flex w-max min-w-full flex-wrap items-center gap-[var(--vibe-space-8)] border-0 bg-transparent p-0 shadow-none",
+          "flex w-max min-w-full items-center gap-[var(--vibe-space-4)] border-0 bg-transparent p-0 shadow-none sm:gap-[var(--vibe-space-8)]",
           "outline-none",
           "focus-within:ring-2 focus-within:ring-ring/40 focus-within:ring-offset-2 focus-within:ring-offset-background"
         )}
@@ -49,7 +49,7 @@ export function EcosystraChromeHorizontalNav({
               prefetch
               aria-current={active ? "page" : undefined}
               className={cn(
-                "inline-flex shrink-0 items-center gap-[var(--vibe-space-8)] rounded-md px-[var(--vibe-space-12)] py-[var(--vibe-space-8)] text-sm font-medium transition-colors",
+                "inline-flex shrink-0 items-center gap-[var(--vibe-space-4)] rounded-md px-[var(--vibe-space-8)] py-[var(--vibe-space-8)] text-xs font-medium transition-colors sm:gap-[var(--vibe-space-8)] sm:px-[var(--vibe-space-12)] sm:text-sm",
                 "border-b-2 border-transparent",
                 "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 active

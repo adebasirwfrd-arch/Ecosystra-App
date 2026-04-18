@@ -1,6 +1,7 @@
 "use client"
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { useMedia } from "react-use"
 import { useApolloClient } from "@apollo/client"
 import {
   DndContext,
@@ -652,7 +653,7 @@ function AssigneePicker({
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-3" align="start">
+      <PopoverContent className="w-[calc(100vw-32px)] p-3 sm:w-80" align="start">
         {hasPeople ? (
           <>
             <div className="flex flex-wrap gap-1.5">
@@ -886,6 +887,7 @@ export function EcosystraBoardGroupTable({
   tableColumnTitles = {},
   onColumnTitleCommit,
 }: Props) {
+  const isDesktop = useMedia("(min-width: 640px)", false)
   const hidden = useMemo(() => new Set(hiddenColumnIds), [hiddenColumnIds])
   /** Row selection for highlight (Vibe: highlighted row + side panel trigger). */
   const [selectedRowIds, setSelectedRowIds] = useState(() => new Set<string>())
@@ -936,8 +938,8 @@ export function EcosystraBoardGroupTable({
         id: "task",
         title: t.colTask,
         loadingStateType: "long-text",
-        width: 280,
-        sticky: true,
+        width: isDesktop ? 280 : 200,
+        sticky: isDesktop,
       },
       {
         id: "status",
@@ -1216,6 +1218,13 @@ export function EcosystraBoardGroupTable({
       index
     )
     const columnResize = getColumnResize(col, index)
+
+    const cellCommonProps = {
+      sticky,
+      stickyLeftPx,
+      size: "medium" as const,
+    }
+
     if (col.id === "add") {
       const addTrigger = (
         <Button
@@ -1236,7 +1245,7 @@ export function EcosystraBoardGroupTable({
           {...mergeHeaderDnd(dnd)}
           {...boardHeaderAlign}
           title={String(col.title)}
-          size="medium"
+          {...cellCommonProps}
           sticky={false}
           stickyEnd
           stickyLeftPx={undefined}
@@ -1265,9 +1274,7 @@ export function EcosystraBoardGroupTable({
           )}
           {...boardHeaderAlign}
           title={col.title}
-          size="medium"
-          sticky={sticky}
-          stickyLeftPx={stickyLeftPx}
+          {...cellCommonProps}
           columnResize={columnResize}
           infoContent={col.infoContent}
         />
@@ -1281,9 +1288,7 @@ export function EcosystraBoardGroupTable({
           key={col.id}
           {...mergeHeaderDnd(dnd)}
           {...boardHeaderAlign}
-          size="medium"
-          sticky={sticky}
-          stickyLeftPx={stickyLeftPx}
+          {...cellCommonProps}
           columnResize={columnResize}
           infoContent={col.infoContent}
         >
@@ -1345,11 +1350,18 @@ export function EcosystraBoardGroupTable({
     rowDragListeners?: DraggableSyntheticListeners | null
   ) => {
     const d = row.dynamicData || {}
+    const sticky = !!col.sticky
     const stickyLeftPx = stickyLeftPxForColumnIndex(
       visibleColumns,
       mergedWidths,
       colIndex
     )
+
+    const cellCommonProps = {
+      sticky,
+      stickyLeftPx,
+      size: "medium" as const,
+    }
 
     const customDef = tableCustomColumns[col.id]
     if (customDef) {
@@ -1359,7 +1371,7 @@ export function EcosystraBoardGroupTable({
           const status = normalizeSubitemStatus(d[fk])
           const pill = taskStatusPillStyle(status)
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <div className="flex min-w-0 max-w-full items-center gap-1">
                 <Select
                   value={status}
@@ -1394,7 +1406,7 @@ export function EcosystraBoardGroupTable({
         case "dueDate": {
           const label = String(d[fk] ?? "—")
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -1432,7 +1444,7 @@ export function EcosystraBoardGroupTable({
           const avatarUrl =
             (d.lastUpdated_avatarUrl as string | null | undefined) ?? null
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <EcosystraBoardLastUpdatedCell
                 byName={by}
                 avatarUrl={avatarUrl}
@@ -1450,7 +1462,7 @@ export function EcosystraBoardGroupTable({
                 ? Number(raw.replace(/[^0-9.]/g, "")) || 0
                 : 0
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <div
                 className="flex items-center gap-1.5 text-muted-foreground"
                 aria-label={
@@ -1484,7 +1496,7 @@ export function EcosystraBoardGroupTable({
             avatarUrl = (d.owner_avatarUrl as string | null | undefined) ?? null
           }
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <EcosystraBoardAvatar name={ownerName} avatarUrl={avatarUrl} />
             </TableCell>
           )
@@ -1497,7 +1509,7 @@ export function EcosystraBoardGroupTable({
               ? `${t.colAssignee}: ${assignees.length + pendingInvites.length}`
               : `${t.colAssignee}: ${t.assigneeUnassigned}`
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <AssigneePicker
                 workspaceId={workspaceId}
                 itemId={row.id}
@@ -1519,7 +1531,7 @@ export function EcosystraBoardGroupTable({
         case "timeline": {
           const tl = String(d[fk] ?? "—")
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -1558,7 +1570,7 @@ export function EcosystraBoardGroupTable({
           >)
           const pill = priorityPillStyle(priority)
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <Select
                 value={priority}
                 onValueChange={(v) => onPatchItem(row.id, { [fk]: v })}
@@ -1582,7 +1594,7 @@ export function EcosystraBoardGroupTable({
         }
         case "budget":
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <InputSpin
                 className="max-w-[200px]"
                 value={budgetNumber({ budget: d[fk] } as Record<
@@ -1600,7 +1612,7 @@ export function EcosystraBoardGroupTable({
           )
         case "duePriority":
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <DuePill
                 label={String(d[fk] ?? "—")}
                 duePriorityLabel={t.dueDatePriorityLabel}
@@ -1609,7 +1621,7 @@ export function EcosystraBoardGroupTable({
           )
         case "notes":
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <InlineNotesPlain
                 itemId={row.id}
                 value={String(d[fk] ?? "")}
@@ -1623,7 +1635,7 @@ export function EcosystraBoardGroupTable({
           const cat = normalizeNotesCategory(d[fk])
           const st = notesCategoryStyle(cat)
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <Select
                 value={cat}
                 onValueChange={(v) => onPatchItem(row.id, { [fk]: v })}
@@ -1652,7 +1664,7 @@ export function EcosystraBoardGroupTable({
         }
         default:
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} size="medium" />
+            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps} />
           )
       }
     }
@@ -1663,9 +1675,7 @@ export function EcosystraBoardGroupTable({
           <TableCell
             key={col.id}
             {...boardAlign(col.id)}
-            sticky
-            stickyLeftPx={stickyLeftPx}
-            size="medium"
+            {...cellCommonProps}
             className="box-border min-w-0"
           >
             {/* `position:relative` on <td> would override `sticky` via Tailwind merge — keep sticky on td, relative on inner wrapper only. */}
@@ -1700,9 +1710,7 @@ export function EcosystraBoardGroupTable({
           <TableRowHeaderCell
             key={col.id}
             {...boardAlign(col.id)}
-            sticky
-            stickyLeftPx={stickyLeftPx}
-            size="medium"
+            {...cellCommonProps}
             className="min-w-0"
           >
             <div className="flex min-w-0 flex-wrap items-center gap-1">
