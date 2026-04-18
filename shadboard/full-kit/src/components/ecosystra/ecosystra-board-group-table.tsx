@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, forwardRef, memo, useCallback, useEffect, useMemo, useState } from "react"
 import { useMedia } from "react-use"
 import { useApolloClient } from "@apollo/client"
 import {
@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { Draggable, Droppable } from "@hello-pangea/dnd"
-import { format, isValid } from "date-fns"
+import { differenceInDays, format, isValid } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import {
   Check,
@@ -160,30 +160,131 @@ function notesCategoryStyle(category: string): {
 }
 
 function formatTimelineRange(range: DateRange | undefined): string {
-  if (!range?.from) return ""
-  if (!range.to) return format(range.from, "MMM d, yyyy")
+  if (!range?.from) return "—"
+  
+  const curYear = new Date().getFullYear()
+
+  if (!range.to) {
+    const showYear = range.from.getFullYear() !== curYear
+    return format(range.from, showYear ? "MMM d, yyyy" : "MMM d")
+  }
 
   const { from, to } = range
+  const showYear = from.getFullYear() !== curYear || to.getFullYear() !== curYear
+
   if (from.getFullYear() === to.getFullYear()) {
     if (from.getMonth() === to.getMonth()) {
-      return `${format(from, "MMM d")} - ${format(to, "d, yyyy")}`
+      const suffix = showYear ? `, ${from.getFullYear()}` : ""
+      return `${format(from, "MMM d")} - ${format(to, "d")}${suffix}`
     }
-    return `${format(from, "MMM d")} - ${format(to, "MMM d, yyyy")}`
+    const suffix = showYear ? `, ${from.getFullYear()}` : ""
+    return `${format(from, "MMM d")} - ${format(to, "MMM d")}${suffix}`
   }
   return `${format(from, "MMM d, yyyy")} - ${format(to, "MMM d, yyyy")}`
 }
 
+function getTimelineDuration(range: DateRange | undefined): string {
+  if (!range?.from || !range.to) return ""
+  const days = differenceInDays(range.to, range.from) + 1
+  return `${days}d`
+}
+
+const TimelinePill = memo(
+  forwardRef<
+    HTMLDivElement,
+    {
+      tl: string
+      range: DateRange | undefined
+      onClear: () => void
+      t: any
+    }
+  >(({ tl, range, onClear, t, ...props }, ref) => {
+    const [isHovered, setIsHovered] = useState(false)
+    const duration = getTimelineDuration(range)
+
+    // Use Screenshot 1 aesthetics: light blue circular clear button with white X
+    return (
+      <div
+        ref={ref}
+        className="relative flex w-full max-w-[200px] items-center justify-center p-0"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        {...props}
+      >
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-full truncate rounded-full border-0 px-3 text-[13px] font-semibold text-white shadow-none transition-all hover:brightness-110 active:scale-[0.98]"
+          style={{
+            backgroundColor: "var(--eco-brand)",
+          }}
+          aria-label={`${t.colTimeline}: ${tl}`}
+        >
+          {isHovered && duration ? duration : tl}
+        </Button>
+        {range?.from && isHovered && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              onClear()
+            }}
+            className="absolute end-1.5 flex size-5.5 items-center justify-center rounded-full bg-white/30 text-white transition-opacity hover:bg-white/50"
+            title="Clear timeline"
+          >
+            <X className="size-3.5 stroke-[2.5]" />
+          </button>
+        )}
+      </div>
+    )
+  })
+)
+TimelinePill.displayName = "TimelinePill"
+
 function parseTimelineRange(s: string): DateRange | undefined {
-  if (!s || s === "—") return undefined
-  const parts = s.split(" - ")
+  if (!s || s === "—" || s === "") return undefined
+  
+  // Normalize: handle both " - " and "–"
+  const normalized = s.replace(/–/g, "-")
+  const parts = normalized.split("-").map(p => p.trim())
+  
   if (parts.length === 1) {
     const d = new Date(parts[0])
     return isValid(d) ? { from: d, to: undefined } : undefined
   }
-  const from = new Date(parts[0])
-  const to = new Date(parts[1])
-  if (!isValid(from)) return undefined
-  return { from, to: isValid(to) ? to : undefined }
+
+  // Concise Format Logic: "Apr 18 - 19" or "Apr 18 - 19, 2026"
+  let fromPart = parts[0]
+  let toPart = parts[1]
+
+  // Detect year in the whole string
+  const yearMatch = s.match(/, (\d{4})/)
+  const targetYear = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear()
+
+  // Detect month in fromPart
+  const monthMatch = fromPart.match(/^[A-Za-z]{3}/)
+  const monthStr = monthMatch ? monthMatch[0] : ""
+
+  // If toPart is just a day number (e.g. "19" or "19, 2026")
+  if (/^\d+/.test(toPart) && !/[A-Za-z]/.test(toPart)) {
+    toPart = `${monthStr} ${toPart}`
+  }
+
+  // Ensure year is applied if missing
+  const fromDate = new Date(fromPart)
+  if (isValid(fromDate) && fromDate.getFullYear() === 2001 && !fromPart.includes("2001")) {
+    fromDate.setFullYear(targetYear)
+  }
+
+  const toDate = new Date(toPart)
+  if (isValid(toDate) && toDate.getFullYear() === 2001 && !toPart.includes("2001")) {
+    toDate.setFullYear(targetYear)
+  }
+
+  if (!isValid(fromDate)) return undefined
+  return { from: fromDate, to: isValid(toDate) ? toDate : undefined }
 }
 
 function DuePill({
@@ -1516,16 +1617,15 @@ export function EcosystraBoardGroupTable({
           )
         }
         case "lastUpdated": {
-          const rel = String(d[fk] ?? "—")
-          const by = "User"
-          const avatarUrl =
-            (d.lastUpdated_avatarUrl as string | null | undefined) ?? null
+          const by = row.lastUpdatedBy?.name || "User"
+          const avatarUrl = row.lastUpdatedBy?.avatarUrl || null
+          const updatedAt = row.updatedAt
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <EcosystraBoardLastUpdatedCell
                 byName={by}
                 avatarUrl={avatarUrl}
-                relativeLabel={rel}
+                updatedAt={updatedAt}
               />
             </TableCell>
           )
@@ -1607,31 +1707,25 @@ export function EcosystraBoardGroupTable({
         }
         case "timeline": {
           const tl = String(d[fk] ?? "—")
+          const range = parseTimelineRange(tl)
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 max-w-[200px] truncate rounded-full border-0 px-3 text-xs font-semibold shadow-none hover:opacity-95"
-                    style={{
-                      backgroundColor: "var(--eco-mono-timeline-bg)",
-                      color: "var(--eco-mono-timeline-fg)",
-                    }}
-                    aria-label={`${t.colTimeline}: ${tl}`}
-                  >
-                    {tl}
-                  </Button>
+                  <TimelinePill
+                    tl={tl}
+                    range={range}
+                    t={t}
+                    onClear={() => onPatchItem(row.id, { [fk]: null })}
+                  />
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="range"
-                    selected={parseTimelineRange(tl)}
-                    onSelect={(range) => {
+                    selected={range}
+                    onSelect={(nextRange) => {
                       onPatchItem(row.id, {
-                        [fk]: formatTimelineRange(range),
+                        [fk]: formatTimelineRange(nextRange),
                       })
                     }}
                   />
@@ -1965,16 +2059,15 @@ export function EcosystraBoardGroupTable({
         )
       }
       case "lastUpdated": {
-        const rel = String(d.lastUpdatedLabel ?? "—")
-        const by = String(d.lastUpdatedBy ?? "User").trim() || "User"
-        const avatarUrl =
-          (d.lastUpdated_avatarUrl as string | null | undefined) ?? null
+        const by = row.lastUpdatedBy?.name || "User"
+        const avatarUrl = row.lastUpdatedBy?.avatarUrl || null
+        const updatedAt = row.updatedAt
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
             <EcosystraBoardLastUpdatedCell
               byName={by}
               avatarUrl={avatarUrl}
-              relativeLabel={rel}
+              updatedAt={updatedAt}
             />
           </TableCell>
         )
@@ -2042,31 +2135,25 @@ export function EcosystraBoardGroupTable({
       }
       case "timeline": {
         const tl = String(d.timeline ?? "—")
+        const range = parseTimelineRange(tl)
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
             <Popover>
               <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 max-w-[200px] truncate rounded-full border-0 px-3 text-xs font-semibold shadow-none hover:opacity-95"
-                  style={{
-                    backgroundColor: "var(--eco-mono-timeline-bg)",
-                    color: "var(--eco-mono-timeline-fg)",
-                  }}
-                  aria-label={`${t.colTimeline}: ${tl}`}
-                >
-                  {tl}
-                </Button>
+                <TimelinePill
+                  tl={tl}
+                  range={range}
+                  t={t}
+                  onClear={() => onPatchItem(row.id, { timeline: null })}
+                />
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="range"
-                  selected={parseTimelineRange(tl)}
-                  onSelect={(range) => {
+                  selected={range}
+                  onSelect={(nextRange) => {
                     onPatchItem(row.id, {
-                      timeline: formatTimelineRange(range),
+                      timeline: formatTimelineRange(nextRange),
                     })
                   }}
                 />

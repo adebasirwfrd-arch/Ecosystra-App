@@ -6,6 +6,8 @@
  * (sizes, stacked ring, max + counter, dashed pending).
  */
 
+import { useEffect, useState } from "react"
+import { formatDistanceToNow, isValid, parseISO } from "date-fns"
 import { Mail, User } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -193,25 +195,66 @@ export function EcosystraBoardAvatarGroup({
   )
 }
 
+/**
+ * Real-time relative time label (e.g., "5m ago").
+ * Refreshes every 60 seconds to maintain "realtime" feel.
+ */
+export function EcosystraRelativeTime({
+  date,
+  className,
+}: {
+  date: string | Date | undefined
+  className?: string
+}) {
+  const [label, setLabel] = useState<string>("—")
+
+  useEffect(() => {
+    if (!date) {
+      setLabel("—")
+      return
+    }
+
+    const d = typeof date === "string" ? parseISO(date) : date
+    if (!isValid(d)) {
+      setLabel("—")
+      return
+    }
+
+    const update = () => {
+      // Vibe/Monday style: "5m ago", "1h ago", etc.
+      // formatDistanceToNow provides "about 5 minutes ago", etc.
+      // For a professional feel, we keep it standard but concise.
+      setLabel(formatDistanceToNow(d, { addSuffix: true }))
+    }
+
+    update()
+    const timer = setInterval(update, 60000) // refresh every minute
+    return () => clearInterval(timer)
+  }, [date])
+
+  return <span className={className}>{label}</span>
+}
+
 /** Optional wrapper for last-updated row: avatar + trailing text. */
 export function EcosystraBoardLastUpdatedCell({
   byName,
   avatarUrl,
-  relativeLabel,
+  updatedAt,
   className,
 }: {
   byName: string
   avatarUrl?: string | null
-  relativeLabel: string
+  updatedAt?: string | null
   className?: string
 }) {
   const by = byName.trim() || "User"
   return (
     <div className={cn("flex min-w-0 items-center gap-2", className)}>
       <EcosystraBoardAvatar name={by} avatarUrl={avatarUrl} title={by} />
-      <span className="truncate text-xs text-muted-foreground">
-        {relativeLabel}
-      </span>
+      <EcosystraRelativeTime
+        date={updatedAt ?? undefined}
+        className="truncate text-xs text-muted-foreground"
+      />
     </div>
   )
 }

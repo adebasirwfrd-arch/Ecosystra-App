@@ -41,6 +41,7 @@ export const typeDefs = `#graphql
     groupId: ID
     parentItemId: ID
     createdByUserId: ID
+    lastUpdatedBy: User
     subitems: [Item!]
     dynamicData: JSON!
     createdAt: String!

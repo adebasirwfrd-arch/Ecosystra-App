@@ -743,8 +743,18 @@ export const resolvers = {
       item.updatedAt instanceof Date
         ? item.updatedAt.toISOString()
         : String(item.updatedAt ?? ""),
-    createdByUserId: (item: { createdByUserId?: string | null }) =>
-      item.createdByUserId ?? null,
+    lastUpdatedBy: async (item: { id: string; createdByUserId?: string | null }) => {
+      const lastAudit = await prisma.ecoTaskAuditLog.findFirst({
+        where: { itemId: item.id },
+        orderBy: { createdAt: "desc" },
+        include: { actor: true },
+      });
+      if (lastAudit?.actor) return lastAudit.actor;
+      if (item.createdByUserId) {
+        return prisma.ecoUser.findUnique({ where: { id: item.createdByUserId } });
+      }
+      return null;
+    },
     subitems: async (item: { id: string; subitems?: unknown[] }) => {
       if (Array.isArray(item.subitems)) return item.subitems;
       return prisma.ecoItem.findMany({

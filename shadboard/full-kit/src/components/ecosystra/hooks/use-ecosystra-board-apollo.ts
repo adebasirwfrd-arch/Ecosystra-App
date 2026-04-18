@@ -39,12 +39,20 @@ function boardToastMessages(dict: DictionaryType | null) {
   }
 }
 
+export type GqlBoardUser = {
+  id: string
+  name?: string | null
+  avatarUrl?: string | null
+}
+
 export type GqlBoardItem = {
   id: string
   name: string
   groupId?: string | null
   parentItemId?: string | null
   createdByUserId?: string | null
+  updatedAt: string
+  lastUpdatedBy?: GqlBoardUser | null
   dynamicData: Record<string, unknown>
   subitems?: GqlBoardItem[]
 }

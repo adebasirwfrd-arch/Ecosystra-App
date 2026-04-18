@@ -19,11 +19,23 @@ export const GET_OR_CREATE_BOARD = gql`
           name
           groupId
           createdByUserId
+          updatedAt
+          lastUpdatedBy {
+            id
+            name
+            avatarUrl
+          }
           dynamicData
           subitems {
             id
             name
             createdByUserId
+            updatedAt
+            lastUpdatedBy {
+              id
+              name
+              avatarUrl
+            }
             dynamicData
           }
         }
