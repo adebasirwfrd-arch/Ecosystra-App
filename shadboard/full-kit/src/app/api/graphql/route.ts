@@ -33,11 +33,25 @@ function getServer(): ApolloServer<GqlContext> {
  * Email app and others call `/api/graphql` with `fetch` (same-origin) but often without
  * `Authorization: Bearer …`. Fall back to NextAuth session cookies so the active user matches.
  */
+function normalizeSessionEmail(
+  email: string | null | undefined
+): string | null {
+  if (!email) return null;
+  const t = email.trim();
+  return t ? t.toLowerCase() : null;
+}
+
 async function resolveAuthForRequest(req: NextRequest): Promise<AuthState> {
   const headerAuth = await resolveAuth(req.headers);
 
   if (headerAuth.email) {
-    return headerAuth;
+    const email = normalizeSessionEmail(headerAuth.email);
+    if (!email) return { userId: null, email: null, isSuperUser: false };
+    return {
+      userId: headerAuth.userId,
+      email,
+      isSuperUser: isSuperUserEmail(email),
+    };
   }
 
   if (headerAuth.userId) {
@@ -45,24 +59,25 @@ async function resolveAuthForRequest(req: NextRequest): Promise<AuthState> {
       where: { id: headerAuth.userId },
       select: { email: true },
     });
-    if (u?.email) {
+    const email = normalizeSessionEmail(u?.email ?? null);
+    if (email) {
       return {
         userId: headerAuth.userId,
-        email: u.email,
-        isSuperUser: isSuperUserEmail(u.email),
+        email,
+        isSuperUser: isSuperUserEmail(email),
       };
     }
   }
 
   const session = await getServerSession(authOptions);
   if (session?.user?.id) {
-    let email = session.user.email ?? null;
+    let email = normalizeSessionEmail(session.user.email ?? null);
     if (!email) {
       const u = await prisma.user.findUnique({
         where: { id: session.user.id },
         select: { email: true },
       });
-      email = u?.email ?? null;
+      email = normalizeSessionEmail(u?.email ?? null);
     }
     if (email) {
       return {
@@ -80,8 +95,8 @@ async function buildContext(req: NextRequest): Promise<GqlContext> {
   const auth = await resolveAuthForRequest(req);
   let prismaUser = null;
   if (auth.email) {
-    prismaUser = await prisma.ecoUser.findUnique({
-      where: { email: auth.email },
+    prismaUser = await prisma.ecoUser.findFirst({
+      where: { email: { equals: auth.email, mode: "insensitive" } },
     });
   }
   return { auth, prismaUser };

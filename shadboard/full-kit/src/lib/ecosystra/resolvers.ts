@@ -295,21 +295,35 @@ function buildEmailFilter(filter: string, userId: string): Prisma.EcoEmailWhereI
   }
 }
 
+/**
+ * EcoUser email must match session (lowercased in GraphQL `buildContext`).
+ * Use case-insensitive lookup so legacy rows still resolve after normalization.
+ */
 async function getViewer(ctx: GqlContext) {
-  const email = ctx.auth.email;
+  const email = ctx.auth.email?.trim().toLowerCase();
   if (!email) {
     throw new Error("UNAUTHORIZED");
   }
-  return withPrismaRetry(() =>
-    prisma.ecoUser.upsert({
-      where: { email },
-      create: {
+  return withPrismaRetry(async () => {
+    const existing = await prisma.ecoUser.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
+    if (existing) {
+      if (existing.email !== email) {
+        return prisma.ecoUser.update({
+          where: { id: existing.id },
+          data: { email },
+        });
+      }
+      return existing;
+    }
+    return prisma.ecoUser.create({
+      data: {
         email,
         name: email.split("@")[0],
       },
-      update: {},
-    })
-  );
+    });
+  });
 }
 
 /** Resolve EcoUser by email, or create from NextAuth `User` so app email works for all signed-up accounts. */
@@ -617,7 +631,7 @@ async function executeAcceptTaskAssigneeInvite(
   const viewer = await getViewer(ctx);
   assertEcoTaskAssigneeInviteDelegate(prisma, "acceptTaskAssigneeInvite");
   const viewerUser = await prisma.ecoUser.findUnique({ where: { id: viewer.id } });
-  if (!viewerUser?.email) throw new Error("FORBIDDEN");
+  if (!viewerUser?.email) throw new Error("UNAUTHORIZED");
 
   const invite = await prisma.ecoTaskAssigneeInvite.findFirst({
     where: { token: token.trim(), status: "PENDING" },
@@ -625,8 +639,12 @@ async function executeAcceptTaskAssigneeInvite(
   });
   if (!invite) throw new Error("NOT_FOUND");
 
-  if (viewerUser.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
-    throw new Error("FORBIDDEN");
+  const viewerEmail = viewerUser.email.trim().toLowerCase();
+  const invitedEmail = invite.email.trim().toLowerCase();
+  if (viewerEmail !== invitedEmail) {
+    throw new Error(
+      `Sign in as ${invitedEmail} to accept this invitation. You are currently signed in as ${viewerEmail}.`
+    );
   }
 
   await prisma.ecoMember.upsert({

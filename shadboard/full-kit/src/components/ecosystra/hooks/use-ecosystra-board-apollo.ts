@@ -344,10 +344,14 @@ export function defaultTaskDynamicData(): Record<string, unknown> {
 }
 
 function gqlErrorMessage(err: unknown): string {
+  const any = err as {
+    graphQLErrors?: readonly { message?: string }[]
+    message?: string
+  }
+  const gqlMsg = any.graphQLErrors?.[0]?.message
+  if (gqlMsg) return gqlMsg
   if (err instanceof Error) return err.message
-  const e = err as { graphQLErrors?: { message: string }[] }
-  const m = e?.graphQLErrors?.[0]?.message
-  return m || "Request failed"
+  return any.message || "Request failed"
 }
 
 /**
