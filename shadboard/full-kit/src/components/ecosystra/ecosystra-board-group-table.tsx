@@ -18,7 +18,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { Draggable, Droppable } from "@hello-pangea/dnd"
-import { format } from "date-fns"
+import { format, isValid } from "date-fns"
+import type { DateRange } from "react-day-picker"
 import {
   Check,
   ChevronDown,
@@ -156,6 +157,33 @@ function notesCategoryStyle(category: string): {
     backgroundColor: "var(--eco-mono-notes-general-bg)",
     color: "var(--eco-mono-notes-general-fg)",
   }
+}
+
+function formatTimelineRange(range: DateRange | undefined): string {
+  if (!range?.from) return ""
+  if (!range.to) return format(range.from, "MMM d, yyyy")
+
+  const { from, to } = range
+  if (from.getFullYear() === to.getFullYear()) {
+    if (from.getMonth() === to.getMonth()) {
+      return `${format(from, "MMM d")} - ${format(to, "d, yyyy")}`
+    }
+    return `${format(from, "MMM d")} - ${format(to, "MMM d, yyyy")}`
+  }
+  return `${format(from, "MMM d, yyyy")} - ${format(to, "MMM d, yyyy")}`
+}
+
+function parseTimelineRange(s: string): DateRange | undefined {
+  if (!s || s === "—") return undefined
+  const parts = s.split(" - ")
+  if (parts.length === 1) {
+    const d = new Date(parts[0])
+    return isValid(d) ? { from: d, to: undefined } : undefined
+  }
+  const from = new Date(parts[0])
+  const to = new Date(parts[1])
+  if (!isValid(from)) return undefined
+  return { from, to: isValid(to) ? to : undefined }
 }
 
 function DuePill({
@@ -1599,11 +1627,11 @@ export function EcosystraBoardGroupTable({
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
-                    mode="single"
-                    onSelect={(date) => {
-                      if (!date) return
+                    mode="range"
+                    selected={parseTimelineRange(tl)}
+                    onSelect={(range) => {
                       onPatchItem(row.id, {
-                        [fk]: format(date, "MMM d, yyyy"),
+                        [fk]: formatTimelineRange(range),
                       })
                     }}
                   />
@@ -2034,11 +2062,11 @@ export function EcosystraBoardGroupTable({
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
-                  mode="single"
-                  onSelect={(date) => {
-                    if (!date) return
+                  mode="range"
+                  selected={parseTimelineRange(tl)}
+                  onSelect={(range) => {
                     onPatchItem(row.id, {
-                      timeline: format(date, "MMM d, yyyy"),
+                      timeline: formatTimelineRange(range),
                     })
                   }}
                 />
