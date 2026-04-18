@@ -349,11 +349,29 @@ export function EcosystraBoardMainView() {
   useEffect(() => {
     const token = acceptAssigneeToken?.trim()
     if (!token) return
+
+    const storageKey = `ecosystra-accept-assignee:${token}`
+    if (
+      typeof window !== "undefined" &&
+      window.sessionStorage.getItem(storageKey)
+    ) {
+      const next = new URLSearchParams(searchParams.toString())
+      next.delete("acceptAssignee")
+      const q = next.toString()
+      router.replace(q ? `${pathname}?${q}` : pathname)
+      return
+    }
+
     let cancelled = false
     void (async () => {
       try {
         await acceptTaskAssigneeInvite(token)
         if (!cancelled) {
+          try {
+            window.sessionStorage.setItem(storageKey, "1")
+          } catch {
+            /* private mode / quota */
+          }
           toast.success(bt.toastInviteAccepted)
           const next = new URLSearchParams(searchParams.toString())
           next.delete("acceptAssignee")

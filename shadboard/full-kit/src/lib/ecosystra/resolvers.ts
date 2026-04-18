@@ -633,8 +633,9 @@ async function executeAcceptTaskAssigneeInvite(
   const viewerUser = await prisma.ecoUser.findUnique({ where: { id: viewer.id } });
   if (!viewerUser?.email) throw new Error("UNAUTHORIZED");
 
+  const tokenTrim = token.trim();
   const invite = await prisma.ecoTaskAssigneeInvite.findFirst({
-    where: { token: token.trim(), status: "PENDING" },
+    where: { token: tokenTrim },
     include: { item: true },
   });
   if (!invite) throw new Error("NOT_FOUND");
@@ -645,6 +646,18 @@ async function executeAcceptTaskAssigneeInvite(
     throw new Error(
       `Sign in as ${invitedEmail} to accept this invitation. You are currently signed in as ${viewerEmail}.`
     );
+  }
+
+  /** React Strict Mode / double navigation can invoke accept twice — second call must succeed. */
+  if (invite.status === "ACCEPTED") {
+    if (invite.acceptedUserId === viewer.id) {
+      return prisma.ecoItem.findUniqueOrThrow({ where: { id: invite.itemId } });
+    }
+    throw new Error("This invitation was already accepted by another account.");
+  }
+
+  if (invite.status !== "PENDING") {
+    throw new Error("This invitation is no longer valid.");
   }
 
   await prisma.ecoMember.upsert({
