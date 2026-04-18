@@ -1,6 +1,26 @@
 import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client"
 
 /**
+ * Vercel / docs typo: `https://host/graphql` hits no Next route → HTML 404.
+ * This app serves GraphQL at `/api/graphql` only.
+ */
+function normalizeExplicitGraphqlUrl(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return trimmed
+  try {
+    const u = new URL(trimmed)
+    const path = u.pathname.replace(/\/$/, "") || "/"
+    if (path === "/graphql") {
+      u.pathname = "/api/graphql"
+      return u.toString()
+    }
+    return trimmed
+  } catch {
+    return trimmed
+  }
+}
+
+/**
  * Resolves the browser GraphQL HTTP endpoint.
  * - Defaults to same-origin `/api/graphql` (correct for Vercel and local Next).
  * - Honors `NEXT_PUBLIC_GRAPHQL_URL` / `NEXT_PUBLIC_ECOSYSTRA_GRAPHQL_URL` when set,
@@ -15,7 +35,7 @@ function resolveGraphqlUri(): string {
   ).trim()
 
   if (typeof window === "undefined") {
-    if (explicit) return explicit
+    if (explicit) return normalizeExplicitGraphqlUrl(explicit)
     if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api/graphql`
     return "http://localhost:4000/graphql"
   }
@@ -27,7 +47,7 @@ function resolveGraphqlUri(): string {
     if (!isLocal && /localhost|127\.0\.0\.1/.test(explicit)) {
       return `${window.location.origin}/api/graphql`
     }
-    return explicit
+    return normalizeExplicitGraphqlUrl(explicit)
   }
 
   return `${window.location.origin}/api/graphql`
@@ -41,7 +61,8 @@ async function ecosystraGraphqlFetch(
   const res = await fetch(input, init)
   const text = await res.text()
   const trimmed = text.trimStart()
-  if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html")) {
+  const lower = trimmed.slice(0, 12).toLowerCase()
+  if (lower.startsWith("<!doctype") || trimmed.slice(0, 5).toLowerCase() === "<html") {
     throw new Error(
       "GraphQL returned HTML instead of JSON. Use same-origin /api/graphql (unset NEXT_PUBLIC_GRAPHQL_URL on Vercel unless you use an external API), " +
         "and disable Deployment Protection / password gate for this project if /api/graphql is blocked."
