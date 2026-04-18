@@ -1,7 +1,7 @@
 "use client"
 
 import { forwardRef } from "react"
-import { GripVertical, Info } from "lucide-react"
+import { GripVertical, Info, MoreHorizontal } from "lucide-react"
 
 import type { LucideIcon } from "lucide-react"
 import type {
@@ -338,6 +338,8 @@ export type TableHeaderCellProps = Omit<ComponentProps<"th">, "title"> & {
   /** Pixel `right` when using `stickyEnd` (defaults to `right-0` class). */
   stickyRightPx?: number
   size?: RowSize
+  /** Optional popup menu trigger on the right side. */
+  menu?: ReactNode
   /** Drag handle on trailing edge (Monday-style column resize). */
   columnResize?: {
     minPx: number
@@ -376,6 +378,7 @@ export const TableHeaderCell = forwardRef<
     stickyEnd,
     stickyRightPx,
     size = "medium",
+    menu,
     columnResize,
     columnDragHandleProps,
     columnDragAriaLabel = "Reorder column",
@@ -496,6 +499,11 @@ export const TableHeaderCell = forwardRef<
         >
           {mainBlock}
         </div>
+        {menu ? (
+          <div className="pointer-events-none absolute right-0 top-1/2 z-[46] -translate-y-1/2 opacity-0 transition-opacity group-hover/header-cell:pointer-events-auto group-hover/header-cell:opacity-100">
+            {menu}
+          </div>
+        ) : null}
         {columnDragHandleProps ? (
           <button
             type="button"

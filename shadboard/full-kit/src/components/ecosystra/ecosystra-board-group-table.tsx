@@ -27,6 +27,7 @@ import {
   Info,
   Mail,
   MessageSquarePlus,
+  MoreHorizontal,
   Plus,
   Search,
   Sparkles,
@@ -123,7 +124,7 @@ const NOTES_CATEGORY_OPTIONS = [
 ] as const
 
 /** Per-cell value for user-added columns (`tableCustomColumns`) — shallow-safe keys in `dynamicData`. */
-function ecoCcFieldKey(columnId: string): string {
+export function ecoCcFieldKey(columnId: string): string {
   return `ecoCc__${columnId}`
 }
 
@@ -837,6 +838,10 @@ type Props = {
   onRowOrderCommit?: (groupId: string, orderedItemIds: string[]) => void
   /** Append a new column instance (`c_…`) before the + column. */
   onAddBoardColumn?: (kind: HidableBoardColumnId) => void
+  /** Create a copy of the given column (props + title override). */
+  onDuplicateBoardColumn?: (columnId: string) => void
+  /** Remove custom column or hide core column. */
+  onDeleteBoardColumn?: (columnId: string) => void
   /**
    * Fires whenever row checkbox selection changes (this group only).
    * Parent can open a side panel / modal from the selected task ids.
@@ -886,6 +891,8 @@ export function EcosystraBoardGroupTable({
   selectionClearVersion = 0,
   tableColumnTitles = {},
   onColumnTitleCommit,
+  onDuplicateBoardColumn,
+  onDeleteBoardColumn,
 }: Props) {
   const isDesktop = useMedia("(min-width: 640px)", false)
   const hidden = useMemo(() => new Set(hiddenColumnIds), [hiddenColumnIds])
@@ -1206,6 +1213,46 @@ export function EcosystraBoardGroupTable({
     wordWrap: true,
   }
 
+  const renderColumnMenu = (col: TableColumn) => {
+    if (col.id === "select" || col.id === "add" || col.id === "task") {
+      return null
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 rounded-md hover:bg-muted/80 focus-visible:ring-1"
+            aria-label={t.columnActions}
+          >
+            <MoreHorizontal className="size-4 opacity-70" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            className="gap-2"
+            onClick={() => onDuplicateBoardColumn?.(col.id)}
+          >
+            <Plus className="size-4 opacity-70" />
+            {t.duplicateColumn}
+          </DropdownMenuItem>
+          <Separator className="my-1" />
+          <DropdownMenuItem
+            variant="destructive"
+            className="gap-2 text-destructive"
+            onClick={() => onDeleteBoardColumn?.(col.id)}
+          >
+            <Trash2 className="size-4 opacity-70" />
+            {t.deleteColumn}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
   const renderHeaderCell = (
     col: TableColumn,
     index: number,
@@ -1291,6 +1338,7 @@ export function EcosystraBoardGroupTable({
           {...cellCommonProps}
           columnResize={columnResize}
           infoContent={col.infoContent}
+          menu={renderColumnMenu(col)}
         >
           <span className="inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 font-medium text-muted-foreground">
             <EcosystraBoardEditableColumnHeader
@@ -1339,6 +1387,7 @@ export function EcosystraBoardGroupTable({
         stickyLeftPx={stickyLeftPx}
         columnResize={columnResize}
         infoContent={col.infoContent}
+        menu={renderColumnMenu(col)}
       />
     )
   }

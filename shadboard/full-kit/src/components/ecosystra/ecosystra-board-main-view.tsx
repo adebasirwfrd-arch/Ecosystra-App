@@ -114,7 +114,7 @@ import {
   EcosystraBoardGroupColorButton,
   EcosystraBoardGroupEditableName,
 } from "./ecosystra-board-group-header"
-import { EcosystraBoardGroupTable } from "./ecosystra-board-group-table"
+import { EcosystraBoardGroupTable, ecoCcFieldKey } from "./ecosystra-board-group-table"
 import { EcosystraBoardKanbanView } from "./ecosystra-board-kanban-view"
 import { useEcosystraDictionary } from "./ecosystra-dictionary-context"
 import {
@@ -267,6 +267,120 @@ export function EcosystraBoardMainView() {
     const withItems = sortedGroups.find((g) => g.items.length > 0)
     return withItems?.id ?? sortedGroups[0]?.id
   }, [sortedGroups])
+
+  const addCustomBoardColumn = useCallback(
+    (kind: HidableBoardColumnId) => {
+      const newId = newCustomTableColumnId()
+      const nextOrder = orderWithColumnBeforeAdd(tableUi.tableColumnOrder, newId)
+      void patchBoardTableUi({
+        tableColumnOrder: nextOrder,
+        tableCustomColumns: {
+          ...tableUi.tableCustomColumns,
+          [newId]: { kind },
+        },
+      })
+    },
+    [patchBoardTableUi, tableUi.tableColumnOrder, tableUi.tableCustomColumns]
+  )
+
+  const duplicateBoardColumn = useCallback(
+    async (columnId: string) => {
+      const { tableColumnOrder, tableCustomColumns, tableColumnTitles } = tableUi
+      const colIdx = tableColumnOrder.indexOf(columnId)
+      if (colIdx < 0) return
+
+      const newId = newCustomTableColumnId()
+      const isCustom = columnId.startsWith("c_")
+      const kind = isCustom
+        ? tableCustomColumns[columnId]?.kind
+        : (columnId as HidableBoardColumnId)
+
+      if (!kind) return
+
+      const nextOrder = [...tableColumnOrder]
+      nextOrder.splice(colIdx + 1, 0, newId)
+
+      const nextCustom = {
+        ...tableCustomColumns,
+        [newId]: { kind },
+      }
+
+      const nextTitles = { ...tableColumnTitles }
+      if (tableColumnTitles[columnId]) {
+        nextTitles[newId] = `${tableColumnTitles[columnId]} (Copy)`
+      }
+
+      await patchBoardTableUi({
+        tableColumnOrder: nextOrder,
+        tableCustomColumns: nextCustom,
+        tableColumnTitles: nextTitles,
+      })
+
+      // Duplicate cell data
+      const sourceKey = isCustom
+        ? ecoCcFieldKey(columnId)
+        : ((): string => {
+            const m: Record<string, string> = {
+              status: "taskStatus",
+              dueDate: "dueDate",
+              lastUpdated: "lastUpdatedLabel",
+              timeline: "timeline",
+              priority: "priority",
+              budget: "budget",
+              duePriority: "dueDatePriority",
+              notes: "notesText",
+              notesCategory: "notesCategory",
+            }
+            return m[columnId] || columnId
+          })()
+
+      const targetKey = ecoCcFieldKey(newId)
+      const allItems = board?.groups.flatMap((g) => g.items) || []
+      const itemsWithData = allItems.filter(
+        (it) => it.dynamicData?.[sourceKey] !== undefined
+      )
+
+      if (itemsWithData.length > 0) {
+        toast.info(`Duplicating data for ${itemsWithData.length} items...`, {
+          id: "duplicate-data-progress",
+        })
+        for (const it of itemsWithData) {
+          void patchItemField(it.id, { [targetKey]: it.dynamicData[sourceKey] })
+        }
+        toast.success("Data duplicated", { id: "duplicate-data-progress" })
+      }
+    },
+    [patchBoardTableUi, tableUi, board?.groups, patchItemField]
+  )
+
+  const deleteBoardColumn = useCallback(
+    (columnId: string) => {
+      const { tableColumnOrder, tableCustomColumns, hiddenColumnIds } = tableUi
+
+      if (columnId === "task" || columnId === "select" || columnId === "add") {
+        return
+      }
+
+      const isCustom = columnId.startsWith("c_")
+      if (isCustom) {
+        const nextOrder = tableColumnOrder.filter((id) => id !== columnId)
+        const nextCustom = { ...tableCustomColumns }
+        delete nextCustom[columnId]
+        void patchBoardTableUi({
+          tableColumnOrder: nextOrder,
+          tableCustomColumns: nextCustom,
+        })
+      } else {
+        const nextHidden = [
+          ...new Set([...hiddenColumnIds, columnId as HidableBoardColumnId]),
+        ]
+        void patchBoardTableUi({
+          hiddenTableColumnIds: nextHidden,
+        })
+      }
+    },
+    [patchBoardTableUi, tableUi]
+  )
 
   const handleBoardDragEnd = useCallback(
     (result: DropResult) => {
@@ -480,24 +594,6 @@ export function EcosystraBoardMainView() {
       void patchBoardTableUi({ hiddenTableColumnIds: next })
     },
     [patchBoardTableUi, tableUi.hiddenColumnIds]
-  )
-
-  /** Append a new column instance (unique id) to the left of the + control. */
-  const addCustomBoardColumn = useCallback(
-    (kind: HidableBoardColumnId) => {
-      const id = newCustomTableColumnId()
-      const nextCc = { ...tableUi.tableCustomColumns, [id]: { kind } }
-      const nextOrder = orderWithColumnBeforeAdd(tableUi.tableColumnOrder, id)
-      void patchBoardTableUi({
-        tableCustomColumns: nextCc,
-        tableColumnOrder: nextOrder,
-      })
-    },
-    [
-      patchBoardTableUi,
-      tableUi.tableCustomColumns,
-      tableUi.tableColumnOrder,
-    ]
   )
 
   const commitColumnTitle = useCallback(
@@ -1505,12 +1601,14 @@ export function EcosystraBoardMainView() {
                             setDeleteTarget({ kind: "item", id })
                           }
                           columnWidthsPx={tableUi.columnWidthsPx}
-                          onColumnWidthCommit={onColumnWidthCommit}
+                      onColumnWidthCommit={onColumnWidthCommit}
                           tableColumnOrder={tableUi.tableColumnOrder}
                           tableCustomColumns={tableUi.tableCustomColumns}
                           enableColumnDrag={group.id === columnDragGroupId}
                           onRowOrderCommit={onRowOrderCommit}
                           onAddBoardColumn={addCustomBoardColumn}
+                          onDuplicateBoardColumn={duplicateBoardColumn}
+                          onDeleteBoardColumn={deleteBoardColumn}
                           onRowSelectionChange={
                             groupSelectionHandlers[group.id]
                           }
