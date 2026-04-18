@@ -30,7 +30,6 @@ import {
   Search,
   Sparkles,
   Trash2,
-  User,
   UserPlus,
   X,
 } from "lucide-react"
@@ -105,6 +104,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  EcosystraBoardAvatar,
+  EcosystraBoardAvatarGroup,
+  EcosystraBoardLastUpdatedCell,
+} from "./ecosystra-board-avatars"
 import { EcosystraBoardAddColumnPopover } from "./ecosystra-board-add-column-popover"
 import { EcosystraBoardEditableColumnHeader } from "./ecosystra-board-editable-column-header"
 import { formatIdr } from "./ecosystra-board-format-idr"
@@ -486,28 +490,6 @@ function buildRowSegments(
   return out
 }
 
-function OwnerAvatarCell({
-  name,
-  avatarUrl,
-}: {
-  name: string
-  avatarUrl?: string | null
-}) {
-  const label = name.trim()
-  return (
-    <div className="flex justify-center" title={label || undefined}>
-      <Avatar className="size-8 shrink-0 rounded-full border border-border/60 text-[10px]">
-        {avatarUrl ? (
-          <AvatarImage src={avatarUrl} alt="" className="rounded-full" />
-        ) : null}
-        <AvatarFallback className="rounded-full bg-muted text-[10px] font-medium">
-          {label ? getInitials(label) : "?"}
-        </AvatarFallback>
-      </Avatar>
-    </div>
-  )
-}
-
 type AssigneeDisplay = {
   id: string
   name: string
@@ -663,41 +645,11 @@ function AssigneePicker({
           )}
           aria-label={assigneeButtonLabel}
         >
-          {hasPeople ? (
-            <div className="flex items-center justify-center ps-0.5">
-              {assignees.slice(0, 3).map((a, i) => (
-                <Avatar
-                  key={a.id}
-                  className={cn(
-                    "size-7 border-2 border-background",
-                    i > 0 && "-ms-2"
-                  )}
-                >
-                  {a.avatarUrl ? (
-                    <AvatarImage src={a.avatarUrl} alt="" className="rounded-full" />
-                  ) : null}
-                  <AvatarFallback className="rounded-full text-[9px] font-medium">
-                    {getInitials(a.name)}
-                  </AvatarFallback>
-                </Avatar>
-              ))}
-              {assignees.length > 3 ? (
-                <span className="-ms-1 rounded-full border border-border bg-muted px-1 text-[10px] font-semibold leading-none">
-                  +{assignees.length - 3}
-                </span>
-              ) : null}
-              {pendingInvites.length > 0 ? (
-                <span
-                  className="ms-0.5 inline-flex size-7 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 bg-muted/50"
-                  title={`${pendingInvites.length} pending`}
-                >
-                  <Mail className="size-3.5 text-muted-foreground" aria-hidden />
-                </span>
-              ) : null}
-            </div>
-          ) : (
-            <User className="size-4 text-muted-foreground" aria-hidden />
-          )}
+          <EcosystraBoardAvatarGroup
+            assignees={assignees}
+            pendingInvites={pendingInvites}
+            max={3}
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-3" align="start">
@@ -1477,18 +1429,15 @@ export function EcosystraBoardGroupTable({
         case "lastUpdated": {
           const rel = String(d[fk] ?? "—")
           const by = "User"
+          const avatarUrl =
+            (d.lastUpdated_avatarUrl as string | null | undefined) ?? null
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-              <div className="flex min-w-0 items-center gap-2">
-                <Avatar className="size-7 shrink-0 rounded-full border border-border/60 text-[10px]">
-                  <AvatarFallback className="bg-muted text-[10px] font-medium">
-                    {getInitials(by)}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="truncate text-xs text-muted-foreground">
-                  {rel}
-                </span>
-              </div>
+              <EcosystraBoardLastUpdatedCell
+                byName={by}
+                avatarUrl={avatarUrl}
+                relativeLabel={rel}
+              />
             </TableCell>
           )
         }
@@ -1536,7 +1485,7 @@ export function EcosystraBoardGroupTable({
           }
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-              <OwnerAvatarCell name={ownerName} avatarUrl={avatarUrl} />
+              <EcosystraBoardAvatar name={ownerName} avatarUrl={avatarUrl} />
             </TableCell>
           )
         }
@@ -1933,18 +1882,15 @@ export function EcosystraBoardGroupTable({
       case "lastUpdated": {
         const rel = String(d.lastUpdatedLabel ?? "—")
         const by = String(d.lastUpdatedBy ?? "User").trim() || "User"
+        const avatarUrl =
+          (d.lastUpdated_avatarUrl as string | null | undefined) ?? null
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <div className="flex min-w-0 items-center gap-2">
-              <Avatar className="size-7 shrink-0 rounded-full border border-border/60 text-[10px]">
-                <AvatarFallback className="bg-muted text-[10px] font-medium">
-                  {getInitials(by)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="truncate text-xs text-muted-foreground">
-                {rel}
-              </span>
-            </div>
+            <EcosystraBoardLastUpdatedCell
+              byName={by}
+              avatarUrl={avatarUrl}
+              relativeLabel={rel}
+            />
           </TableCell>
         )
       }
@@ -1978,7 +1924,7 @@ export function EcosystraBoardGroupTable({
         const avatarUrl = (d.owner_avatarUrl as string | null | undefined) ?? null
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <OwnerAvatarCell name={ownerName} avatarUrl={avatarUrl} />
+            <EcosystraBoardAvatar name={ownerName} avatarUrl={avatarUrl} />
           </TableCell>
         )
       }
