@@ -4,7 +4,7 @@
 
 **Semua secret (connection string Supabase, JWT, Pusher) hanya boleh ada di:**
 
-`ecosystra-clone/apps/api/.env`
+`shadboard/full-kit/.env.local` (atau `.env` server Anda)
 
 File ini **gitignored** — jangan commit. **Jangan** menempel password atau URL lengkap ke file markdown ini atau ke Git.
 
@@ -24,10 +24,10 @@ Ambil string koneksi dari Supabase Dashboard → **Project Settings → Database
 Dari folder API:
 
 ```bash
-cd ecosystra-clone/apps/api
-npx prisma generate
+cd shadboard/full-kit
+pnpm db:generate
 npx prisma db push
-# atau alur migrasi file: npx prisma migrate dev
+# atau alur migrasi file: pnpm migrate
 ```
 
 Ini menerapkan `prisma/schema.prisma` ke database (Workspace, Board, Group, Item, User domain, Notification, Member, …). **Tanpa** ini, API GraphQL tidak punya tabel yang benar.

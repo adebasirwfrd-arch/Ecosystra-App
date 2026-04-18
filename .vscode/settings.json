@@ -4,13 +4,11 @@
     "**/node_modules/**": true,
     "**/.next/**": true,
     "**/.git/objects/**": true,
-    "**/ecosystra-clone/**": true,
     "**/dist/**": true,
     "**/.turbo/**": true
   },
   "search.exclude": {
     "**/node_modules": true,
-    "**/.next": true,
-    "**/ecosystra-clone": true
+    "**/.next": true
   }
 }

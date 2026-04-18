@@ -1,0 +1,66 @@
+/**
+ * Vibe spacing scale — Foundations/Spacing (GRANDBOOK → vibe.monday.com).
+ * Scoped to embedded Ecosystra chrome only; use via var(--vibe-space-*).
+ *
+ * WCAG 2.1 AA — scoped overrides (inherit into board + chrome):
+ * - Text / placeholders: ≥4.5:1 vs background via stronger --muted-foreground.
+ * - UI borders / inputs: ≥3:1 vs adjacent background via --border / --input.
+ * - Focus ring color: ≥3:1 vs background via --ring (non-text).
+ */
+.chromeRoot {
+  --vibe-space-2: 2px;
+  --vibe-space-4: 4px;
+  --vibe-space-8: 8px;
+  --vibe-space-12: 12px;
+  --vibe-space-16: 16px;
+  --vibe-space-20: 20px;
+  --vibe-space-24: 24px;
+  --vibe-space-32: 32px;
+  --vibe-space-40: 40px;
+  --vibe-space-48: 48px;
+  --vibe-space-64: 64px;
+  --vibe-space-80: 80px;
+
+  /* Light: secondary text & placeholders (body bg ~ white) */
+  --muted-foreground: 240 5% 38%;
+  /* Light: control edges vs white — ~3:1 non-text vs background */
+  --border: 240 5% 52%;
+  --input: 240 5% 52%;
+  /* Focus indicator — strong blue vs white (~3:1+ for 2px ring) */
+  --ring: 221 83% 42%;
+}
+
+/* Dark theme (class on <html> from ModeProvider) */
+:global(html.dark) .chromeRoot {
+  --muted-foreground: 240 5% 78%;
+  --border: 240 4% 42%;
+  --input: 240 4% 42%;
+  --ring: 217 91% 62%;
+}
+
+/*
+ * Thicker, clearer focus on native controls (supplements Tailwind ring-1 on Input).
+ * Keeps keyboard focus ≥3:1 vs page background for the focus ring itself.
+ */
+.chromeRoot :global([data-slot="input"]):focus-visible,
+.chromeRoot :global([data-slot="textarea"]):focus-visible,
+.chromeRoot :global([data-slot="select-trigger"]):focus-visible,
+.chromeRoot :global([data-slot="checkbox"]):focus-visible,
+.chromeRoot :global([data-slot="button"]):focus-visible {
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  box-shadow: 0 0 0 2px hsl(var(--ring));
+}
+
+.chromeRoot :global([data-slot="breadcrumb-link"]):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+.chromeRoot :global([data-slot="input"])::placeholder,
+.chromeRoot :global([data-slot="textarea"])::placeholder {
+  /* Same token as UI text; avoid extra opacity that drops below 4.5:1 */
+  color: hsl(var(--muted-foreground));
+  opacity: 1;
+}

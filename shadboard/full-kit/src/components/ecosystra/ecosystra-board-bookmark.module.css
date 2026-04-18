@@ -1,0 +1,22 @@
+/**
+ * Monday-style “folded corner” labels (due priority, notes category).
+ * Foreground/background via inline style or CSS variables on the element.
+ */
+.bookmarkSelectTrigger {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  min-height: 1.75rem;
+  min-width: 7.5rem;
+  padding: 0.2rem 0.65rem 0.2rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border: none;
+  border-radius: 2px;
+  /* Top-right corner fold (Monday bookmark) */
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+}

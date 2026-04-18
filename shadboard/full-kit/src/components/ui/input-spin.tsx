@@ -20,6 +20,8 @@ interface InputSpinProps
   max?: number
   step?: number
   buttonVariant?: ComponentProps<typeof Button>["variant"]
+  /** When set, center shows formatted text (e.g. currency) instead of raw digits. */
+  formatDisplay?: (value: number) => string
 }
 
 export function InputSpin({
@@ -31,6 +33,7 @@ export function InputSpin({
   disabled = false,
   className,
   buttonVariant = "default",
+  formatDisplay,
   ...props
 }: InputSpinProps) {
   const [internalValue, setInternalValue] = useState<number>(value ?? 0)
@@ -73,6 +76,7 @@ export function InputSpin({
         disabled && "cursor-not-allowed opacity-50",
         className
       )}
+      {...(formatDisplay ? props : {})}
     >
       <Button
         type="button"
@@ -85,21 +89,30 @@ export function InputSpin({
       >
         <Minus className="h-4 w-4" />
       </Button>
-      <input
-        type="number"
-        value={internalValue}
-        className={cn(
-          "h-full w-10 border-0 bg-transparent text-sm text-center focus:outline-hidden focus:ring-0",
-          "[-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        )}
-        onChange={handleOnChange}
-        disabled={disabled}
-        min={min}
-        max={max}
-        step={step}
-        readOnly
-        {...props}
-      />
+      {formatDisplay ? (
+        <span
+          className="min-w-[6.5rem] max-w-[11rem] shrink truncate px-1 text-center text-sm tabular-nums"
+          title={String(internalValue)}
+        >
+          {formatDisplay(internalValue)}
+        </span>
+      ) : (
+        <input
+          type="number"
+          value={internalValue}
+          className={cn(
+            "h-full w-10 border-0 bg-transparent text-sm text-center focus:outline-hidden focus:ring-0",
+            "[-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          )}
+          onChange={handleOnChange}
+          disabled={disabled}
+          min={min}
+          max={max}
+          step={step}
+          readOnly
+          {...props}
+        />
+      )}
       <Button
         type="button"
         variant={buttonVariant}

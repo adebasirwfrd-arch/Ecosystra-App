@@ -190,17 +190,48 @@ export async function bootstrapProjectAndTask(params: {
   ]);
 }
 
+/** Replace assignee relation tuples for a task (multiple assignees supported). */
+export async function syncTaskAssigneeTuples(params: {
+  taskItemId: string;
+  previousUserIds: string[];
+  nextUserIds: string[];
+}): Promise<void> {
+  const prev = new Set(params.previousUserIds.filter(Boolean));
+  const next = new Set(params.nextUserIds.filter(Boolean));
+  for (const uid of prev) {
+    if (!next.has(uid)) {
+      await deleteTuple({
+        entityType: "task",
+        entityId: params.taskItemId,
+        relation: "assignee",
+        subjectType: "user",
+        subjectId: uid,
+      });
+    }
+  }
+  const toAdd = [...next].filter((uid) => !prev.has(uid));
+  if (toAdd.length === 0) return;
+  await writeTuples(
+    toAdd.map((uid) => ({
+      entityType: "task" as const,
+      entityId: params.taskItemId,
+      relation: "assignee",
+      subjectType: "user",
+      subjectId: uid,
+    }))
+  );
+}
+
 export async function setTaskAssigneeTuple(params: {
   taskItemId: string;
   assigneeUserId: string | null;
   previousAssigneeUserId?: string | null;
 }): Promise<void> {
-  if (params.previousAssigneeUserId && params.previousAssigneeUserId !== params.assigneeUserId) {
-    await deleteTuple({ entityType: "task", entityId: params.taskItemId, relation: "assignee", subjectType: "user", subjectId: params.previousAssigneeUserId });
-  }
-  if (params.assigneeUserId) {
-    await writeTuples([{ entityType: "task", entityId: params.taskItemId, relation: "assignee", subjectType: "user", subjectId: params.assigneeUserId }]);
-  }
+  await syncTaskAssigneeTuples({
+    taskItemId: params.taskItemId,
+    previousUserIds: params.previousAssigneeUserId ? [params.previousAssigneeUserId] : [],
+    nextUserIds: params.assigneeUserId ? [params.assigneeUserId] : [],
+  });
 }
 
 export async function setTaskOwnerTuple(params: {

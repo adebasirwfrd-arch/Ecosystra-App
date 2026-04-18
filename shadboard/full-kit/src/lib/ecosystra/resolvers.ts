@@ -1,17 +1,19 @@
+import { randomBytes } from "crypto";
 import GraphQLJSON from "graphql-type-json";
 import type { Prisma } from "@/generated/prisma";
 import type { AuthState } from "./auth";
 import { db as prisma, withPrismaRetry } from "@/lib/prisma";
 import { logItemFieldChange } from "./audit";
 import { enqueueTaskEmail } from "./email-queue";
+import { sendTaskAssigneeInviteEmail } from "./brevo-email";
 import {
   assertProjectAssign,
   assertTaskEdit,
   bootstrapProjectAndTask,
   ensureProjectTuples,
   permifyDisabled,
-  setTaskAssigneeTuple,
   setTaskOwnerTuple,
+  syncTaskAssigneeTuples,
 } from "./permify";
 import { isSuperUserEmail } from "./superuser";
 
@@ -274,15 +276,16 @@ function buildEmailFilter(filter: string, userId: string): Prisma.EcoEmailWhereI
 }
 
 async function getViewer(ctx: GqlContext) {
-  if (!ctx.auth.email) {
+  const email = ctx.auth.email;
+  if (!email) {
     throw new Error("UNAUTHORIZED");
   }
   return withPrismaRetry(() =>
     prisma.ecoUser.upsert({
-      where: { email: ctx.auth.email },
+      where: { email },
       create: {
-        email: ctx.auth.email,
-        name: ctx.auth.email.split("@")[0],
+        email,
+        name: email.split("@")[0],
       },
       update: {},
     })
@@ -337,10 +340,317 @@ async function loadBoardWithTree(boardId: string) {
   });
 }
 
+const MAX_TASK_ASSIGNEES = 25;
+const MAX_INVITE_EMAILS_PER_CALL = 20;
+
+function assertEcoTaskAssigneeInviteDelegate(
+  client: { ecoTaskAssigneeInvite?: { findMany: unknown } },
+  context: string
+): void {
+  if (!client.ecoTaskAssigneeInvite) {
+    throw new Error(
+      `${context}: Prisma client is stale (missing ecoTaskAssigneeInvite). Stop the dev server, run \`pnpm prisma generate\` and \`pnpm prisma db push\`, then restart.`
+    );
+  }
+}
+
+function normalizeAssigneeUserIdsFromDynamic(prev: Record<string, unknown>): string[] {
+  const raw = prev.assigneeUserIds;
+  if (Array.isArray(raw)) {
+    return [...new Set(raw.map((x) => String(x)).filter(Boolean))];
+  }
+  const single = prev.assigneeUserId;
+  if (typeof single === "string" && single.trim()) return [single.trim()];
+  return [];
+}
+
+function normalizeEmailAddr(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+function isValidEmailAddr(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+async function buildAssigneeDynamicData(
+  tx: Prisma.TransactionClient,
+  prev: Record<string, unknown>,
+  nextUserIds: string[],
+  itemId: string
+): Promise<Record<string, unknown>> {
+  const users =
+    nextUserIds.length > 0
+      ? await tx.ecoUser.findMany({ where: { id: { in: nextUserIds } } })
+      : [];
+  const order = new Map(nextUserIds.map((id, i) => [id, i]));
+  users.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  const assignees = nextUserIds.map((id) => {
+    const u = users.find((x) => x.id === id);
+    return u
+      ? {
+          id: u.id,
+          name: u.name?.trim() || u.email,
+          email: u.email,
+          avatarUrl: u.avatarUrl ?? null,
+        }
+      : { id, name: "", email: "", avatarUrl: null };
+  });
+  const first = assignees[0] as
+    | { id: string; name: string; email: string; avatarUrl: string | null }
+    | undefined;
+  assertEcoTaskAssigneeInviteDelegate(tx, "buildAssigneeDynamicData");
+  const pending = await tx.ecoTaskAssigneeInvite.findMany({
+    where: { itemId, status: "PENDING" },
+    select: { email: true, status: true },
+  });
+  return {
+    ...prev,
+    assigneeUserIds: nextUserIds,
+    assignees,
+    assigneeUserId: first?.id ?? null,
+    assignee: first?.name ?? "",
+    assigneeEmail: first?.email ?? null,
+    assignee_avatarUrl: first?.avatarUrl ?? null,
+    assigneePendingInvites: pending.map((p) => ({ email: p.email, status: p.status })),
+    last_updated: new Date().toISOString(),
+  };
+}
+
+async function executeSetTaskAssignees(
+  _: unknown,
+  {
+    itemId,
+    assigneeUserIds,
+    inviteEmails,
+  }: { itemId: string; assigneeUserIds: string[]; inviteEmails: string[] },
+  ctx: GqlContext
+) {
+  const viewer = await getViewer(ctx);
+  const item = await prisma.ecoItem.findUnique({
+    where: { id: itemId },
+    include: { board: { select: { id: true, workspaceId: true } } },
+  });
+  if (!item?.board) throw new Error("NOT_FOUND");
+  await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: itemId });
+  await assertProjectAssign({
+    prismaUserId: viewer.id,
+    email: ctx.auth.email,
+    projectBoardId: item.boardId,
+  });
+
+  const workspaceId = item.board.workspaceId;
+  const prev = (item.dynamicData as Record<string, unknown>) || {};
+  const prevIds = normalizeAssigneeUserIdsFromDynamic(prev);
+
+  const uniqueInputIds = [...new Set(assigneeUserIds)].slice(0, MAX_TASK_ASSIGNEES);
+  if (uniqueInputIds.length > 0) {
+    const members = await prisma.ecoMember.findMany({
+      where: { workspaceId, userId: { in: uniqueInputIds } },
+      select: { userId: true },
+    });
+    const memberSet = new Set(members.map((m) => m.userId));
+    for (const id of uniqueInputIds) {
+      if (!memberSet.has(id)) throw new Error("ASSIGNEE_NOT_IN_WORKSPACE");
+    }
+  }
+
+  const invitesToEmail: { token: string; email: string }[] = [];
+
+  assertEcoTaskAssigneeInviteDelegate(prisma, "setTaskAssignees");
+
+  const updated = await prisma.$transaction(async (tx) => {
+    assertEcoTaskAssigneeInviteDelegate(tx, "setTaskAssignees(tx)");
+    const normalizedInviteEmails = [
+      ...new Set(inviteEmails.map(normalizeEmailAddr).filter(isValidEmailAddr)),
+    ].slice(0, MAX_INVITE_EMAILS_PER_CALL);
+
+    const assignedEmails = new Set(
+      uniqueInputIds.length > 0
+        ? (
+            await tx.ecoUser.findMany({
+              where: { id: { in: uniqueInputIds } },
+              select: { email: true },
+            })
+          ).map((u) => u.email.toLowerCase())
+        : []
+    );
+
+    for (const email of normalizedInviteEmails) {
+      if (assignedEmails.has(email)) continue;
+      const existingInv = await tx.ecoTaskAssigneeInvite.findUnique({
+        where: { itemId_email: { itemId, email } },
+      });
+      if (existingInv?.status === "ACCEPTED") continue;
+
+      const token = randomBytes(24).toString("hex");
+      const row = await tx.ecoTaskAssigneeInvite.upsert({
+        where: { itemId_email: { itemId, email } },
+        create: {
+          itemId,
+          email,
+          token,
+          invitedByUserId: viewer.id,
+          workspaceId,
+          status: "PENDING",
+        },
+        update: {
+          token,
+          invitedByUserId: viewer.id,
+          status: "PENDING",
+        },
+      });
+      invitesToEmail.push({ token: row.token, email: row.email });
+    }
+
+    const nextData = await buildAssigneeDynamicData(tx, prev, uniqueInputIds, itemId);
+    const row = await tx.ecoItem.update({
+      where: { id: itemId },
+      data: { dynamicData: nextData as Prisma.InputJsonValue },
+    });
+    await logItemFieldChange(tx, {
+      itemId,
+      actorUserId: viewer.id,
+      fieldKey: "assignees",
+      oldValue: prevIds,
+      newValue: uniqueInputIds,
+    });
+    return row;
+  });
+
+  if (!permifyDisabled()) {
+    await syncTaskAssigneeTuples({
+      taskItemId: itemId,
+      previousUserIds: prevIds,
+      nextUserIds: uniqueInputIds,
+    });
+  }
+
+  const prevSet = new Set(prevIds);
+  const actor = await prisma.ecoUser.findUnique({
+    where: { id: viewer.id },
+    select: { name: true, email: true },
+  });
+  const actorLabel = actor?.name?.trim() || actor?.email || "Someone";
+
+  for (const uid of uniqueInputIds) {
+    if (prevSet.has(uid)) continue;
+    const assignee = await prisma.ecoUser.findUnique({ where: { id: uid } });
+    if (!assignee) continue;
+    try {
+      await prisma.ecoNotification.create({
+        data: {
+          userId: assignee.id,
+          title: `Assigned: ${updated.name}`,
+          message: `${actorLabel} assigned you to this task.`,
+          type: "task_assigned",
+          link: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
+        },
+      });
+    } catch (e) {
+      console.error("[notification] assignee notification failed", e);
+    }
+    if (assignee.email) {
+      await enqueueTaskEmail({
+        taskId: itemId,
+        assigneeEmail: assignee.email,
+        assigneeName: assignee.name,
+        changes: { assignee: { old: prev.assignee, new: assignee.name || assignee.email } },
+        deepLink: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
+        summary: `You were assigned to task "${updated.name}"`,
+      });
+      try {
+        const subject = `Assigned: ${updated.name}`;
+        const content = `You have been assigned to task "${updated.name}".\n\nOpen: ${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`;
+        await prisma.ecoEmail.create({
+          data: {
+            senderId: viewer.id,
+            recipientId: assignee.id,
+            subject,
+            content,
+            label: "work",
+            isSent: true,
+          },
+        });
+      } catch (e) {
+        console.warn("[setTaskAssignees] auto email row failed", e);
+      }
+    }
+  }
+
+  for (const inv of invitesToEmail) {
+    await sendTaskAssigneeInviteEmail({
+      toEmail: inv.email,
+      taskName: updated.name,
+      inviterName: actorLabel,
+      acceptUrl: `${appBaseUrl()}/board?acceptAssignee=${encodeURIComponent(inv.token)}`,
+    });
+  }
+
+  return updated;
+}
+
+async function executeAcceptTaskAssigneeInvite(
+  _: unknown,
+  { token }: { token: string },
+  ctx: GqlContext
+) {
+  const viewer = await getViewer(ctx);
+  assertEcoTaskAssigneeInviteDelegate(prisma, "acceptTaskAssigneeInvite");
+  const viewerUser = await prisma.ecoUser.findUnique({ where: { id: viewer.id } });
+  if (!viewerUser?.email) throw new Error("FORBIDDEN");
+
+  const invite = await prisma.ecoTaskAssigneeInvite.findFirst({
+    where: { token: token.trim(), status: "PENDING" },
+    include: { item: true },
+  });
+  if (!invite) throw new Error("NOT_FOUND");
+
+  if (viewerUser.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+    throw new Error("FORBIDDEN");
+  }
+
+  await prisma.ecoMember.upsert({
+    where: { userId_workspaceId: { userId: viewer.id, workspaceId: invite.workspaceId } },
+    create: { userId: viewer.id, workspaceId: invite.workspaceId, role: "MEMBER" },
+    update: {},
+  });
+
+  const item = invite.item;
+  const prev = (item.dynamicData as Record<string, unknown>) || {};
+  const prevIds = normalizeAssigneeUserIdsFromDynamic(prev);
+  const nextIds = prevIds.includes(viewer.id) ? prevIds : [...prevIds, viewer.id];
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.ecoTaskAssigneeInvite.update({
+      where: { id: invite.id },
+      data: { status: "ACCEPTED", acceptedAt: new Date(), acceptedUserId: viewer.id },
+    });
+    const nextData = await buildAssigneeDynamicData(tx, prev, nextIds, item.id);
+    return tx.ecoItem.update({
+      where: { id: item.id },
+      data: { dynamicData: nextData as Prisma.InputJsonValue },
+    });
+  });
+
+  if (!permifyDisabled()) {
+    await syncTaskAssigneeTuples({
+      taskItemId: item.id,
+      previousUserIds: prevIds,
+      nextUserIds: nextIds,
+    });
+  }
+
+  return updated;
+}
+
 export const resolvers = {
   JSON: GraphQLJSON,
 
   Board: {
+    createdAt: (board: { createdAt?: Date }) =>
+      board.createdAt instanceof Date
+        ? board.createdAt.toISOString()
+        : String(board.createdAt ?? ""),
     metadata: (board: { columns?: unknown }) => {
       const columns = board?.columns;
       if (columns && typeof columns === "object" && !Array.isArray(columns)) {
@@ -359,6 +669,37 @@ export const resolvers = {
         return (columns as { definitions: unknown[] }).definitions;
       }
       return [];
+    },
+  },
+
+  Group: {
+    items: async (group: { id: string; items?: unknown[] }) => {
+      if (Array.isArray(group.items)) return group.items;
+      return prisma.ecoItem.findMany({
+        where: { groupId: group.id, parentItemId: null },
+        include: { subitems: true },
+        orderBy: { createdAt: "asc" },
+      });
+    },
+  },
+
+  Item: {
+    createdAt: (item: { createdAt?: Date }) =>
+      item.createdAt instanceof Date
+        ? item.createdAt.toISOString()
+        : String(item.createdAt ?? ""),
+    updatedAt: (item: { updatedAt?: Date }) =>
+      item.updatedAt instanceof Date
+        ? item.updatedAt.toISOString()
+        : String(item.updatedAt ?? ""),
+    createdByUserId: (item: { createdByUserId?: string | null }) =>
+      item.createdByUserId ?? null,
+    subitems: async (item: { id: string; subitems?: unknown[] }) => {
+      if (Array.isArray(item.subitems)) return item.subitems;
+      return prisma.ecoItem.findMany({
+        where: { parentItemId: item.id },
+        orderBy: { createdAt: "asc" },
+      });
     },
   },
 
@@ -675,101 +1016,24 @@ export const resolvers = {
       });
     },
 
+    setTaskAssignees: executeSetTaskAssignees,
+
     setTaskAssignee: async (
       _: unknown,
       { itemId, assigneeUserId }: { itemId: string; assigneeUserId: string | null },
       ctx: GqlContext
-    ) => {
-      const viewer = await getViewer(ctx);
-      const item = await prisma.ecoItem.findUnique({ where: { id: itemId } });
-      if (!item) throw new Error("NOT_FOUND");
-      await assertTaskEdit({ prismaUserId: viewer.id, email: ctx.auth.email, taskItemId: itemId });
+    ) =>
+      executeSetTaskAssignees(
+        _,
+        {
+          itemId,
+          assigneeUserIds: assigneeUserId ? [assigneeUserId] : [],
+          inviteEmails: [],
+        },
+        ctx
+      ),
 
-      const prev = (item.dynamicData as Record<string, unknown>) || {};
-      const prevAssignee = (prev.assigneeUserId as string) || null;
-      const assignee = assigneeUserId ? await prisma.ecoUser.findUnique({ where: { id: assigneeUserId } }) : null;
-
-      const updated = await prisma.$transaction(async (tx) => {
-        const nextData = {
-          ...prev,
-          assignee: assignee?.name || assignee?.email || "",
-          assigneeUserId: assignee?.id || null,
-          assigneeEmail: assignee?.email || null,
-          assignee_avatarUrl: assignee?.avatarUrl ?? null,
-          last_updated: new Date().toISOString(),
-        };
-        const row = await tx.ecoItem.update({ where: { id: itemId }, data: { dynamicData: nextData } });
-        await logItemFieldChange(tx, {
-          itemId, actorUserId: viewer.id, fieldKey: "assignee",
-          oldValue: prev.assignee, newValue: nextData.assignee,
-        });
-        return row;
-      });
-
-      if (!permifyDisabled()) {
-        await setTaskAssigneeTuple({
-          taskItemId: itemId, assigneeUserId: assignee?.id || null, previousAssigneeUserId: prevAssignee,
-        });
-      }
-
-      const assigneeChanged = (prevAssignee || null) !== (assignee?.id || null);
-
-      if (assignee && assigneeChanged) {
-        try {
-          const actor = await prisma.ecoUser.findUnique({ where: { id: viewer.id }, select: { name: true, email: true } });
-          const actorLabel = actor?.name?.trim() || actor?.email || "Someone";
-          await prisma.ecoNotification.create({
-            data: {
-              userId: assignee.id,
-              title: `Assigned: ${item.name}`,
-              message: `${actorLabel} assigned you to this task.`,
-              type: "task_assigned",
-              link: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
-            },
-          });
-        } catch (e) {
-          console.error("[notification] assignee notification failed", e);
-        }
-      }
-
-      if (assignee?.email && assigneeChanged) {
-        await enqueueTaskEmail({
-          taskId: itemId, assigneeEmail: assignee.email, assigneeName: assignee.name,
-          changes: { assignee: { old: prev.assignee, new: assignee.name || assignee.email } },
-          deepLink: `${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`,
-          summary: `You were assigned to task "${item.name}"`,
-        });
-
-        try {
-          const subject = `Assigned: ${item.name}`;
-          const content = `You have been assigned to task "${item.name}".\n\nOpen the task: ${appBaseUrl()}/board?task=${encodeURIComponent(itemId)}`;
-          await prisma.ecoEmail.create({
-            data: {
-              senderId: viewer.id,
-              recipientId: assignee.id,
-              subject,
-              content,
-              label: "work",
-              isSent: false,
-            },
-          });
-          await prisma.ecoEmail.create({
-            data: {
-              senderId: viewer.id,
-              recipientId: assignee.id,
-              subject,
-              content,
-              label: "work",
-              isSent: true,
-            },
-          });
-        } catch (e) {
-          console.warn("[setTaskAssignee] auto email row failed", e);
-        }
-      }
-
-      return updated;
-    },
+    acceptTaskAssigneeInvite: executeAcceptTaskAssigneeInvite,
 
     assignMemberRole: async (
       _: unknown,
@@ -842,11 +1106,27 @@ export const resolvers = {
     ) => {
       const viewer = await getViewer(ctx);
       await assertProjectAssign({ prismaUserId: viewer.id, email: ctx.auth.email, projectBoardId: args.boardId });
+      let groupId = args.groupId ?? null;
+      if (args.parentItemId && !groupId) {
+        const parent = await prisma.ecoItem.findUnique({
+          where: { id: args.parentItemId },
+          select: { groupId: true },
+        });
+        groupId = parent?.groupId ?? null;
+      }
+      const creator = await prisma.ecoUser.findUnique({ where: { id: viewer.id } });
+      const incoming = (args.dynamicData || {}) as Record<string, unknown>;
+      const dynamicData: Record<string, unknown> = {
+        ...incoming,
+        owner: creator?.name?.trim() || creator?.email || "",
+        ownerUserId: viewer.id,
+        owner_avatarUrl: creator?.avatarUrl ?? null,
+      };
       const item = await prisma.ecoItem.create({
         data: {
-          name: args.name, boardId: args.boardId, groupId: args.groupId,
+          name: args.name, boardId: args.boardId, groupId,
           parentItemId: args.parentItemId,
-          dynamicData: (args.dynamicData || {}) as Prisma.InputJsonValue,
+          dynamicData: dynamicData as Prisma.InputJsonValue,
           createdByUserId: viewer.id,
         },
       });

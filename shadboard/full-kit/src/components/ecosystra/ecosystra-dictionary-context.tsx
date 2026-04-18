@@ -1,11 +1,9 @@
 "use client"
 
+import { createContext, useContext } from "react"
+
 import type { DictionaryType } from "@/lib/get-dictionary"
-import {
-  createContext,
-  useContext,
-  type ReactNode,
-} from "react"
+import type { ReactNode } from "react"
 
 const EcosystraDictionaryContext = createContext<DictionaryType | null>(null)
 

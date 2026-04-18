@@ -2,7 +2,6 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 @import "./themes.css";
-@import "../../../../ecosystra-clone/apps/web/src/index.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -289,13 +288,4 @@ aside.EmojiPickerReact {
   border-width: 1px;
 }
 
-/* Ecosystra embedded in Shadboard: align board chrome with card insets */
-[data-ecosystra-embedded="true"] .board-header {
-  padding: 1rem 1rem 0;
-}
-
-@media (min-width: 768px) {
-  [data-ecosystra-embedded="true"] .board-header {
-    padding-inline: 1.25rem;
-  }
-}
+/* Ecosystra embedded UI lives in `src/components/ecosystra` (no external clone CSS). */

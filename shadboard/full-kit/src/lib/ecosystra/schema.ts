@@ -40,10 +40,19 @@ export const typeDefs = `#graphql
     boardId: ID!
     groupId: ID
     parentItemId: ID
+    createdByUserId: ID
     subitems: [Item!]
     dynamicData: JSON!
     createdAt: String!
     updatedAt: String!
+  }
+
+  type TaskAssigneeInvite {
+    id: ID!
+    itemId: ID!
+    email: String!
+    status: String!
+    createdAt: String!
   }
 
   type TaskAuditEntry {
@@ -130,6 +139,9 @@ export const typeDefs = `#graphql
     markNotificationAsRead(id: ID!): Notification!
     setTaskOwner(itemId: ID!, ownerUserId: ID): Item!
     setTaskAssignee(itemId: ID!, assigneeUserId: ID): Item!
+    """Replace workspace-member assignees; optional inviteEmails create pending invites (Brevo)."""
+    setTaskAssignees(itemId: ID!, assigneeUserIds: [ID!]!, inviteEmails: [String!]!): Item!
+    acceptTaskAssigneeInvite(token: String!): Item!
     assignMemberRole(workspaceId: ID!, userId: ID!, role: String!): Member!
     sendEmail(
       to: String!

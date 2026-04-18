@@ -3,7 +3,13 @@
   "private": true,
   "packageManager": "pnpm@10.19.0",
   "scripts": {
-    "build": "pnpm --filter shadboard-nextjs-full-kit run build"
+    "build": "pnpm --filter shadboard-nextjs-full-kit run build",
+    "dev": "pnpm --filter shadboard-nextjs-full-kit run dev:3002",
+    "dev:3002": "pnpm --filter shadboard-nextjs-full-kit run dev:3002",
+    "db:generate": "pnpm --filter shadboard-nextjs-full-kit run db:generate",
+    "db:push": "pnpm --filter shadboard-nextjs-full-kit run db:push",
+    "db:studio": "pnpm --filter shadboard-nextjs-full-kit run db:studio",
+    "migrate": "pnpm --filter shadboard-nextjs-full-kit run migrate"
   },
   "devDependencies": {
     "next": "15.5.15"

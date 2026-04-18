@@ -1,0 +1,296 @@
+/**
+ * Board surface — semantic colors + spacing tokens (GRANDBOOK / Vibe foundations).
+ * Scope with `boardSurface.boardRoot` on the board section.
+ *
+ * “Monday board” table chrome: minimal borders (#E6E9EF family), white surfaces,
+ * product palette for status pills (pairs tuned for verify-ecosystra-contrast.mjs).
+ */
+.boardRoot {
+  /* Spacing — Foundations/Spacing */
+  --vibe-space-2: 2px;
+  --vibe-space-4: 4px;
+  --vibe-space-8: 8px;
+  --vibe-space-12: 12px;
+  --vibe-space-16: 16px;
+  --vibe-space-20: 20px;
+  --vibe-space-24: 24px;
+  --vibe-space-32: 32px;
+
+  /* Product / board chrome (Monday-like) */
+  --eco-brand: #0073ea;
+  --eco-group-todo: #579bfc;
+  --eco-group-new: #e2445c;
+
+  /* Light grid & surfaces — low visual noise */
+  --eco-board-outer-border: #e6e9ef;
+  --eco-board-row-divider: #eceff4;
+  --eco-board-header-bottom: #e6e9ef;
+  --eco-board-header-bg: #ffffff;
+  --eco-board-header-fg: #676879;
+  --eco-board-row-hover: #f6f7fb;
+  /** Row checkbox selection — matches Tailwind `blue-50` / `blue-100` on `<TableRow highlighted>` */
+  --eco-board-row-selected-bg: #eff6ff;
+  --eco-board-row-selected-hover-bg: #dbeafe;
+  --eco-board-footer-bg: #fafbfc;
+  --eco-board-sticky-sep: #e6e9ef;
+  --eco-board-card-bg: #ffffff;
+  /** Tab strip: inactive label (Monday ui-gray) */
+  --eco-board-toolbar-inactive: #676879;
+
+  /* Legacy soft pills (non-mono contexts) */
+  --eco-pill-timeline-bg: #e5f0ff;
+  --eco-pill-timeline-fg: #0066cc;
+  --eco-priority-low-bg: #dff0ff;
+  --eco-priority-low-fg: #0066cc;
+  --eco-priority-med-bg: #e8e9ff;
+  --eco-priority-med-fg: #4a3dad;
+  --eco-priority-high-bg: #ede5ff;
+  --eco-priority-high-fg: #401694;
+  --eco-due-critical-bg: #fff2e1;
+  --eco-due-critical-fg: #8f4a00;
+  --eco-notes-action-bg: #ffeec4;
+  --eco-notes-action-fg: #a35b00;
+  --eco-notes-meeting-bg: #e5f7e8;
+  --eco-notes-meeting-fg: #037f4c;
+  --eco-notes-general-bg: #ffe5e5;
+  --eco-notes-general-fg: #c42d47;
+
+  /**
+   * Main table — solid pills (Monday product hues; *-fg on *-bg verified by script).
+   * Timeline / brand blue: #579BFC family; status: orange / green / red from references.
+   */
+  /* Timeline blue: near Monday #579BFC; deep enough for white text (AA). */
+  --eco-mono-timeline-bg: #1d4ed8;
+  --eco-mono-timeline-fg: #ffffff;
+  /* Working — Monday orange #FDAB3D; dark label for AA on bright orange */
+  --eco-mono-status-working-bg: #fdab3d;
+  --eco-mono-status-working-fg: #1f2937;
+  /* Done green: near Monday #00C875; deepened for white label (AA). */
+  --eco-mono-status-done-bg: #047857;
+  --eco-mono-status-done-fg: #ffffff;
+  --eco-mono-status-stuck-bg: #df2f4a;
+  --eco-mono-status-stuck-fg: #ffffff;
+  --eco-mono-status-notstarted-bg: #c5c7d0;
+  --eco-mono-status-notstarted-fg: #323338;
+  /* Priority — Monday-style Low (sky) / Medium (indigo) / High (deep purple) */
+  --eco-mono-priority-low-bg: #66ccff;
+  --eco-mono-priority-low-fg: #1f2937;
+  --eco-mono-priority-med-bg: #5559df;
+  --eco-mono-priority-med-fg: #ffffff;
+  --eco-mono-priority-high-bg: #401694;
+  --eco-mono-priority-high-fg: #ffffff;
+  /* Notes & due — saturated chips */
+  --eco-mono-notes-action-bg: #fdab3d;
+  --eco-mono-notes-action-fg: #1f2937;
+  --eco-mono-notes-meeting-bg: #047857;
+  --eco-mono-notes-meeting-fg: #ffffff;
+  --eco-mono-notes-general-bg: #df2f4a;
+  --eco-mono-notes-general-fg: #ffffff;
+  --eco-mono-due-critical-bg: #fdab3d;
+  --eco-mono-due-critical-fg: #1f2937;
+  --eco-table-header-bg: #ffffff;
+}
+
+/**
+ * Dark mode — board-only surfaces (scoped under `.boardRoot` inside `.dark`).
+ * Keeps product pill tokens; flips neutrals for table + toolbar.
+ */
+:global(.dark) .boardRoot {
+  --eco-board-outer-border: #3f3f46;
+  --eco-board-row-divider: #27272a;
+  --eco-board-header-bottom: #3f3f46;
+  --eco-board-header-bg: #18181b;
+  --eco-board-header-fg: #a1a1aa;
+  --eco-board-row-hover: #27272a;
+  --eco-board-row-selected-bg: rgb(23 37 84 / 0.4);
+  --eco-board-row-selected-hover-bg: rgb(30 64 175 / 0.45);
+  --eco-board-footer-bg: #18181b;
+  --eco-board-sticky-sep: #3f3f46;
+  --eco-board-card-bg: #18181b;
+  --eco-table-header-bg: #18181b;
+  --eco-board-toolbar-inactive: #a1a1aa;
+}
+
+/** View tabs — underline active state (Monday main table). */
+.boardToolbarTablist {
+  height: auto !important;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  /* Horizontal flex spacing — medium between related tabs (Vibe space-8) */
+  gap: var(--vibe-space-8);
+  border-radius: 0 !important;
+  border: none !important;
+  border-bottom: 1px solid var(--eco-board-row-divider) !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.boardToolbarTab {
+  position: relative;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  border-radius: 0.375rem 0.375rem 0 0 !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  color: var(--eco-board-toolbar-inactive) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.boardToolbarTab[data-state="active"] {
+  color: var(--eco-brand) !important;
+  box-shadow: inset 0 -2px 0 0 var(--eco-brand) !important;
+}
+
+.boardToolbarTab:disabled {
+  opacity: 0.45;
+}
+
+.boardToolbarBadge {
+  border: none !important;
+  background-color: var(--eco-board-row-hover) !important;
+  color: var(--eco-board-header-fg) !important;
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+}
+
+/** Secondary toolbar row (search, filters). */
+.boardToolbarActions {
+  border-bottom: 1px solid var(--eco-board-row-divider);
+}
+
+/** Split “New task” control — single brand surface + subtle divider. */
+.boardNewTaskPrimary {
+  border-radius: 0.375rem 0 0 0.375rem !important;
+  border: none !important;
+  background-color: var(--eco-brand) !important;
+  color: #ffffff !important;
+}
+
+.boardNewTaskPrimary:hover {
+  filter: brightness(1.06);
+}
+
+.boardNewTaskSplit {
+  border-radius: 0 0.375rem 0.375rem 0 !important;
+  border: none !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.35) !important;
+  background-color: var(--eco-brand) !important;
+  color: #ffffff !important;
+}
+
+.boardNewTaskSplit:hover {
+  filter: brightness(1.06);
+}
+
+:global(.dark) .monoTableWrap :global([data-sticky="true"]) {
+  box-shadow: 4px 0 14px -6px rgba(0, 0, 0, 0.45);
+}
+
+/**
+ * Monday-style board table: no vertical grid, hairline row dividers, flat header,
+ * sticky column edge only where needed.
+ *
+ * Do not set `overflow: hidden` on `<table>` — it breaks `position: sticky` during
+ * horizontal scroll (Vibe / GRANDBOOK sticky column). Scrolling lives on the wrapper
+ * (`overflow-auto` in `Table`); the table stays `overflow: visible`.
+ */
+.monoTableWrap :global(table) {
+  overflow: visible;
+  border-radius: 8px;
+  border: 1px solid var(--eco-board-outer-border) !important;
+  background-color: var(--eco-board-card-bg);
+  box-shadow: none;
+}
+
+.monoTableWrap :global(thead th),
+.monoTableWrap :global(tbody td),
+.monoTableWrap :global(tbody th) {
+  border-inline-end: none !important;
+  border-bottom: 1px solid var(--eco-board-row-divider) !important;
+}
+
+.monoTableWrap :global(thead tr) {
+  background-color: var(--eco-table-header-bg) !important;
+}
+
+.monoTableWrap :global(thead th) {
+  color: var(--eco-board-header-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.monoTableWrap :global([data-sticky="true"]) {
+  border-inline-end: 1px solid var(--eco-board-sticky-sep) !important;
+  box-shadow: 4px 0 12px -8px rgba(87, 155, 252, 0.2);
+}
+
+/**
+ * Sticky body cells must match row surface + sit above scrolling cells (z-index).
+ * Scrolling columns paint under these when background is opaque.
+ */
+.monoTableWrap :global(tbody td[data-sticky="true"]),
+.monoTableWrap :global(tbody th[data-sticky="true"]) {
+  z-index: 2 !important;
+  background-color: var(--eco-board-card-bg) !important;
+}
+
+.monoTableWrap :global(tbody tr:hover td[data-sticky="true"]),
+.monoTableWrap :global(tbody tr:hover th[data-sticky="true"]) {
+  background-color: var(--eco-board-row-hover) !important;
+}
+
+/**
+ * Sticky columns use `!important` backgrounds above — Tailwind `group-data` highlight
+ * cannot win. Mirror selected row blue (same as non-sticky cells) when `tr[data-highlighted="true"]`.
+ */
+.monoTableWrap :global(tbody tr[data-highlighted="true"] td[data-sticky="true"]),
+.monoTableWrap :global(tbody tr[data-highlighted="true"] th[data-sticky="true"]) {
+  background-color: var(--eco-board-row-selected-bg) !important;
+}
+
+.monoTableWrap :global(tbody tr[data-highlighted="true"]:hover td[data-sticky="true"]),
+.monoTableWrap :global(tbody tr[data-highlighted="true"]:hover th[data-sticky="true"]) {
+  background-color: var(--eco-board-row-selected-hover-bg) !important;
+}
+
+.monoTableWrap :global(thead [data-sticky="true"]) {
+  z-index: 3 !important;
+  background-color: var(--eco-table-header-bg) !important;
+}
+
+.monoTableWrap :global(tbody tr) {
+  background-color: var(--eco-board-card-bg);
+  transition: background-color 0.12s ease;
+}
+
+.monoTableWrap :global(tbody tr:hover) {
+  background-color: var(--eco-board-row-hover) !important;
+}
+
+.monoTableWrap :global(tbody tr[data-highlighted="true"]) {
+  background-color: var(--eco-board-row-selected-bg) !important;
+}
+
+.monoTableWrap :global(tbody tr[data-highlighted="true"]:hover) {
+  background-color: var(--eco-board-row-selected-hover-bg) !important;
+}
+
+.monoTableWrap :global(tfoot tr) {
+  background-color: var(--eco-board-footer-bg) !important;
+}
+
+.monoTableWrap :global(tfoot td),
+.monoTableWrap :global(tfoot th) {
+  border-bottom: none !important;
+  border-top: 1px solid var(--eco-board-row-divider) !important;
+}
+
+.monoTableWrap :global(tfoot) {
+  border-top: none !important;
+  background: transparent !important;
+}

@@ -121,3 +121,68 @@ export async function sendTaskNotificationEmail(
   );
   return { ok: true };
 }
+
+export type TaskAssigneeInviteEmailPayload = {
+  toEmail: string;
+  toName?: string | null;
+  taskName: string;
+  inviterName: string;
+  acceptUrl: string;
+};
+
+/** Invite someone by email to accept a task assignment (approval via link). */
+export async function sendTaskAssigneeInviteEmail(
+  payload: TaskAssigneeInviteEmailPayload
+): Promise<{ ok: boolean; message?: string }> {
+  const key = apiKey();
+  if (!key) {
+    console.warn("[brevo] BREVO_API_KEY not set — skip invite email");
+    return { ok: false, message: "no_api_key" };
+  }
+
+  const senderEmail =
+    process.env.BREVO_SENDER_EMAIL?.trim() || "noreply@example.com";
+  const senderName = process.env.BREVO_SENDER_NAME?.trim() || "Ecosystra";
+  const subject = `[Ecosystra] Invitation: ${payload.taskName}`;
+  const hrefSafe = payload.acceptUrl
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;");
+  const htmlContent = `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8" /></head>
+<body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1a1a1a">
+  <p><strong>${escapeHtml(payload.inviterName)}</strong> invited you to collaborate on <strong>${escapeHtml(payload.taskName)}</strong>.</p>
+  <p><a href="${hrefSafe}" style="display:inline-block;padding:12px 20px;background:#0073ea;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Accept invitation</a></p>
+  <p style="font-size:12px;color:#666">If the button does not work, copy this link:<br/>${escapeHtml(
+    payload.acceptUrl
+  )}</p>
+</body></html>`;
+
+  const res = await fetch(`${BREVO_API}/smtp/email`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": key,
+    },
+    body: JSON.stringify({
+      sender: { name: senderName, email: senderEmail },
+      to: [
+        {
+          email: payload.toEmail,
+          name: payload.toName || payload.toEmail,
+        },
+      ],
+      subject,
+      htmlContent,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("[brevo] invite email failed", res.status, errText.slice(0, 500));
+    return { ok: false, message: errText };
+  }
+  console.info("[brevo] invite email sent", payload.toEmail);
+  return { ok: true };
+}

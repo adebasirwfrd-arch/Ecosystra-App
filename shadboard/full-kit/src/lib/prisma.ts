@@ -85,16 +85,17 @@ declare global {
   /**
    * Bumped when Prisma schema/client shape changes so dev HMR cannot reuse a stale engine
    * (e.g. new columns — old singleton would throw "Unknown argument …" on new fields).
-   * Last bump: force refresh after `pnpm prisma generate` (EcoChatThread ecoItem include).
+   * Last bump: EcoTaskAssigneeInvite — stale singleton had no `ecoTaskAssigneeInvite` delegate
+   * ("Cannot read properties of undefined (reading 'findUnique')").
    */
   // eslint-disable-next-line no-var
-  var prismaShadboardV11: undefined | ReturnType<typeof prismaClientSingleton>
+  var prismaShadboardV12: undefined | ReturnType<typeof prismaClientSingleton>
 }
 
-const db = globalThis.prismaShadboardV11 ?? prismaClientSingleton()
+const db = globalThis.prismaShadboardV12 ?? prismaClientSingleton()
 
 // If not in production, reuse the Prisma instance across hot reloads
-if (process.env.NODE_ENV !== "production") globalThis.prismaShadboardV11 = db
+if (process.env.NODE_ENV !== "production") globalThis.prismaShadboardV12 = db
 
 function isTransientConnectionError(e: unknown): boolean {
   if (typeof e === "object" && e !== null && "code" in e) {

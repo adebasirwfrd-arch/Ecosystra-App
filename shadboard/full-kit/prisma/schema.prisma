@@ -203,13 +203,14 @@ model CrmSalesRep {
 // ============================================================
 
 model EcoWorkspace {
-  id          String       @id @default(uuid())
-  name        String
-  description String?
-  folders     EcoFolder[]
-  boards      EcoBoard[]
-  members     EcoMember[]
-  createdAt   DateTime     @default(now())
+  id                 String                  @id @default(uuid())
+  name               String
+  description        String?
+  folders            EcoFolder[]
+  boards             EcoBoard[]
+  members            EcoMember[]
+  taskAssigneeInvites EcoTaskAssigneeInvite[]
+  createdAt          DateTime                @default(now())
 
   @@map("Workspace")
   @@schema("public")
@@ -274,8 +275,33 @@ model EcoItem {
   updatedAt       DateTime  @updatedAt
   auditLogs       EcoTaskAuditLog[]
   chatThreads     EcoChatThread[]
+  assigneeInvites EcoTaskAssigneeInvite[]
 
   @@map("Item")
+  @@schema("public")
+}
+
+/// Pending email invites for task assignees (Brevo). Accept flow adds user to workspace + assignees.
+model EcoTaskAssigneeInvite {
+  id              String         @id @default(uuid())
+  itemId          String
+  item            EcoItem        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  email           String
+  token           String         @unique
+  invitedByUserId String
+  invitedBy       EcoUser        @relation("TaskAssigneeInviteSentBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  workspace       EcoWorkspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// PENDING | ACCEPTED | REVOKED
+  status          String         @default("PENDING")
+  createdAt       DateTime       @default(now())
+  acceptedAt      DateTime?
+  acceptedUserId  String?
+
+  @@unique([itemId, email])
+  @@index([token])
+  @@index([workspaceId])
+  @@map("TaskAssigneeInvite")
   @@schema("public")
 }
 
@@ -294,6 +320,7 @@ model EcoUser {
   emailsReceived EcoEmail[]         @relation("EmailsReceived")
   chatMemberships EcoChatMember[]
   chatMessagesSent EcoChatMessage[]
+  taskAssigneeInvitesSent EcoTaskAssigneeInvite[] @relation("TaskAssigneeInviteSentBy")
   createdAt      DateTime           @default(now())
 
   @@map("User")

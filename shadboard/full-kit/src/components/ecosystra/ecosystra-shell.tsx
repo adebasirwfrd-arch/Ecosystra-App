@@ -3,10 +3,9 @@
 import { EcosystraApp } from "./ecosystra-app"
 
 /**
- * Shell wrapper for the embedded Ecosystra app.
- * We avoid `next/dynamic` here: dynamic-splitting the module that imports
- * `ecosystra-clone/.../App` can break Webpack chunk wiring (runtime
- * "Cannot read properties of undefined (reading 'call')") with `externalDir`.
+ * Shell wrapper for the embedded Ecosystra app (`EcosystraApp` under
+ * `src/components/ecosystra`). Avoid `next/dynamic` here so the client tree
+ * stays stable across `/apps/ecosystra/*` navigations.
  */
 export function EcosystraShell() {
   return <EcosystraApp />
