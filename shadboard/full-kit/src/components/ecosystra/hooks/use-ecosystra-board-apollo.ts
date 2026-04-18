@@ -7,20 +7,21 @@ import { toast } from "sonner"
 import type { DictionaryType } from "@/lib/get-dictionary"
 
 import {
+  ACCEPT_TASK_ASSIGNEE_INVITE,
   CREATE_GROUP,
   CREATE_ITEM,
   DELETE_GROUP,
   DELETE_ITEM,
   GET_OR_CREATE_BOARD,
+  MOVE_ITEM_TO_GROUP,
   SEARCH_WORKSPACE,
-  ACCEPT_TASK_ASSIGNEE_INVITE,
   SET_TASK_ASSIGNEE,
   SET_TASK_ASSIGNEES,
   SET_TASK_OWNER,
   UPDATE_BOARD,
   UPDATE_BOARD_METADATA,
+  UPDATE_BOARD_SUBITEM_COLUMNS,
   UPDATE_GROUP,
-  MOVE_ITEM_TO_GROUP,
   UPDATE_ITEM,
   UPDATE_ITEM_DYNAMIC_DATA,
   WORKSPACE_USERS,
@@ -102,6 +103,7 @@ export const HIDABLE_COLUMN_IDS = [
   "timeline",
   "priority",
   "budget",
+  "rating",
   "duePriority",
   "notes",
   "notesCategory",
@@ -125,6 +127,7 @@ export const BOARD_TABLE_COLUMN_IDS: readonly string[] = [
   "duePriority",
   "owner",
   "assignee",
+  "rating",
   "add",
 ] as const
 
@@ -189,7 +192,11 @@ export function orderWithColumnBeforeAdd(
     : [...stripped, columnId, "add"]
 }
 
-export function reorderArray<T>(list: T[], fromIndex: number, toIndex: number): T[] {
+export function reorderArray<T>(
+  list: T[],
+  fromIndex: number,
+  toIndex: number
+): T[] {
   if (
     fromIndex === toIndex ||
     fromIndex < 0 ||
@@ -254,6 +261,141 @@ function ensureOwnerColumnInOrder(order: string[]): string[] {
   const ai = order.indexOf("assignee")
   if (ai >= 0) return [...order.slice(0, ai), "owner", ...order.slice(ai)]
   return order
+}
+
+/** Keep the sticky "+ add column" id last (main and sub-item tables). */
+export function ensureAddColumnLastInOrder(order: string[]): string[] {
+  if (!order.length) return ["add"]
+  if (!order.includes("add")) return [...order, "add"]
+  return [...order.filter((id) => id !== "add"), "add"]
+}
+
+/**
+ * Default sub-item nested table column ids — same set and order as the main table
+ * so default pixel widths from `allColumns` match the primary board.
+ */
+export const SUBITEM_DEFAULT_BOARD_COLUMN_IDS: readonly string[] =
+  BOARD_TABLE_COLUMN_IDS
+
+export type SubitemBoardTableUi = {
+  hiddenColumnIds: HidableBoardColumnId[]
+  columnWidthsPx: Record<string, number>
+  tableColumnOrder: string[]
+  tableCustomColumns: Record<string, TableCustomColumnDef>
+  tableColumnTitles: Record<string, string>
+  /** Per parent task id: ordered sub-item ids for drag-reorder within the nested table. */
+  itemOrdersByParent: Record<string, string[]>
+}
+
+export function parseSubitemBoardTableUi(raw: unknown): SubitemBoardTableUi {
+  const base =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {}
+  const rawHidden = base.hiddenTableColumnIds
+  const hidden = Array.isArray(rawHidden)
+    ? rawHidden.filter((id): id is HidableBoardColumnId =>
+        HIDABLE_COLUMN_IDS.includes(id as HidableBoardColumnId)
+      )
+    : []
+  const rawW = base.tableColumnWidthsPx
+  const columnWidthsPx: Record<string, number> = {}
+  if (
+    rawW &&
+    typeof rawW === "object" &&
+    rawW !== null &&
+    !Array.isArray(rawW)
+  ) {
+    for (const [k, v] of Object.entries(rawW)) {
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+        columnWidthsPx[k] = v
+      }
+    }
+  }
+  const tableCustomColumns: Record<string, TableCustomColumnDef> = {}
+  const rawCc = base.tableCustomColumns
+  if (
+    rawCc &&
+    typeof rawCc === "object" &&
+    rawCc !== null &&
+    !Array.isArray(rawCc)
+  ) {
+    for (const [k, v] of Object.entries(rawCc)) {
+      if (
+        typeof k === "string" &&
+        k.startsWith("c_") &&
+        v &&
+        typeof v === "object" &&
+        !Array.isArray(v) &&
+        "kind" in v
+      ) {
+        const kind = (v as { kind?: unknown }).kind
+        if (HIDABLE_COLUMN_IDS.includes(kind as HidableBoardColumnId)) {
+          tableCustomColumns[k] = { kind: kind as HidableBoardColumnId }
+        }
+      }
+    }
+  }
+  const customColumnIds = Object.keys(tableCustomColumns)
+  const rawOrder = base.tableColumnOrder
+  const rawOrderArr = Array.isArray(rawOrder)
+    ? rawOrder.filter((x): x is string => typeof x === "string")
+    : undefined
+  const tableColumnOrder = ensureAddColumnLastInOrder(
+    ensureOwnerColumnInOrder(
+      mergeBoardColumnOrder(
+        rawOrderArr,
+        SUBITEM_DEFAULT_BOARD_COLUMN_IDS,
+        customColumnIds
+      )
+    )
+  )
+  const tableColumnTitles: Record<string, string> = {}
+  const rawTitles = base.tableColumnTitles
+  if (
+    rawTitles &&
+    typeof rawTitles === "object" &&
+    rawTitles !== null &&
+    !Array.isArray(rawTitles)
+  ) {
+    for (const [k, v] of Object.entries(rawTitles)) {
+      if (typeof k === "string" && typeof v === "string") {
+        tableColumnTitles[k] = v
+      }
+    }
+  }
+  const itemOrdersByParent: Record<string, string[]> = {}
+  const rawIobp = base.itemOrdersByParent
+  if (rawIobp && typeof rawIobp === "object" && !Array.isArray(rawIobp)) {
+    for (const [k, v] of Object.entries(rawIobp)) {
+      if (typeof k === "string" && Array.isArray(v)) {
+        itemOrdersByParent[k] = v.filter(
+          (x): x is string => typeof x === "string"
+        )
+      }
+    }
+  }
+  return {
+    hiddenColumnIds: hidden,
+    columnWidthsPx,
+    tableColumnOrder,
+    tableCustomColumns,
+    tableColumnTitles,
+    itemOrdersByParent,
+  }
+}
+
+export function serializeSubitemBoardTableUi(
+  ui: SubitemBoardTableUi
+): Record<string, unknown> {
+  return {
+    hiddenTableColumnIds: ui.hiddenColumnIds,
+    tableColumnWidthsPx: ui.columnWidthsPx,
+    tableColumnOrder: ui.tableColumnOrder,
+    tableCustomColumns: ui.tableCustomColumns,
+    tableColumnTitles: ui.tableColumnTitles,
+    itemOrdersByParent: ui.itemOrdersByParent,
+  }
 }
 
 export type DuePriorityLabel = {
@@ -351,7 +493,12 @@ export function parseBoardTableUiMetadata(
   const groupBy: BoardTableGroupBy = gb === "priority" ? "priority" : "none"
   const rawW = meta?.tableColumnWidthsPx
   const columnWidthsPx: Record<string, number> = {}
-  if (rawW && typeof rawW === "object" && rawW !== null && !Array.isArray(rawW)) {
+  if (
+    rawW &&
+    typeof rawW === "object" &&
+    rawW !== null &&
+    !Array.isArray(rawW)
+  ) {
     for (const [k, v] of Object.entries(rawW)) {
       if (typeof v === "number" && Number.isFinite(v) && v > 0) {
         columnWidthsPx[k] = v
@@ -360,7 +507,12 @@ export function parseBoardTableUiMetadata(
   }
   const rawCc = meta?.tableCustomColumns
   const tableCustomColumns: Record<string, TableCustomColumnDef> = {}
-  if (rawCc && typeof rawCc === "object" && rawCc !== null && !Array.isArray(rawCc)) {
+  if (
+    rawCc &&
+    typeof rawCc === "object" &&
+    rawCc !== null &&
+    !Array.isArray(rawCc)
+  ) {
     for (const [k, v] of Object.entries(rawCc)) {
       if (
         typeof k === "string" &&
@@ -383,17 +535,24 @@ export function parseBoardTableUiMetadata(
   const rawOrderArr = Array.isArray(rawOrder)
     ? rawOrder.filter((x): x is string => typeof x === "string")
     : undefined
-  const tableColumnOrder = ensureOwnerColumnInOrder(
-    mergeBoardColumnOrder(
-      rawOrderArr,
-      BOARD_TABLE_COLUMN_IDS,
-      customColumnIds
+  const tableColumnOrder = ensureAddColumnLastInOrder(
+    ensureOwnerColumnInOrder(
+      mergeBoardColumnOrder(
+        rawOrderArr,
+        BOARD_TABLE_COLUMN_IDS,
+        customColumnIds
+      )
     )
   )
 
   const groupItemOrders: Record<string, string[]> = {}
   const rawGio = meta?.groupItemOrders
-  if (rawGio && typeof rawGio === "object" && rawGio !== null && !Array.isArray(rawGio)) {
+  if (
+    rawGio &&
+    typeof rawGio === "object" &&
+    rawGio !== null &&
+    !Array.isArray(rawGio)
+  ) {
     for (const [k, v] of Object.entries(rawGio)) {
       if (Array.isArray(v)) {
         groupItemOrders[k] = v.filter((x): x is string => typeof x === "string")
@@ -490,6 +649,7 @@ export function defaultTaskDynamicData(): Record<string, unknown> {
     timeline: `${m} ${day} - ${day + 1}`,
     priority: "Medium",
     budget: 0,
+    rating: 0,
     dueDatePriority: "Critical Priority",
     notesCategory: "General Note",
     notesText: "",
@@ -560,6 +720,12 @@ export function useEcosystraBoardApollo() {
   const [updateBoardMetadata] = useMutation(UPDATE_BOARD_METADATA, {
     refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
   })
+  const [updateBoardSubitemColumnsMutation] = useMutation(
+    UPDATE_BOARD_SUBITEM_COLUMNS,
+    {
+      refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
+    }
+  )
   const [setTaskOwnerMutation] = useMutation(SET_TASK_OWNER, {
     refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
   })
@@ -667,8 +833,15 @@ export function useEcosystraBoardApollo() {
               status: "Working on it",
               dropdown: "General",
               subDueDate: "",
+              subDueDateIso: "",
               subStatus2: "—",
               subNotesText: "",
+              priority: "Medium",
+              rating: 0,
+              budget: 0,
+              filesCount: 0,
+              dueDatePriority: "Critical Priority",
+              notesCategory: "General Note",
             },
           },
         })
@@ -766,6 +939,77 @@ export function useEcosystraBoardApollo() {
       }
     },
     [deleteGroup, toastMsg.groupDeleted]
+  )
+
+  const subitemTableUi = useMemo(
+    () => parseSubitemBoardTableUi(board?.subitemColumns),
+    [board?.subitemColumns]
+  )
+
+  const patchSubitemBoardTableUi = useCallback(
+    async (partial: {
+      hiddenTableColumnIds?: HidableBoardColumnId[]
+      tableColumnWidthsPx?: Record<string, number>
+      tableColumnOrder?: string[]
+      tableCustomColumns?: Record<string, TableCustomColumnDef>
+      tableColumnTitles?: Record<string, string>
+      itemOrdersByParent?: Record<string, string[]>
+    }) => {
+      if (!board?.id) return
+      const cur = parseSubitemBoardTableUi(board.subitemColumns)
+      const next: SubitemBoardTableUi = {
+        hiddenColumnIds: partial.hiddenTableColumnIds ?? cur.hiddenColumnIds,
+        columnWidthsPx: partial.tableColumnWidthsPx ?? cur.columnWidthsPx,
+        tableColumnOrder: ensureAddColumnLastInOrder(
+          partial.tableColumnOrder ?? cur.tableColumnOrder
+        ),
+        tableCustomColumns:
+          partial.tableCustomColumns ?? cur.tableCustomColumns,
+        tableColumnTitles: partial.tableColumnTitles ?? cur.tableColumnTitles,
+        itemOrdersByParent:
+          partial.itemOrdersByParent ?? cur.itemOrdersByParent,
+      }
+      try {
+        await updateBoardSubitemColumnsMutation({
+          variables: {
+            id: board.id,
+            subitemColumns: serializeSubitemBoardTableUi(next),
+          },
+        })
+      } catch (e) {
+        toast.error(gqlErrorMessage(e))
+      }
+    },
+    [board?.id, board?.subitemColumns, updateBoardSubitemColumnsMutation]
+  )
+
+  const addSubitemBoardColumn = useCallback(
+    async (kind: HidableBoardColumnId) => {
+      if (!board?.id) return
+      const cur = parseSubitemBoardTableUi(board.subitemColumns)
+      const newId = newCustomTableColumnId()
+      const nextOrder = orderWithColumnBeforeAdd(
+        cur.tableColumnOrder,
+        newId,
+        SUBITEM_DEFAULT_BOARD_COLUMN_IDS
+      )
+      const next: SubitemBoardTableUi = {
+        ...cur,
+        tableColumnOrder: ensureAddColumnLastInOrder(nextOrder),
+        tableCustomColumns: { ...cur.tableCustomColumns, [newId]: { kind } },
+      }
+      try {
+        await updateBoardSubitemColumnsMutation({
+          variables: {
+            id: board.id,
+            subitemColumns: serializeSubitemBoardTableUi(next),
+          },
+        })
+      } catch (e) {
+        toast.error(gqlErrorMessage(e))
+      }
+    },
+    [board?.id, board?.subitemColumns, updateBoardSubitemColumnsMutation]
   )
 
   const patchBoardTableUi = useCallback(
@@ -889,6 +1133,9 @@ export function useEcosystraBoardApollo() {
     patchGroup,
     removeGroup,
     tableUi,
+    subitemTableUi,
+    patchSubitemBoardTableUi,
+    addSubitemBoardColumn,
     patchBoardTableUi,
     setTaskOwner: setTaskOwnerFn,
     setTaskAssignee: setTaskAssigneeFn,

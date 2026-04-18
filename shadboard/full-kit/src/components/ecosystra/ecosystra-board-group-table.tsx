@@ -1,16 +1,38 @@
 "use client"
 
-import { Fragment, forwardRef, memo, useCallback, useEffect, useMemo, useState } from "react"
-import { useMedia } from "react-use"
+import {
+  Fragment,
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import { useApolloClient } from "@apollo/client"
-import { useDroppable } from "@dnd-kit/core"
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
 import { Draggable, Droppable } from "@hello-pangea/dnd"
 import { differenceInDays, format, isValid } from "date-fns"
-import type { DateRange } from "react-day-picker"
+import { useMedia } from "react-use"
+import { toast } from "sonner"
 import {
   Check,
   ChevronDown,
+  CirclePlus,
   FileText,
   GripVertical,
   Info,
@@ -20,33 +42,35 @@ import {
   Plus,
   Search,
   Sparkles,
+  Star,
   Trash2,
   UserPlus,
   X,
 } from "lucide-react"
-import { toast } from "sonner"
 
 import boardSurface from "./ecosystra-board-surface.module.css"
 
 import type { TableColumn } from "@/components/ui/ecosystra-table"
-import type { DraggableSyntheticListeners } from "@dnd-kit/core"
+import type { DragEndEvent, DraggableSyntheticListeners } from "@dnd-kit/core"
 import type {
   DraggableProvidedDragHandleProps,
   DraggableProvidedDraggableProps,
   DraggableStateSnapshot,
 } from "@hello-pangea/dnd"
 import type { CSSProperties, ReactNode, Ref } from "react"
+import type { DateRange } from "react-day-picker"
 import type {
   DuePriorityLabel,
   GqlBoardItem,
   HidableBoardColumnId,
+  SubitemBoardTableUi,
   TableCustomColumnDef,
 } from "./hooks/use-ecosystra-board-apollo"
-import { BoardColumnLabelPicker } from "./board-column-label-picker"
 
 import { WORKSPACE_USERS } from "@/lib/ecosystra/board-gql"
 import { cn, getInitials } from "@/lib/utils"
 
+import { sortItemsByOrder } from "./hooks/use-ecosystra-board-apollo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -71,19 +95,11 @@ import {
   stickyLeftPxForColumnIndex,
 } from "@/components/ui/ecosystra-table"
 import { Input } from "@/components/ui/input"
-import { InputSpin } from "@/components/ui/input-spin"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -92,17 +108,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-
+import { BoardColumnLabelPicker } from "./board-column-label-picker"
 import { DuePriorityPicker } from "./due-priority-picker"
+import { EcosystraBoardAddColumnPopover } from "./ecosystra-board-add-column-popover"
 import {
   EcosystraBoardAvatar,
   EcosystraBoardAvatarGroup,
   EcosystraBoardLastUpdatedCell,
 } from "./ecosystra-board-avatars"
-import { EcosystraBoardAddColumnPopover } from "./ecosystra-board-add-column-popover"
 import { EcosystraBoardEditableColumnHeader } from "./ecosystra-board-editable-column-header"
 import { formatIdr } from "./ecosystra-board-format-idr"
 import { SortableBoardRowTbody } from "./ecosystra-board-sortable-row-tbody"
+import { SortableSubitemTableRow } from "./ecosystra-board-sortable-subitem-row"
 import { EcosystraGrandbookNewList } from "./ecosystra-grandbook"
 
 const NOTES_CATEGORY_OPTIONS = [
@@ -147,7 +164,7 @@ function resolveNotesCategoryDisplayLabel(
 
 function formatTimelineRange(range: DateRange | undefined): string {
   if (!range?.from) return "—"
-  
+
   const curYear = new Date().getFullYear()
 
   if (!range.to) {
@@ -156,7 +173,8 @@ function formatTimelineRange(range: DateRange | undefined): string {
   }
 
   const { from, to } = range
-  const showYear = from.getFullYear() !== curYear || to.getFullYear() !== curYear
+  const showYear =
+    from.getFullYear() !== curYear || to.getFullYear() !== curYear
 
   if (from.getFullYear() === to.getFullYear()) {
     if (from.getMonth() === to.getMonth()) {
@@ -174,6 +192,58 @@ function getTimelineDuration(range: DateRange | undefined): string {
   const days = differenceInDays(range.to, range.from) + 1
   return `${days}d`
 }
+
+function clampBoardRating(raw: unknown): number {
+  const x = typeof raw === "number" ? raw : Number(raw)
+  if (!Number.isFinite(x)) return 0
+  return Math.max(0, Math.min(5, Math.round(x)))
+}
+
+const BoardRatingStars = memo(function BoardRatingStars({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: unknown
+  onChange: (next: number) => void
+  ariaLabel: string
+}) {
+  const committed = clampBoardRating(value)
+  const [hover, setHover] = useState<number | null>(null)
+  const display = hover ?? committed
+
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className="flex items-center justify-center gap-0.5 py-0.5"
+      onMouseLeave={() => setHover(null)}
+    >
+      {[1, 2, 3, 4, 5].map((i) => (
+        <button
+          key={i}
+          type="button"
+          className={cn(
+            "rounded p-0.5 outline-offset-2 transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring",
+            i <= display ? "text-amber-400" : "text-muted-foreground/35"
+          )}
+          aria-label={`${i} of 5`}
+          aria-pressed={i <= committed}
+          onMouseEnter={() => setHover(i)}
+          onFocus={() => setHover(i)}
+          onBlur={() => setHover(null)}
+          onClick={() => onChange(committed === i ? 0 : i)}
+        >
+          <Star
+            className={cn("size-[1.05rem]", i <= display && "fill-current")}
+            strokeWidth={1.5}
+            aria-hidden
+          />
+        </button>
+      ))}
+    </div>
+  )
+})
 
 const TimelinePill = memo(
   forwardRef<
@@ -231,11 +301,11 @@ TimelinePill.displayName = "TimelinePill"
 
 function parseTimelineRange(s: string): DateRange | undefined {
   if (!s || s === "—" || s === "") return undefined
-  
+
   // Normalize: handle both " - " and "–"
   const normalized = s.replace(/–/g, "-")
-  const parts = normalized.split("-").map(p => p.trim())
-  
+  const parts = normalized.split("-").map((p) => p.trim())
+
   if (parts.length === 1) {
     const d = new Date(parts[0])
     return isValid(d) ? { from: d, to: undefined } : undefined
@@ -247,7 +317,9 @@ function parseTimelineRange(s: string): DateRange | undefined {
 
   // Detect year in the whole string
   const yearMatch = s.match(/, (\d{4})/)
-  const targetYear = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear()
+  const targetYear = yearMatch
+    ? parseInt(yearMatch[1], 10)
+    : new Date().getFullYear()
 
   // Detect month in fromPart
   const monthMatch = fromPart.match(/^[A-Za-z]{3}/)
@@ -260,30 +332,25 @@ function parseTimelineRange(s: string): DateRange | undefined {
 
   // Ensure year is applied if missing
   const fromDate = new Date(fromPart)
-  if (isValid(fromDate) && fromDate.getFullYear() === 2001 && !fromPart.includes("2001")) {
+  if (
+    isValid(fromDate) &&
+    fromDate.getFullYear() === 2001 &&
+    !fromPart.includes("2001")
+  ) {
     fromDate.setFullYear(targetYear)
   }
 
   const toDate = new Date(toPart)
-  if (isValid(toDate) && toDate.getFullYear() === 2001 && !toPart.includes("2001")) {
+  if (
+    isValid(toDate) &&
+    toDate.getFullYear() === 2001 &&
+    !toPart.includes("2001")
+  ) {
     toDate.setFullYear(targetYear)
   }
 
   if (!isValid(fromDate)) return undefined
   return { from: fromDate, to: isValid(toDate) ? toDate : undefined }
-}
-
-
-
-const SUBITEM_STATUS2_OPTIONS = ["—", "At risk", "On track"] as const
-
-function normalizeSubitemStatus2(
-  v: unknown
-): (typeof SUBITEM_STATUS2_OPTIONS)[number] {
-  const s = String(v ?? "—")
-  return (SUBITEM_STATUS2_OPTIONS as readonly string[]).includes(s)
-    ? (s as (typeof SUBITEM_STATUS2_OPTIONS)[number])
-    : "—"
 }
 
 function InlineNotesPlain({
@@ -327,7 +394,7 @@ function InlineNotesPlain({
 }
 
 function BudgetInlineEdit({
-  itemId,
+  itemId: _itemId,
   value,
   ariaLabel,
   onCommit,
@@ -409,12 +476,6 @@ const SUBITEM_STATUS_OPTIONS = [
   "Not started",
 ] as const
 
-const SUBITEM_DROPDOWN_OPTIONS = [
-  "General",
-  "Development",
-  "Marketing",
-] as const
-
 function normalizeSubitemStatus(
   v: unknown
 ): (typeof SUBITEM_STATUS_OPTIONS)[number] {
@@ -422,64 +483,6 @@ function normalizeSubitemStatus(
   return (SUBITEM_STATUS_OPTIONS as readonly string[]).includes(s)
     ? (s as (typeof SUBITEM_STATUS_OPTIONS)[number])
     : "Working on it"
-}
-
-function normalizeSubitemDropdown(
-  v: unknown
-): (typeof SUBITEM_DROPDOWN_OPTIONS)[number] {
-  const s = String(v ?? "General")
-  return (SUBITEM_DROPDOWN_OPTIONS as readonly string[]).includes(s)
-    ? (s as (typeof SUBITEM_DROPDOWN_OPTIONS)[number])
-    : "General"
-}
-
-function taskStatusPillStyle(status: string): {
-  backgroundColor: string
-  color: string
-} {
-  const s = normalizeSubitemStatus(status)
-  const map: Record<(typeof SUBITEM_STATUS_OPTIONS)[number], [string, string]> =
-    {
-      "Working on it": [
-        "var(--eco-mono-status-working-bg)",
-        "var(--eco-mono-status-working-fg)",
-      ],
-      Done: [
-        "var(--eco-mono-status-done-bg)",
-        "var(--eco-mono-status-done-fg)",
-      ],
-      Stuck: [
-        "var(--eco-mono-status-stuck-bg)",
-        "var(--eco-mono-status-stuck-fg)",
-      ],
-      "Not started": [
-        "var(--eco-mono-status-notstarted-bg)",
-        "var(--eco-mono-status-notstarted-fg)",
-      ],
-    }
-  const pair = map[s]
-  return {
-    backgroundColor: pair[0],
-    color: pair[1],
-  }
-}
-
-function priorityPillStyle(p: "Low" | "Medium" | "High"): {
-  backgroundColor: string
-  color: string
-} {
-  const map = {
-    Low: ["var(--eco-mono-priority-low-bg)", "var(--eco-mono-priority-low-fg)"],
-    Medium: [
-      "var(--eco-mono-priority-med-bg)",
-      "var(--eco-mono-priority-med-fg)",
-    ],
-    High: [
-      "var(--eco-mono-priority-high-bg)",
-      "var(--eco-mono-priority-high-fg)",
-    ],
-  } as const
-  return { backgroundColor: map[p][0], color: map[p][1] }
 }
 
 function ColumnSummaryBar({
@@ -527,6 +530,7 @@ function boardColumnResizeBounds(columnId: string): {
 } {
   if (columnId === "select") return { min: 40, max: 88 }
   if (columnId === "task") return { min: 160, max: 900 }
+  if (columnId === "rating") return { min: 120, max: 220 }
   if (columnId.startsWith("c_")) return { min: 64, max: 640 }
   return { min: 64, max: 640 }
 }
@@ -621,9 +625,7 @@ function resolvePriorityBucketLabel(
   priorityLabels: DuePriorityLabel[]
 ): string {
   const raw = String(d.priority ?? "")
-  const hit = priorityLabels.find(
-    (l) => l.label === raw || l.id === raw
-  )
+  const hit = priorityLabels.find((l) => l.label === raw || l.id === raw)
   if (hit) return hit.label
   const leg = itemPriority(d)
   return priorityLabels.find((l) => l.label === leg)?.label ?? leg
@@ -637,17 +639,14 @@ function buildRowSegments(
   if (!groupByPriority) {
     return items.map((item) => ({ type: "row", key: item.id, item }))
   }
-  const orderLabels = [...priorityLabels]
-    .map((l) => l.label)
-    .filter(Boolean)
+  const orderLabels = [...priorityLabels].map((l) => l.label).filter(Boolean)
   const rank = (d: Record<string, unknown>) => {
     const lab = resolvePriorityBucketLabel(d, priorityLabels)
     const i = orderLabels.indexOf(lab)
     return i >= 0 ? i : orderLabels.length
   }
   const sorted = [...items].sort(
-    (a, b) =>
-      rank(a.dynamicData || {}) - rank(b.dynamicData || {})
+    (a, b) => rank(a.dynamicData || {}) - rank(b.dynamicData || {})
   )
   const out: RowSeg[] = []
   let last = ""
@@ -668,7 +667,9 @@ type AssigneeDisplay = {
   avatarUrl?: string | null
 }
 
-function parseAssigneesFromDynamic(d: Record<string, unknown>): AssigneeDisplay[] {
+function parseAssigneesFromDynamic(
+  d: Record<string, unknown>
+): AssigneeDisplay[] {
   const raw = d.assignees
   if (Array.isArray(raw)) {
     const out: AssigneeDisplay[] = []
@@ -824,7 +825,10 @@ function AssigneePicker({
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[calc(100vw-32px)] p-3 sm:w-80" align="start">
+      <PopoverContent
+        className="w-[calc(100vw-32px)] p-3 sm:w-80"
+        align="start"
+      >
         {hasPeople ? (
           <>
             <div className="flex flex-wrap gap-1.5">
@@ -836,7 +840,11 @@ function AssigneePicker({
                 >
                   <Avatar className="size-5 shrink-0">
                     {a.avatarUrl ? (
-                      <AvatarImage src={a.avatarUrl} alt="" className="rounded-full" />
+                      <AvatarImage
+                        src={a.avatarUrl}
+                        alt=""
+                        className="rounded-full"
+                      />
                     ) : null}
                     <AvatarFallback className="rounded-full text-[9px]">
                       {getInitials(a.name)}
@@ -931,7 +939,10 @@ function AssigneePicker({
           className="mt-2 flex w-full items-center gap-2 rounded-md bg-muted/80 px-2.5 py-2 text-left text-xs font-medium text-foreground hover:bg-muted"
           onClick={() => inviteByEmail()}
         >
-          <UserPlus className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <UserPlus
+            className="size-4 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
           {inviteFooterLabel}
         </button>
       </PopoverContent>
@@ -954,7 +965,9 @@ function BoardRowEmptyGroupDropTarget({
   return (
     <div
       ref={setNodeRef}
-      className={cn(isOver && "rounded-xl ring-2 ring-primary/25 ring-offset-2")}
+      className={cn(
+        isOver && "rounded-xl ring-2 ring-primary/25 ring-offset-2"
+      )}
     >
       {children}
     </div>
@@ -999,6 +1012,25 @@ type Props = {
   enableColumnDrag?: boolean
   /** Append a new column instance (`c_…`) before the + column. */
   onAddBoardColumn?: (kind: HidableBoardColumnId) => void
+  /** Sub-item nested table layout (persisted `Board.subitemColumns`). */
+  subitemTableUi: SubitemBoardTableUi
+  /** Add a column kind to the sub-item table (new `c_…` id). */
+  onAddSubitemBoardColumn?: (kind: HidableBoardColumnId) => void
+  /** Persist sub-item table column widths (`Board.subitemColumns`). */
+  onSubitemColumnWidthCommit?: (columnId: string, widthPx: number) => void
+  /** When true, sub-item column headers use `DragDropContext` with type `SUBITEM_COLUMN`. */
+  enableSubitemColumnDrag?: boolean
+  onDuplicateSubitemBoardColumn?: (columnId: string) => void
+  onDeleteSubitemBoardColumn?: (columnId: string) => void
+  onSubitemColumnTitleCommit?: (
+    columnId: string,
+    nextTitle: string,
+    fallbackTitle: string
+  ) => void
+  /** Persist per-parent sub-item row order (`itemOrdersByParent`). */
+  onSubitemRowOrderCommit?: (parentItemId: string, orderedIds: string[]) => void
+  /** Group accent color for nested sub-item border (hex). */
+  groupColor?: string | null
   /** Create a copy of the given column (props + title override). */
   onDuplicateBoardColumn?: (columnId: string) => void
   /** Remove custom column or hide core column. */
@@ -1073,15 +1105,36 @@ export function EcosystraBoardGroupTable({
   priorityLabels,
   notesCategoryLabels,
   patchBoardTableUi,
+  subitemTableUi,
+  onAddSubitemBoardColumn,
+  onSubitemColumnWidthCommit,
+  enableSubitemColumnDrag = false,
+  onDuplicateSubitemBoardColumn,
+  onDeleteSubitemBoardColumn,
+  onSubitemColumnTitleCommit,
+  onSubitemRowOrderCommit,
+  groupColor = null,
 }: Props) {
   const isDesktop = useMedia("(min-width: 640px)", false)
   const hidden = useMemo(() => new Set(hiddenColumnIds), [hiddenColumnIds])
+  const subHidden = useMemo(
+    () => new Set(subitemTableUi.hiddenColumnIds),
+    [subitemTableUi.hiddenColumnIds]
+  )
+  const groupAccent = (groupColor && groupColor.trim()) || "#579BFC"
   /** Row selection for highlight (Vibe: highlighted row + side panel trigger). */
   const [selectedRowIds, setSelectedRowIds] = useState(() => new Set<string>())
+  const [selectedSubitemIds, setSelectedSubitemIds] = useState(
+    () => new Set<string>()
+  )
 
   useEffect(() => {
     setSelectedRowIds(new Set())
   }, [selectionClearVersion])
+
+  useEffect(() => {
+    setSelectedSubitemIds(new Set())
+  }, [expandedSubitemRowId])
 
   const setRowSelected = useCallback((itemId: string, selected: boolean) => {
     setSelectedRowIds((prev) => {
@@ -1198,6 +1251,13 @@ export function EcosystraBoardGroupTable({
         width: 72,
       },
       {
+        id: "rating",
+        title: t.colRating,
+        loadingStateType: "short-text",
+        width: 140,
+        infoContent: t.colRatingInfo,
+      },
+      {
         id: "add",
         title: t.colAdd,
         loadingStateType: "short-text",
@@ -1231,6 +1291,34 @@ export function EcosystraBoardGroupTable({
           !!c && !hidden.has(c.id as HidableBoardColumnId)
       )
   }, [allColumns, hidden, tableColumnOrder, tableCustomColumns])
+
+  const subVisibleColumns = useMemo(() => {
+    const byId = new Map(allColumns.map((c) => [c.id, c]))
+    return subitemTableUi.tableColumnOrder
+      .map((id) => {
+        const built = byId.get(id)
+        if (built) {
+          const title = subitemTableUi.tableColumnTitles[id] ?? built.title
+          return { ...built, title } satisfies TableColumn
+        }
+        const def = subitemTableUi.tableCustomColumns[id]
+        if (!def) return undefined
+        const tmpl = byId.get(def.kind)
+        if (!tmpl) return undefined
+        const title = subitemTableUi.tableColumnTitles[id] ?? tmpl.title
+        return {
+          id,
+          title,
+          loadingStateType: tmpl.loadingStateType,
+          width: tmpl.width,
+          infoContent: tmpl.infoContent,
+        } satisfies TableColumn
+      })
+      .filter(
+        (c): c is TableColumn =>
+          !!c && !subHidden.has(c.id as HidableBoardColumnId)
+      )
+  }, [allColumns, subHidden, subitemTableUi])
 
   const columnWidthsPx = columnWidthsPxProp
 
@@ -1301,6 +1389,85 @@ export function EcosystraBoardGroupTable({
       t.resizeColumn,
       visibleColumns.length,
     ]
+  )
+
+  const subColumnWidthsPx = subitemTableUi.columnWidthsPx
+
+  const [subDragWidthById, setSubDragWidthById] = useState<
+    Partial<Record<string, number>>
+  >({})
+
+  const subMergedWidths = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const c of subVisibleColumns) {
+      const d = subDragWidthById[c.id]
+      if (typeof d === "number" && Number.isFinite(d) && d > 0) {
+        m[c.id] = d
+      } else {
+        m[c.id] = resolveTableColumnWidthPx(c, subColumnWidthsPx)
+      }
+    }
+    return m
+  }, [subVisibleColumns, subColumnWidthsPx, subDragWidthById])
+
+  useEffect(() => {
+    if (!subColumnWidthsPx) return
+    setSubDragWidthById((prev) => {
+      const keys = Object.keys(prev)
+      if (keys.length === 0) return prev
+      const next = { ...prev }
+      let changed = false
+      for (const k of keys) {
+        const sv = subColumnWidthsPx[k]
+        const pv = next[k]
+        if (
+          typeof sv === "number" &&
+          typeof pv === "number" &&
+          Math.abs(sv - pv) < 1
+        ) {
+          delete next[k]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [subColumnWidthsPx])
+
+  const getSubColumnResize = useCallback(
+    (col: TableColumn, index: number) => {
+      if (!onSubitemColumnWidthCommit || index >= subVisibleColumns.length - 1)
+        return undefined
+      const w =
+        subMergedWidths[col.id] ??
+        resolveTableColumnWidthPx(col, subColumnWidthsPx)
+      const b = boardColumnResizeBounds(col.id)
+      return {
+        minPx: b.min,
+        maxPx: b.max,
+        widthPx: w,
+        showHandle: true as const,
+        ariaLabel: t.resizeColumn,
+        onResize: (next: number) =>
+          setSubDragWidthById((prev) => ({ ...prev, [col.id]: next })),
+        onResizeCommit: (final: number) => {
+          onSubitemColumnWidthCommit(col.id, final)
+        },
+      }
+    },
+    [
+      subColumnWidthsPx,
+      subMergedWidths,
+      onSubitemColumnWidthCommit,
+      t.resizeColumn,
+      subVisibleColumns.length,
+    ]
+  )
+
+  const subitemRowSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
   )
 
   const rowSegments = useMemo(
@@ -1403,6 +1570,46 @@ export function EcosystraBoardGroupTable({
             variant="destructive"
             className="gap-2 text-destructive"
             onClick={() => onDeleteBoardColumn?.(col.id)}
+          >
+            <Trash2 className="size-4 opacity-70" />
+            {t.deleteColumn}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
+  const renderSubitemColumnMenu = (col: TableColumn) => {
+    if (col.id === "select" || col.id === "add" || col.id === "task") {
+      return null
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 rounded-md hover:bg-muted/80 focus-visible:ring-1"
+            aria-label={t.columnActions}
+          >
+            <MoreHorizontal className="size-4 opacity-70" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            className="gap-2"
+            onClick={() => onDuplicateSubitemBoardColumn?.(col.id)}
+          >
+            <Plus className="size-4 opacity-70" />
+            {t.duplicateColumn}
+          </DropdownMenuItem>
+          <Separator className="my-1" />
+          <DropdownMenuItem
+            variant="destructive"
+            className="gap-2 text-destructive"
+            onClick={() => onDeleteSubitemBoardColumn?.(col.id)}
           >
             <Trash2 className="size-4 opacity-70" />
             {t.deleteColumn}
@@ -1551,6 +1758,146 @@ export function EcosystraBoardGroupTable({
     )
   }
 
+  const renderSubitemHeaderCell = (
+    col: TableColumn,
+    index: number,
+    dnd?: HeaderCellDnd
+  ) => {
+    const sticky = !!col.sticky
+    const stickyLeftPx = stickyLeftPxForColumnIndex(
+      subVisibleColumns,
+      subMergedWidths,
+      index
+    )
+    const columnResize = getSubColumnResize(col, index)
+
+    const cellCommonProps = {
+      sticky,
+      stickyLeftPx,
+      size: "medium" as const,
+    }
+
+    if (col.id === "add") {
+      const addTrigger = (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          aria-label={t.colAdd}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Plus className="size-4" aria-hidden />
+        </Button>
+      )
+      return (
+        <TableHeaderCell
+          key={col.id}
+          {...mergeHeaderDnd(dnd)}
+          {...boardHeaderAlign}
+          title={String(col.title)}
+          {...cellCommonProps}
+          sticky={false}
+          stickyEnd
+          stickyLeftPx={undefined}
+          columnResize={columnResize}
+        >
+          {onAddSubitemBoardColumn ? (
+            <EcosystraBoardAddColumnPopover
+              t={t as Record<string, string>}
+              onAddColumn={onAddSubitemBoardColumn}
+            >
+              {addTrigger}
+            </EcosystraBoardAddColumnPopover>
+          ) : (
+            addTrigger
+          )}
+        </TableHeaderCell>
+      )
+    }
+    if (col.id === "select") {
+      return (
+        <TableHeaderCell
+          key={col.id}
+          {...mergeHeaderDnd(
+            dnd,
+            col.id === "select" ? "box-border min-w-0" : undefined
+          )}
+          {...boardHeaderAlign}
+          title={col.title}
+          {...cellCommonProps}
+          columnResize={columnResize}
+          infoContent={col.infoContent}
+        />
+      )
+    }
+    const fallbackTitle = String(col.title)
+    const displayTitle =
+      subitemTableUi.tableColumnTitles[col.id] ?? fallbackTitle
+    if (onSubitemColumnTitleCommit) {
+      return (
+        <TableHeaderCell
+          key={col.id}
+          {...mergeHeaderDnd(dnd)}
+          {...boardHeaderAlign}
+          {...cellCommonProps}
+          columnResize={columnResize}
+          infoContent={col.infoContent}
+          menu={renderSubitemColumnMenu(col)}
+        >
+          <span className="inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 font-medium text-muted-foreground">
+            <EcosystraBoardEditableColumnHeader
+              label={displayTitle}
+              fallbackLabel={fallbackTitle}
+              ariaLabel={`${displayTitle}: ${t.editColumnTitle}`}
+              onCommit={(next) =>
+                onSubitemColumnTitleCommit(col.id, next, fallbackTitle)
+              }
+            />
+            {col.infoContent ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label="Column information"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Info className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    {col.infoContent}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
+          </span>
+        </TableHeaderCell>
+      )
+    }
+    return (
+      <TableHeaderCell
+        key={col.id}
+        {...mergeHeaderDnd(
+          dnd,
+          col.id === "select" ? "box-border min-w-0" : undefined
+        )}
+        {...boardHeaderAlign}
+        title={subitemTableUi.tableColumnTitles[col.id] ?? col.title}
+        size="medium"
+        sticky={sticky}
+        stickyLeftPx={stickyLeftPx}
+        columnResize={columnResize}
+        infoContent={col.infoContent}
+        menu={renderSubitemColumnMenu(col)}
+      />
+    )
+  }
+
   const renderBodyCell = (
     col: TableColumn,
     row: GqlBoardItem,
@@ -1579,7 +1926,11 @@ export function EcosystraBoardGroupTable({
           const statusVal = resolveTaskStatusDisplayLabel(d[fk], statusLabels)
           const isDone = statusVal === "Done"
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <BoardColumnLabelPicker
                 variant="status"
                 labels={statusLabels}
@@ -1604,7 +1955,11 @@ export function EcosystraBoardGroupTable({
         case "dueDate": {
           const label = String(d[fk] ?? "—")
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -1639,12 +1994,18 @@ export function EcosystraBoardGroupTable({
         case "lastUpdated": {
           const by =
             row.lastUpdatedBy?.name?.trim() ||
-            (typeof d.lastUpdatedBy === "string" ? d.lastUpdatedBy.trim() : "") ||
+            (typeof d.lastUpdatedBy === "string"
+              ? d.lastUpdatedBy.trim()
+              : "") ||
             "User"
           const avatarUrl = row.lastUpdatedBy?.avatarUrl || null
           const updatedAt = row.updatedAt
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <EcosystraBoardLastUpdatedCell
                 byName={by}
                 avatarUrl={avatarUrl}
@@ -1667,7 +2028,11 @@ export function EcosystraBoardGroupTable({
                 ? Number(raw.replace(/[^0-9.]/g, "")) || 0
                 : 0
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <div
                 className="flex items-center gap-1.5 text-muted-foreground"
                 aria-label={
@@ -1701,7 +2066,11 @@ export function EcosystraBoardGroupTable({
             avatarUrl = (d.owner_avatarUrl as string | null | undefined) ?? null
           }
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <EcosystraBoardAvatar name={ownerName} avatarUrl={avatarUrl} />
             </TableCell>
           )
@@ -1714,7 +2083,11 @@ export function EcosystraBoardGroupTable({
               ? `${t.colAssignee}: ${assignees.length + pendingInvites.length}`
               : `${t.colAssignee}: ${t.assigneeUnassigned}`
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <AssigneePicker
                 workspaceId={workspaceId}
                 itemId={row.id}
@@ -1737,7 +2110,11 @@ export function EcosystraBoardGroupTable({
           const tl = String(d[fk] ?? "—")
           const range = parseTimelineRange(tl)
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <Popover>
                 <PopoverTrigger asChild>
                   <TimelinePill
@@ -1764,7 +2141,11 @@ export function EcosystraBoardGroupTable({
         }
         case "priority": {
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <BoardColumnLabelPicker
                 variant="priority"
                 labels={priorityLabels}
@@ -1780,7 +2161,11 @@ export function EcosystraBoardGroupTable({
         }
         case "budget":
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <BudgetInlineEdit
                 itemId={row.id}
                 value={budgetNumber({ budget: d[fk] } as Record<
@@ -1792,15 +2177,31 @@ export function EcosystraBoardGroupTable({
               />
             </TableCell>
           )
+        case "rating":
+          return (
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
+              <BoardRatingStars
+                value={d[fk]}
+                onChange={(n) => onPatchItem(row.id, { [fk]: n })}
+                ariaLabel={t.colRating}
+              />
+            </TableCell>
+          )
         case "duePriority":
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <DuePriorityPicker
                 value={String(d[fk] ?? "")}
                 labels={duePriorityLabels}
-                onSelect={(labelId) =>
-                  onPatchItem(row.id, { [fk]: labelId })
-                }
+                onSelect={(labelId) => onPatchItem(row.id, { [fk]: labelId })}
                 onUpdateLabels={(newLabels) =>
                   void patchBoardTableUi({ duePriorityLabels: newLabels })
                 }
@@ -1809,7 +2210,11 @@ export function EcosystraBoardGroupTable({
           )
         case "notes":
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <InlineNotesPlain
                 itemId={row.id}
                 value={String(d[fk] ?? "")}
@@ -1821,7 +2226,11 @@ export function EcosystraBoardGroupTable({
           )
         case "notesCategory": {
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            >
               <BoardColumnLabelPicker
                 variant="notesCategory"
                 labels={notesCategoryLabels}
@@ -1837,7 +2246,11 @@ export function EcosystraBoardGroupTable({
         }
         default:
           return (
-            <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps} />
+            <TableCell
+              key={col.id}
+              {...boardAlign(col.id)}
+              {...cellCommonProps}
+            />
           )
       }
     }
@@ -1879,6 +2292,15 @@ export function EcosystraBoardGroupTable({
         )
       case "task": {
         const subs = row.subitems ?? []
+        const hasSubs = subs.length > 0
+        const toggleExpand = () =>
+          setExpandedSubitemRowId(
+            expandedSubitemRowId === row.id ? null : row.id
+          )
+        const addSubitemAndExpand = () => {
+          onAddSubitem(row.id)
+          setExpandedSubitemRowId(row.id)
+        }
         return (
           <TableRowHeaderCell
             key={col.id}
@@ -1887,7 +2309,7 @@ export function EcosystraBoardGroupTable({
             className="min-w-0"
           >
             <div className="flex min-w-0 flex-wrap items-center gap-1">
-              {subs.length ? (
+              {hasSubs ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -1895,15 +2317,11 @@ export function EcosystraBoardGroupTable({
                   className="size-7 shrink-0"
                   aria-expanded={expandedSubitemRowId === row.id}
                   aria-controls={`subitems-${row.id}`}
-                  onClick={() =>
-                    setExpandedSubitemRowId(
-                      expandedSubitemRowId === row.id ? null : row.id
-                    )
-                  }
+                  onClick={toggleExpand}
                   aria-label={
                     expandedSubitemRowId === row.id
                       ? t.collapseGroup
-                      : t.expandGroup
+                      : t.expandSubitemsHint
                   }
                 >
                   <ChevronDown
@@ -1915,7 +2333,26 @@ export function EcosystraBoardGroupTable({
                   />
                 </Button>
               ) : (
-                <span className="inline-block w-7" aria-hidden />
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100"
+                        aria-controls={`subitems-${row.id}`}
+                        onClick={addSubitemAndExpand}
+                        aria-label={t.addSubitemChevronHint}
+                      >
+                        <ChevronDown className="size-4" aria-hidden />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {t.addSubitemChevronHint}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               <InlineTaskTitle
                 itemId={row.id}
@@ -1978,6 +2415,21 @@ export function EcosystraBoardGroupTable({
                       type="button"
                       variant="ghost"
                       size="icon"
+                      className="size-7 text-[color:var(--eco-board-header-fg)] opacity-0 transition-opacity group-hover/row:opacity-80 hover:opacity-100"
+                      aria-label={t.addSubitemPlusHint}
+                      onClick={addSubitemAndExpand}
+                    >
+                      <CirclePlus className="size-3.5" aria-hidden />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t.addSubitemPlusHint}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       className="size-7 text-[color:var(--eco-board-header-fg)] opacity-80 hover:opacity-100"
                       aria-label={t.taskComments}
                     >
@@ -1992,7 +2444,10 @@ export function EcosystraBoardGroupTable({
         )
       }
       case "status": {
-        const statusVal = resolveTaskStatusDisplayLabel(d.taskStatus, statusLabels)
+        const statusVal = resolveTaskStatusDisplayLabel(
+          d.taskStatus,
+          statusLabels
+        )
         const isDone = statusVal === "Done"
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
@@ -2102,7 +2557,8 @@ export function EcosystraBoardGroupTable({
       }
       case "owner": {
         const ownerName = String(d.owner ?? "").trim()
-        const avatarUrl = (d.owner_avatarUrl as string | null | undefined) ?? null
+        const avatarUrl =
+          (d.owner_avatarUrl as string | null | undefined) ?? null
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
             <EcosystraBoardAvatar name={ownerName} avatarUrl={avatarUrl} />
@@ -2207,6 +2663,16 @@ export function EcosystraBoardGroupTable({
             />
           </TableCell>
         )
+      case "rating":
+        return (
+          <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
+            <BoardRatingStars
+              value={d.rating}
+              onChange={(n) => onPatchItem(row.id, { rating: n })}
+              ariaLabel={t.colRating}
+            />
+          </TableCell>
+        )
       case "notes":
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
@@ -2249,207 +2715,761 @@ export function EcosystraBoardGroupTable({
     }
   }
 
+  const renderSubitemDataCell = (
+    col: TableColumn,
+    s: GqlBoardItem,
+    rowDragListeners?: DraggableSyntheticListeners | null
+  ) => {
+    const sd = s.dynamicData || {}
+    const customDef = subitemTableUi.tableCustomColumns[col.id]
+    if (customDef) {
+      const fk = ecoCcFieldKey(col.id)
+      switch (customDef.kind) {
+        case "status":
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <BoardColumnLabelPicker
+                variant="status"
+                labels={statusLabels}
+                value={String(sd[fk] ?? sd.status ?? "")}
+                onSelect={(next) => onPatchItem(s.id, { [fk]: next })}
+                onUpdateLabels={(next) =>
+                  void patchBoardTableUi({ statusLabels: next })
+                }
+                ariaLabel={t.colStatus}
+              />
+            </div>
+          )
+        case "dueDate": {
+          const label = String(sd[fk] ?? sd.subDueDate ?? "—")
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-0 px-2 font-normal shadow-none hover:bg-muted/50"
+                    aria-label={`${t.colDueDate}: ${label}`}
+                  >
+                    <Check
+                      className="size-3.5 shrink-0 text-emerald-600"
+                      aria-hidden
+                    />
+                    <span className="truncate">{label}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    onSelect={(date) => {
+                      if (!date) return
+                      onPatchItem(s.id, {
+                        [fk]: format(date, "MMM d"),
+                      })
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          )
+        }
+        case "notes":
+          return (
+            <div key={col.id} className="min-w-0 px-0.5">
+              <InlineNotesPlain
+                itemId={s.id}
+                value={String(sd[fk] ?? sd.subNotesText ?? "")}
+                ariaLabel={t.colNotes}
+                placeholder={t.notesPlaceholder}
+                onCommit={(next) => onPatchItem(s.id, { [fk]: next })}
+              />
+            </div>
+          )
+        case "priority":
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <BoardColumnLabelPicker
+                variant="priority"
+                labels={priorityLabels}
+                value={String(sd[fk] ?? sd.priority ?? "")}
+                onSelect={(next) => onPatchItem(s.id, { [fk]: next })}
+                onUpdateLabels={(next) =>
+                  void patchBoardTableUi({ priorityLabels: next })
+                }
+                ariaLabel={t.colPriority}
+              />
+            </div>
+          )
+        case "budget":
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <BudgetInlineEdit
+                itemId={s.id}
+                value={budgetNumber({ budget: sd[fk] } as Record<
+                  string,
+                  unknown
+                >)}
+                onCommit={(n) => onPatchItem(s.id, { [fk]: n })}
+                ariaLabel={t.colBudget}
+              />
+            </div>
+          )
+        case "rating":
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <BoardRatingStars
+                value={sd[fk] ?? sd.rating}
+                onChange={(n) => onPatchItem(s.id, { [fk]: n })}
+                ariaLabel={t.colRating}
+              />
+            </div>
+          )
+        case "duePriority":
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <DuePriorityPicker
+                value={String(sd[fk] ?? sd.dueDatePriority ?? "")}
+                labels={duePriorityLabels}
+                onSelect={(labelId) => onPatchItem(s.id, { [fk]: labelId })}
+                onUpdateLabels={(newLabels) =>
+                  void patchBoardTableUi({ duePriorityLabels: newLabels })
+                }
+              />
+            </div>
+          )
+        case "notesCategory":
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <BoardColumnLabelPicker
+                variant="notesCategory"
+                labels={notesCategoryLabels}
+                value={String(sd[fk] ?? sd.notesCategory ?? "")}
+                onSelect={(next) => onPatchItem(s.id, { [fk]: next })}
+                onUpdateLabels={(next) =>
+                  void patchBoardTableUi({ notesCategoryLabels: next })
+                }
+                ariaLabel={t.colNotesCategory}
+              />
+            </div>
+          )
+        case "files": {
+          const n =
+            typeof sd[fk] === "number" && Number.isFinite(sd[fk] as number)
+              ? (sd[fk] as number)
+              : typeof sd.filesCount === "number"
+                ? sd.filesCount
+                : 0
+          return (
+            <div
+              key={col.id}
+              className="flex items-center justify-center gap-1.5 text-muted-foreground"
+            >
+              <FileText className="size-4 shrink-0" aria-hidden />
+              {n > 0 ? (
+                <span className="text-xs font-medium text-foreground">{n}</span>
+              ) : (
+                <span className="text-xs">—</span>
+              )}
+            </div>
+          )
+        }
+        case "timeline": {
+          const tl = String(sd[fk] ?? sd.timeline ?? "—")
+          const range = parseTimelineRange(tl)
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <TimelinePill
+                    tl={tl}
+                    range={range}
+                    t={t}
+                    onClear={() => onPatchItem(s.id, { [fk]: null })}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    selected={range}
+                    onSelect={(nextRange) => {
+                      onPatchItem(s.id, {
+                        [fk]: formatTimelineRange(nextRange),
+                      })
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          )
+        }
+        case "lastUpdated": {
+          const by =
+            s.lastUpdatedBy?.name?.trim() ||
+            (typeof sd.lastUpdatedBy === "string"
+              ? sd.lastUpdatedBy.trim()
+              : "") ||
+            "User"
+          const avatarUrl = s.lastUpdatedBy?.avatarUrl || null
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <EcosystraBoardLastUpdatedCell
+                byName={by}
+                avatarUrl={avatarUrl}
+                updatedAt={s.updatedAt}
+                fallbackTimeLabel={
+                  typeof sd.lastUpdatedLabel === "string"
+                    ? sd.lastUpdatedLabel
+                    : null
+                }
+              />
+            </div>
+          )
+        }
+        case "owner": {
+          const ownerName = String(sd[fk] ?? sd.owner ?? "").trim()
+          const avatarUrl =
+            (sd.owner_avatarUrl as string | null | undefined) ?? null
+          return (
+            <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+              <EcosystraBoardAvatar name={ownerName} avatarUrl={avatarUrl} />
+            </div>
+          )
+        }
+        case "assignee": {
+          const assignees = parseAssigneesFromDynamic(sd)
+          const pendingInvites = parsePendingInvitesFromDynamic(sd)
+          const assigneeButtonLabel =
+            assignees.length > 0 || pendingInvites.length > 0
+              ? `${t.colAssignee}: ${assignees.length + pendingInvites.length}`
+              : `${t.colAssignee}: ${t.assigneeUnassigned}`
+          return (
+            <div key={col.id} className="min-w-0 px-0.5">
+              <AssigneePicker
+                workspaceId={workspaceId}
+                itemId={s.id}
+                assignees={assignees}
+                pendingInvites={pendingInvites}
+                assigneeButtonLabel={assigneeButtonLabel}
+                onCommit={(userIds, inviteEmails) =>
+                  onSetTaskAssignees(s.id, userIds, inviteEmails)
+                }
+                onOpenAssign={() => onPersonToolbarTarget(s.id)}
+                filterPlaceholder={t.assigneeSearch}
+                clearLabel={t.assigneeClear}
+                inviteFooterLabel={t.assigneeInviteFooter}
+                inviteHint={t.assigneeInviteHint}
+              />
+            </div>
+          )
+        }
+        default:
+          return <div key={col.id} className="h-8" />
+      }
+    }
+
+    switch (col.id) {
+      case "select":
+        return (
+          <div className="relative min-h-9 w-full min-w-0 px-0.5">
+            {rowDragListeners ? (
+              <button
+                type="button"
+                {...rowDragListeners}
+                aria-label={t.reorderRow}
+                className="absolute start-1 top-1/2 z-[1] -translate-y-1/2 shrink-0 rounded border-0 bg-muted/90 p-1 opacity-0 shadow-sm transition-opacity group-hover/row:opacity-100 cursor-grab active:cursor-grabbing"
+              >
+                <GripVertical
+                  className="size-4 text-muted-foreground"
+                  aria-hidden
+                />
+              </button>
+            ) : null}
+            <div className="flex w-full items-center justify-center">
+              <Checkbox
+                aria-label={t.colSelect}
+                checked={selectedSubitemIds.has(s.id)}
+                onCheckedChange={(v) =>
+                  setSelectedSubitemIds((prev) => {
+                    const next = new Set(prev)
+                    if (v === true) next.add(s.id)
+                    else next.delete(s.id)
+                    return next
+                  })
+                }
+                className="data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white"
+              />
+            </div>
+          </div>
+        )
+      case "task":
+        return (
+          <div key={col.id} className="flex min-w-0 items-center gap-1 px-0.5">
+            <InlineTaskTitle
+              itemId={s.id}
+              name={s.name}
+              ariaLabel={t.subitemNameEditLabel}
+              emptyErrorLabel={t.taskNameEmptyError}
+              className="font-semibold"
+              onCommit={(next) => onRenameItem(s.id, next)}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0 text-muted-foreground"
+                  aria-label={t.taskRowActionsMenu}
+                >
+                  <Info className="size-3.5" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => onDeleteItem(s.id)}
+                >
+                  <Trash2 className="me-2 size-4" aria-hidden />
+                  {t.deleteConfirm}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 text-muted-foreground opacity-80 hover:opacity-100"
+                    aria-label={t.taskComments}
+                  >
+                    <MessageSquarePlus className="size-3.5" aria-hidden />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t.taskComments}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )
+      case "owner": {
+        const ownerName = String(sd.owner ?? "").trim()
+        const avatarUrl =
+          (sd.owner_avatarUrl as string | null | undefined) ?? null
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <EcosystraBoardAvatar name={ownerName} avatarUrl={avatarUrl} />
+          </div>
+        )
+      }
+      case "assignee": {
+        const assignees = parseAssigneesFromDynamic(sd)
+        const pendingInvites = parsePendingInvitesFromDynamic(sd)
+        const assigneeButtonLabel =
+          assignees.length > 0 || pendingInvites.length > 0
+            ? `${t.colAssignee}: ${assignees.length + pendingInvites.length}`
+            : `${t.colAssignee}: ${t.assigneeUnassigned}`
+        return (
+          <div key={col.id} className="min-w-0 px-0.5">
+            <AssigneePicker
+              workspaceId={workspaceId}
+              itemId={s.id}
+              assignees={assignees}
+              pendingInvites={pendingInvites}
+              assigneeButtonLabel={assigneeButtonLabel}
+              onCommit={(userIds, inviteEmails) =>
+                onSetTaskAssignees(s.id, userIds, inviteEmails)
+              }
+              onOpenAssign={() => onPersonToolbarTarget(s.id)}
+              filterPlaceholder={t.assigneeSearch}
+              clearLabel={t.assigneeClear}
+              inviteFooterLabel={t.assigneeInviteFooter}
+              inviteHint={t.assigneeInviteHint}
+            />
+          </div>
+        )
+      }
+      case "status": {
+        const statusVal = resolveTaskStatusDisplayLabel(sd.status, statusLabels)
+        const isDone = statusVal === "Done"
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <BoardColumnLabelPicker
+              variant="status"
+              labels={statusLabels}
+              value={String(sd.status ?? "")}
+              onSelect={(next) => onPatchItem(s.id, { status: next })}
+              onUpdateLabels={(next) =>
+                void patchBoardTableUi({ statusLabels: next })
+              }
+              ariaLabel={t.colStatus}
+              trailing={
+                isDone ? (
+                  <Check
+                    className="size-4 shrink-0 text-emerald-600"
+                    aria-label={t.statusDoneHint}
+                  />
+                ) : null
+              }
+            />
+          </div>
+        )
+      }
+      case "dueDate": {
+        const label = String(sd.subDueDate ?? "—")
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-0 px-2 font-normal shadow-none hover:bg-muted/50"
+                  aria-label={`${t.colDueDate}: ${label}`}
+                >
+                  <Check
+                    className="size-3.5 shrink-0 text-emerald-600"
+                    aria-hidden
+                  />
+                  <span className="truncate">{label}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  onSelect={(date) => {
+                    if (!date) return
+                    onPatchItem(s.id, {
+                      subDueDate: format(date, "MMM d"),
+                      subDueDateIso: format(date, "yyyy-MM-dd"),
+                    })
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        )
+      }
+      case "notes":
+        return (
+          <div key={col.id} className="min-w-0 px-0.5">
+            <InlineNotesPlain
+              itemId={s.id}
+              value={String(sd.subNotesText ?? "")}
+              ariaLabel={t.colNotes}
+              placeholder={t.notesPlaceholder}
+              onCommit={(next) => onPatchItem(s.id, { subNotesText: next })}
+            />
+          </div>
+        )
+      case "notesCategory":
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <BoardColumnLabelPicker
+              variant="notesCategory"
+              labels={notesCategoryLabels}
+              value={String(sd.notesCategory ?? "")}
+              onSelect={(next) => onPatchItem(s.id, { notesCategory: next })}
+              onUpdateLabels={(next) =>
+                void patchBoardTableUi({ notesCategoryLabels: next })
+              }
+              ariaLabel={t.colNotesCategory}
+            />
+          </div>
+        )
+      case "priority":
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <BoardColumnLabelPicker
+              variant="priority"
+              labels={priorityLabels}
+              value={String(sd.priority ?? "")}
+              onSelect={(next) => onPatchItem(s.id, { priority: next })}
+              onUpdateLabels={(next) =>
+                void patchBoardTableUi({ priorityLabels: next })
+              }
+              ariaLabel={t.colPriority}
+            />
+          </div>
+        )
+      case "budget":
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <BudgetInlineEdit
+              itemId={s.id}
+              value={budgetNumber(sd)}
+              onCommit={(n) => onPatchItem(s.id, { budget: n })}
+              ariaLabel={t.colBudget}
+            />
+          </div>
+        )
+      case "rating":
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <BoardRatingStars
+              value={sd.rating}
+              onChange={(n) => onPatchItem(s.id, { rating: n })}
+              ariaLabel={t.colRating}
+            />
+          </div>
+        )
+      case "duePriority":
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <DuePriorityPicker
+              value={String(sd.dueDatePriority ?? "")}
+              labels={duePriorityLabels}
+              onSelect={(labelId) =>
+                onPatchItem(s.id, { dueDatePriority: labelId })
+              }
+              onUpdateLabels={(newLabels) =>
+                void patchBoardTableUi({ duePriorityLabels: newLabels })
+              }
+            />
+          </div>
+        )
+      case "files": {
+        const n =
+          typeof sd.filesCount === "number" && Number.isFinite(sd.filesCount)
+            ? sd.filesCount
+            : 0
+        return (
+          <div
+            key={col.id}
+            className="flex items-center justify-center gap-1.5 text-muted-foreground"
+          >
+            <FileText className="size-4 shrink-0" aria-hidden />
+            {n > 0 ? (
+              <span className="text-xs font-medium text-foreground">{n}</span>
+            ) : (
+              <span className="text-xs">—</span>
+            )}
+          </div>
+        )
+      }
+      case "timeline": {
+        const tl = String(sd.timeline ?? "—")
+        const range = parseTimelineRange(tl)
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <Popover>
+              <PopoverTrigger asChild>
+                <TimelinePill
+                  tl={tl}
+                  range={range}
+                  t={t}
+                  onClear={() => onPatchItem(s.id, { timeline: null })}
+                />
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={range}
+                  onSelect={(nextRange) => {
+                    onPatchItem(s.id, {
+                      timeline: formatTimelineRange(nextRange),
+                    })
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        )
+      }
+      case "lastUpdated": {
+        const by =
+          s.lastUpdatedBy?.name?.trim() ||
+          (typeof sd.lastUpdatedBy === "string"
+            ? sd.lastUpdatedBy.trim()
+            : "") ||
+          "User"
+        const avatarUrl = s.lastUpdatedBy?.avatarUrl || null
+        return (
+          <div key={col.id} className="flex min-w-0 justify-center px-0.5">
+            <EcosystraBoardLastUpdatedCell
+              byName={by}
+              avatarUrl={avatarUrl}
+              updatedAt={s.updatedAt}
+              fallbackTimeLabel={
+                typeof sd.lastUpdatedLabel === "string"
+                  ? sd.lastUpdatedLabel
+                  : null
+              }
+            />
+          </div>
+        )
+      }
+      case "add":
+        return <div key={col.id} className="h-8 w-full" aria-hidden />
+      default:
+        return <div key={col.id} className="h-8" />
+    }
+  }
+
   const renderExpandedSubitemsRow = (row: GqlBoardItem) => {
+    if (expandedSubitemRowId !== row.id) return null
     const subs = row.subitems ?? []
-    if (subs.length === 0 || expandedSubitemRowId !== row.id) return null
+    const sortedSubs = sortItemsByOrder(
+      subs,
+      subitemTableUi.itemOrdersByParent[row.id]
+    )
+    const sortableIds = sortedSubs.map((s) => s.id)
+
+    const onSubitemRowsDragEnd = (event: DragEndEvent) => {
+      if (!onSubitemRowOrderCommit) return
+      const { active, over } = event
+      if (!over) return
+      const activeId = String(active.id)
+      const overId = String(over.id)
+      if (activeId === overId) return
+      const orderIds = sortedSubs.map((x) => x.id)
+      const oldI = orderIds.indexOf(activeId)
+      const newI = orderIds.indexOf(overId)
+      if (oldI < 0 || newI < 0) return
+      onSubitemRowOrderCommit(row.id, arrayMove(orderIds, oldI, newI))
+    }
+
+    const subTableEmptyFallback = (
+      <div className="p-4 text-center text-sm text-muted-foreground">—</div>
+    )
+
     return (
       <TableRow>
         <TableCell
           colSpan={colSpan}
-          className="bg-[color:var(--eco-board-row-hover)] p-0"
+          className="bg-sky-50/60 p-0 dark:bg-sky-950/20"
         >
           <div
             id={`subitems-${row.id}`}
-            className="border-t border-[color:var(--eco-board-row-divider)] bg-[color:var(--eco-board-row-hover)] p-3 ps-4 [border-inline-start:4px_solid_var(--eco-group-todo)]"
+            className="border-t border-sky-200/80 p-3 ps-4 dark:border-sky-800/60"
+            style={{
+              borderInlineStartWidth: 4,
+              borderInlineStartStyle: "solid",
+              borderInlineStartColor: groupAccent,
+            }}
             role="region"
             aria-label={t.subitemsRegionLabel}
           >
-            <div className="overflow-x-auto">
-              <div
-                className="grid min-w-[880px] grid-cols-7 gap-2 border-b border-border pb-2 text-xs font-medium text-muted-foreground"
-                aria-hidden
+            <div className="overflow-x-auto rounded-md border border-sky-200/70 bg-background/90 dark:border-sky-900/50">
+              <DndContext
+                sensors={subitemRowSensors}
+                collisionDetection={closestCenter}
+                onDragEnd={onSubitemRowsDragEnd}
               >
-                <span>{t.subitemCol}</span>
-                <span>{t.subitemOwner}</span>
-                <span>{t.subitemStatus}</span>
-                <span>{t.subitemDate}</span>
-                <span>{t.subitemStatus1}</span>
-                <span>{t.subitemStatus2}</span>
-                <span>{t.subitemText}</span>
-              </div>
-              <ul className="m-0 list-none p-0">
-                {subs.map((s: GqlBoardItem) => {
-                  const sd = s.dynamicData || {}
-                  const dropdown = normalizeSubitemDropdown(sd.dropdown)
-                  const status = normalizeSubitemStatus(sd.status)
-                  const status2 = normalizeSubitemStatus2(sd.subStatus2)
-                  const subDateLabel = String(sd.subDueDate ?? "").trim()
-                  const subAssignees = parseAssigneesFromDynamic(sd as Record<string, unknown>)
-                  const subPending = parsePendingInvitesFromDynamic(
-                    sd as Record<string, unknown>
-                  )
-                  const assigneeBtn =
-                    subAssignees.length > 0 || subPending.length > 0
-                      ? `${t.subitemOwner}: ${subAssignees.length + subPending.length}`
-                      : `${t.subitemOwner}: ${t.assigneeUnassigned}`
-                  return (
-                    <li
-                      key={s.id}
-                      className="grid min-w-[880px] grid-cols-7 gap-2 border-b border-border/40 py-3 last:border-b-0"
-                    >
-                      <div
-                        role="heading"
-                        aria-level={3}
-                        className="m-0 min-w-0 text-sm font-semibold text-foreground"
+                <Table
+                  id={`eco-subtbl-${groupId}-${row.id}`}
+                  columns={subVisibleColumns}
+                  columnWidthsPx={subMergedWidths}
+                  emptyState={subTableEmptyFallback}
+                  errorState={subTableEmptyFallback}
+                  isEmpty={false}
+                  size={tableSize}
+                  withoutBorder
+                  className="rounded-none border-0 bg-transparent shadow-none"
+                >
+                  <TableHeader>
+                    {enableSubitemColumnDrag ? (
+                      <Droppable
+                        droppableId={`eco-subcols|${groupId}|${row.id}`}
+                        direction="horizontal"
+                        type="SUBITEM_COLUMN"
                       >
-                        <InlineTaskTitle
-                          itemId={s.id}
-                          name={s.name}
-                          ariaLabel={t.subitemNameEditLabel}
-                          emptyErrorLabel={t.taskNameEmptyError}
-                          className="font-semibold"
-                          onCommit={(next) => onRenameItem(s.id, next)}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <AssigneePicker
-                          workspaceId={workspaceId}
-                          itemId={s.id}
-                          assignees={subAssignees}
-                          pendingInvites={subPending}
-                          assigneeButtonLabel={assigneeBtn}
-                          onCommit={(userIds, inviteEmails) =>
-                            onSetTaskAssignees(s.id, userIds, inviteEmails)
-                          }
-                          onOpenAssign={() => onPersonToolbarTarget(s.id)}
-                          filterPlaceholder={t.assigneeSearch}
-                          clearLabel={t.assigneeClear}
-                          inviteFooterLabel={t.assigneeInviteFooter}
-                          inviteHint={t.assigneeInviteHint}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <Select
-                          value={status}
-                          onValueChange={(v) =>
-                            onPatchItem(s.id, { status: v })
-                          }
-                        >
-                          <SelectTrigger
-                            size="sm"
-                            className="h-8 max-w-[160px] border-border/80"
-                            aria-label={t.subitemStatus}
+                        {(provided) => (
+                          <TableRow
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            size={tableSize}
                           >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SUBITEM_STATUS_OPTIONS.map((opt) => (
-                              <SelectItem key={opt} value={opt}>
-                                {opt}
-                              </SelectItem>
+                            {subVisibleColumns.map((col, hi) => (
+                              <Draggable
+                                key={col.id}
+                                draggableId={`subg-${groupId}-p-${row.id}-col-${col.id}`}
+                                index={hi}
+                                isDragDisabled={col.id === "add"}
+                              >
+                                {(prov, snapshot) =>
+                                  renderSubitemHeaderCell(col, hi, {
+                                    innerRef: prov.innerRef,
+                                    draggableProps: prov.draggableProps,
+                                    dragHandleProps: prov.dragHandleProps,
+                                    snapshot,
+                                  })
+                                }
+                              </Draggable>
                             ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="min-w-0">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 max-w-[120px] justify-start truncate px-2 font-normal"
-                              aria-label={`${t.subitemDate}: ${subDateLabel || "—"}`}
-                            >
-                              {subDateLabel || "—"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              onSelect={(date) => {
-                                if (!date) return
-                                onPatchItem(s.id, {
-                                  subDueDate: format(date, "MMM d"),
-                                })
-                              }}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      <div className="min-w-0">
-                        <Select
-                          value={dropdown}
-                          onValueChange={(v) =>
-                            onPatchItem(s.id, { dropdown: v })
-                          }
-                        >
-                          <SelectTrigger
-                            size="sm"
-                            className="h-8 max-w-[140px] border-border/80"
-                            aria-label={t.subitemStatus1}
+                            {provided.placeholder}
+                          </TableRow>
+                        )}
+                      </Droppable>
+                    ) : (
+                      <TableRow size={tableSize}>
+                        {subVisibleColumns.map((col, hi) =>
+                          renderSubitemHeaderCell(col, hi)
+                        )}
+                      </TableRow>
+                    )}
+                  </TableHeader>
+                  <TableBody>
+                    {sortableIds.length === 0 ? null : (
+                      <SortableContext
+                        items={sortableIds}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {sortedSubs.map((s) => (
+                          <SortableSubitemTableRow
+                            key={s.id}
+                            id={s.id}
+                            size={tableSize}
+                            highlighted={selectedSubitemIds.has(s.id)}
                           >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SUBITEM_DROPDOWN_OPTIONS.map((opt) => (
-                              <SelectItem key={opt} value={opt}>
-                                {opt}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="min-w-0">
-                        <Select
-                          value={status2}
-                          onValueChange={(v) =>
-                            onPatchItem(s.id, { subStatus2: v })
-                          }
-                        >
-                          <SelectTrigger
-                            size="sm"
-                            className="h-8 max-w-[120px] border-border/80"
-                            aria-label={t.subitemStatus2}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SUBITEM_STATUS2_OPTIONS.map((opt) => (
-                              <SelectItem key={opt} value={opt}>
-                                {opt}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="min-w-0">
-                        <Input
-                          key={`${s.id}-subtext`}
-                          className="h-8 max-w-full border-border/80 text-sm"
-                          defaultValue={String(sd.subNotesText ?? "")}
-                          placeholder={t.subitemTextPlaceholder}
-                          aria-label={t.subitemText}
-                          onBlur={(e) =>
-                            onPatchItem(s.id, {
-                              subNotesText: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
+                            {(listeners) =>
+                              subVisibleColumns.map((c, ci) => {
+                                const sticky = !!c.sticky
+                                const stickyLeftPx = stickyLeftPxForColumnIndex(
+                                  subVisibleColumns,
+                                  subMergedWidths,
+                                  ci
+                                )
+                                return (
+                                  <TableCell
+                                    key={c.id}
+                                    {...boardAlign(c.id)}
+                                    sticky={sticky}
+                                    stickyLeftPx={stickyLeftPx}
+                                    size="medium"
+                                    className={
+                                      c.id === "select"
+                                        ? "box-border min-w-0"
+                                        : undefined
+                                    }
+                                  >
+                                    {renderSubitemDataCell(c, s, listeners)}
+                                  </TableCell>
+                                )
+                              })
+                            }
+                          </SortableSubitemTableRow>
+                        ))}
+                      </SortableContext>
+                    )}
+                  </TableBody>
+                </Table>
+              </DndContext>
+              <div className="border-t border-border/60 px-2 py-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-9 w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => onAddSubitem(row.id)}
+                >
+                  <Plus className="size-4" aria-hidden />
+                  {t.addSubitem}
+                </Button>
+              </div>
             </div>
-            <Button
-              type="button"
-              variant="link"
-              className="mt-2 h-auto p-0 text-primary"
-              onClick={() => onAddSubitem(row.id)}
-            >
-              {t.addSubitem}
-            </Button>
           </div>
         </TableCell>
       </TableRow>
@@ -2498,161 +3518,94 @@ export function EcosystraBoardGroupTable({
           emptyGroupBody
         )
       ) : (
-      <Table
-        id={`ecosystra-board-table-${groupId}`}
-        columns={visibleColumns}
-        columnWidthsPx={mergedWidths}
-        emptyState={tableErrorFallback}
-        errorState={tableErrorFallback}
-        isEmpty={false}
-        size={tableSize}
-        className={cn(boardSurface.monoTableWrap, "bg-transparent")}
-      >
-        <TableCaption className="sr-only">
-          {t.tableCaptionGroup.replace("{name}", groupName)}
-        </TableCaption>
-        <TableHeader>
-          {enableColumnDrag ? (
-            <Droppable
-              droppableId={`board-columns-${groupId}`}
-              direction="horizontal"
-              type="COLUMN"
-            >
-              {(provided) => (
-                <TableRow
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  size={tableSize}
-                >
-                  {visibleColumns.map((col, hi) => (
-                    <Draggable
-                      key={col.id}
-                      draggableId={`g-${groupId}-col-${col.id}`}
-                      index={hi}
-                      isDragDisabled={col.id === "add"}
-                    >
-                      {(prov, snapshot) =>
-                        renderHeaderCell(col, hi, {
-                          innerRef: prov.innerRef,
-                          draggableProps: prov.draggableProps,
-                          dragHandleProps: prov.dragHandleProps,
-                          snapshot,
-                        })
-                      }
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </TableRow>
-              )}
-            </Droppable>
-          ) : (
-            <TableRow>
-              {visibleColumns.map((col, hi) => renderHeaderCell(col, hi))}
-            </TableRow>
-          )}
-        </TableHeader>
-        {groupByPriority ? (
-          <TableBody>
-            {rowSegments.map((seg) => {
-              if (seg.type === "header") {
-                return (
+        <Table
+          id={`ecosystra-board-table-${groupId}`}
+          columns={visibleColumns}
+          columnWidthsPx={mergedWidths}
+          emptyState={tableErrorFallback}
+          errorState={tableErrorFallback}
+          isEmpty={false}
+          size={tableSize}
+          className={cn(boardSurface.monoTableWrap, "bg-transparent")}
+        >
+          <TableCaption className="sr-only">
+            {t.tableCaptionGroup.replace("{name}", groupName)}
+          </TableCaption>
+          <TableHeader>
+            {enableColumnDrag ? (
+              <Droppable
+                droppableId={`board-columns-${groupId}`}
+                direction="horizontal"
+                type="COLUMN"
+              >
+                {(provided) => (
                   <TableRow
-                    key={seg.key}
-                    className="bg-[color:var(--eco-board-row-hover)]"
-                  >
-                    <th
-                      colSpan={colSpan}
-                      scope="colgroup"
-                      className="px-3 py-2 text-start text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                    >
-                      {t.groupByPriorityHeading}: {seg.label}
-                    </th>
-                  </TableRow>
-                )
-              }
-              const row = seg.item
-              return (
-                <Fragment key={seg.key}>
-                  <TableRow
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
                     size={tableSize}
-                    highlighted={selectedRowIds.has(row.id)}
                   >
-                    {visibleColumns.map((col, ci) =>
-                      renderBodyCell(col, row, ci)
-                    )}
+                    {visibleColumns.map((col, hi) => (
+                      <Draggable
+                        key={col.id}
+                        draggableId={`g-${groupId}-col-${col.id}`}
+                        index={hi}
+                        isDragDisabled={col.id === "add"}
+                      >
+                        {(prov, snapshot) =>
+                          renderHeaderCell(col, hi, {
+                            innerRef: prov.innerRef,
+                            draggableProps: prov.draggableProps,
+                            dragHandleProps: prov.dragHandleProps,
+                            snapshot,
+                          })
+                        }
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
                   </TableRow>
-                  {renderExpandedSubitemsRow(row)}
-                </Fragment>
-              )
-            })}
-            <TableRow className="border-dashed">
-              <TableCell colSpan={colSpan} className="py-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-9 w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => onAddTask(groupId)}
-                >
-                  <Plus className="size-4" aria-hidden />
-                  {t.addTask}
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        ) : items.length === 0 ? (
-          <TableBody>
-            <TableRow className="border-dashed">
-              <TableCell colSpan={colSpan} className="py-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-9 w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => onAddTask(groupId)}
-                >
-                  <Plus className="size-4" aria-hidden />
-                  {t.addTask}
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        ) : (
-          <>
-            <SortableContext
-              items={rowIdsForSort}
-              strategy={verticalListSortingStrategy}
-            >
+                )}
+              </Droppable>
+            ) : (
+              <TableRow>
+                {visibleColumns.map((col, hi) => renderHeaderCell(col, hi))}
+              </TableRow>
+            )}
+          </TableHeader>
+          {groupByPriority ? (
+            <TableBody>
               {rowSegments.map((seg) => {
-                if (seg.type !== "row") return null
+                if (seg.type === "header") {
+                  return (
+                    <TableRow
+                      key={seg.key}
+                      className="bg-[color:var(--eco-board-row-hover)]"
+                    >
+                      <th
+                        colSpan={colSpan}
+                        scope="colgroup"
+                        className="px-3 py-2 text-start text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        {t.groupByPriorityHeading}: {seg.label}
+                      </th>
+                    </TableRow>
+                  )
+                }
                 const row = seg.item
                 return (
-                  <SortableBoardRowTbody
-                    key={seg.key}
-                    id={row.id}
-                    disabled={false}
-                    groupId={groupId}
-                  >
-                    {({ listeners }) => (
-                      <>
-                        <TableRow
-                          size={tableSize}
-                          className="group/row"
-                          highlighted={selectedRowIds.has(row.id)}
-                        >
-                          {visibleColumns.map((col, ci) =>
-                            renderBodyCell(col, row, ci, listeners)
-                          )}
-                        </TableRow>
-                        {renderExpandedSubitemsRow(row)}
-                      </>
-                    )}
-                  </SortableBoardRowTbody>
+                  <Fragment key={seg.key}>
+                    <TableRow
+                      size={tableSize}
+                      className="group/row"
+                      highlighted={selectedRowIds.has(row.id)}
+                    >
+                      {visibleColumns.map((col, ci) =>
+                        renderBodyCell(col, row, ci)
+                      )}
+                    </TableRow>
+                    {renderExpandedSubitemsRow(row)}
+                  </Fragment>
                 )
               })}
-            </SortableContext>
-            <tbody
-              data-slot="table-body"
-              className="[&_tr:last-child>td]:border-b-0"
-            >
               <TableRow className="border-dashed">
                 <TableCell colSpan={colSpan} className="py-3">
                   <Button
@@ -2666,165 +3619,233 @@ export function EcosystraBoardGroupTable({
                   </Button>
                 </TableCell>
               </TableRow>
-            </tbody>
-          </>
-        )}
-        {items.length > 0 ? (
-          <TableFooter>
-            <TableRow className="bg-[color:var(--eco-board-footer-bg)]">
-              {visibleColumns.map((col) => {
-                const footerStickyEnd = !!col.stickyEnd
-                if (col.id === "budget") {
+            </TableBody>
+          ) : items.length === 0 ? (
+            <TableBody>
+              <TableRow className="border-dashed">
+                <TableCell colSpan={colSpan} className="py-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => onAddTask(groupId)}
+                  >
+                    <Plus className="size-4" aria-hidden />
+                    {t.addTask}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          ) : (
+            <>
+              <SortableContext
+                items={rowIdsForSort}
+                strategy={verticalListSortingStrategy}
+              >
+                {rowSegments.map((seg) => {
+                  if (seg.type !== "row") return null
+                  const row = seg.item
                   return (
-                    <TableCell
-                      key={col.id}
-                      {...boardAlign(col.id)}
-                      size="medium"
-                      className="text-sm font-semibold text-foreground"
+                    <SortableBoardRowTbody
+                      key={seg.key}
+                      id={row.id}
+                      disabled={false}
+                      groupId={groupId}
                     >
-                      <span className="sr-only">{t.colBudget}</span>
-                      {`${formatIdr(budgetSum)} ${t.budgetSumLabel}`}
-                    </TableCell>
+                      {({ listeners }) => (
+                        <>
+                          <TableRow
+                            size={tableSize}
+                            className="group/row"
+                            highlighted={selectedRowIds.has(row.id)}
+                          >
+                            {visibleColumns.map((col, ci) =>
+                              renderBodyCell(col, row, ci, listeners)
+                            )}
+                          </TableRow>
+                          {renderExpandedSubitemsRow(row)}
+                        </>
+                      )}
+                    </SortableBoardRowTbody>
                   )
-                }
-                if (col.id === "status") {
-                  const segs = statusLabels.map((l) => ({
-                    flex: items.filter(
-                      (it) =>
-                        resolveTaskStatusDisplayLabel(
-                          (it.dynamicData || {}).taskStatus,
-                          statusLabels
-                        ) === l.label
-                    ).length,
-                    color: l.color,
-                  }))
-                  return (
-                    <TableCell
-                      key={col.id}
-                      {...boardAlign(col.id)}
-                      size="medium"
+                })}
+              </SortableContext>
+              <tbody
+                data-slot="table-body"
+                className="[&_tr:last-child>td]:border-b-0"
+              >
+                <TableRow className="border-dashed">
+                  <TableCell colSpan={colSpan} className="py-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                      onClick={() => onAddTask(groupId)}
                     >
-                      <ColumnSummaryBar
-                        segments={segs}
-                        aria-label={t.footerStatusSummary}
-                      />
-                    </TableCell>
-                  )
-                }
-                if (col.id === "priority") {
-                  const segs = priorityLabels.map((l) => ({
-                    flex: items.filter(
-                      (it) =>
-                        resolvePriorityBucketLabel(
-                          it.dynamicData || {},
-                          priorityLabels
-                        ) === l.label
-                    ).length,
-                    color: l.color,
-                  }))
-                  return (
-                    <TableCell
-                      key={col.id}
-                      {...boardAlign(col.id)}
-                      size="medium"
-                    >
-                      <ColumnSummaryBar
-                        segments={segs}
-                        aria-label={t.footerPrioritySummary}
-                      />
-                    </TableCell>
-                  )
-                }
-                if (col.id === "timeline") {
-                  return (
-                    <TableCell
-                      key={col.id}
-                      {...boardAlign(col.id)}
-                      size="medium"
-                    >
-                      <span
-                        className="inline-flex max-w-full whitespace-normal break-words rounded-full px-2.5 py-0.5 text-center text-xs font-semibold [overflow-wrap:anywhere]"
-                        style={{
-                          backgroundColor: "var(--eco-mono-timeline-bg)",
-                          color: "var(--eco-mono-timeline-fg)",
-                        }}
+                      <Plus className="size-4" aria-hidden />
+                      {t.addTask}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              </tbody>
+            </>
+          )}
+          {items.length > 0 ? (
+            <TableFooter>
+              <TableRow className="bg-[color:var(--eco-board-footer-bg)]">
+                {visibleColumns.map((col) => {
+                  const footerStickyEnd = !!col.stickyEnd
+                  if (col.id === "budget") {
+                    return (
+                      <TableCell
+                        key={col.id}
+                        {...boardAlign(col.id)}
+                        size="medium"
+                        className="text-sm font-semibold text-foreground"
                       >
-                        {groupTimelineFooterLabel(items)}
-                      </span>
-                    </TableCell>
-                  )
-                }
-                if (col.id === "notesCategory") {
-                  const segs = notesCategoryLabels.map((l) => ({
-                    flex: items.filter(
-                      (it) =>
-                        resolveNotesCategoryDisplayLabel(
-                          (it.dynamicData || {}).notesCategory,
-                          notesCategoryLabels
-                        ) === l.label
-                    ).length,
-                    color: l.color,
-                  }))
-                  return (
-                    <TableCell
-                      key={col.id}
-                      {...boardAlign(col.id)}
-                      size="medium"
-                    >
-                      <ColumnSummaryBar
-                        segments={segs}
-                        aria-label={t.footerNotesCategorySummary}
-                      />
-                    </TableCell>
-                  )
-                }
-                if (col.id === "duePriority") {
-                  const labels = [
-                    ...new Set(
-                      items.map((it) =>
-                        String(
-                          (it.dynamicData || {}).dueDatePriority ??
-                            "Critical Priority"
+                        <span className="sr-only">{t.colBudget}</span>
+                        {`${formatIdr(budgetSum)} ${t.budgetSumLabel}`}
+                      </TableCell>
+                    )
+                  }
+                  if (col.id === "status") {
+                    const segs = statusLabels.map((l) => ({
+                      flex: items.filter(
+                        (it) =>
+                          resolveTaskStatusDisplayLabel(
+                            (it.dynamicData || {}).taskStatus,
+                            statusLabels
+                          ) === l.label
+                      ).length,
+                      color: l.color,
+                    }))
+                    return (
+                      <TableCell
+                        key={col.id}
+                        {...boardAlign(col.id)}
+                        size="medium"
+                      >
+                        <ColumnSummaryBar
+                          segments={segs}
+                          aria-label={t.footerStatusSummary}
+                        />
+                      </TableCell>
+                    )
+                  }
+                  if (col.id === "priority") {
+                    const segs = priorityLabels.map((l) => ({
+                      flex: items.filter(
+                        (it) =>
+                          resolvePriorityBucketLabel(
+                            it.dynamicData || {},
+                            priorityLabels
+                          ) === l.label
+                      ).length,
+                      color: l.color,
+                    }))
+                    return (
+                      <TableCell
+                        key={col.id}
+                        {...boardAlign(col.id)}
+                        size="medium"
+                      >
+                        <ColumnSummaryBar
+                          segments={segs}
+                          aria-label={t.footerPrioritySummary}
+                        />
+                      </TableCell>
+                    )
+                  }
+                  if (col.id === "timeline") {
+                    return (
+                      <TableCell
+                        key={col.id}
+                        {...boardAlign(col.id)}
+                        size="medium"
+                      >
+                        <span
+                          className="inline-flex max-w-full whitespace-normal break-words rounded-full px-2.5 py-0.5 text-center text-xs font-semibold [overflow-wrap:anywhere]"
+                          style={{
+                            backgroundColor: "var(--eco-mono-timeline-bg)",
+                            color: "var(--eco-mono-timeline-fg)",
+                          }}
+                        >
+                          {groupTimelineFooterLabel(items)}
+                        </span>
+                      </TableCell>
+                    )
+                  }
+                  if (col.id === "notesCategory") {
+                    const segs = notesCategoryLabels.map((l) => ({
+                      flex: items.filter(
+                        (it) =>
+                          resolveNotesCategoryDisplayLabel(
+                            (it.dynamicData || {}).notesCategory,
+                            notesCategoryLabels
+                          ) === l.label
+                      ).length,
+                      color: l.color,
+                    }))
+                    return (
+                      <TableCell
+                        key={col.id}
+                        {...boardAlign(col.id)}
+                        size="medium"
+                      >
+                        <ColumnSummaryBar
+                          segments={segs}
+                          aria-label={t.footerNotesCategorySummary}
+                        />
+                      </TableCell>
+                    )
+                  }
+                  if (col.id === "duePriority") {
+                    const labels = [
+                      ...new Set(
+                        items.map((it) =>
+                          String(
+                            (it.dynamicData || {}).dueDatePriority ??
+                              "Critical Priority"
+                          )
                         )
-                      )
-                    ),
-                  ]
-                  const segs = labels.map((lab) => ({
-                    flex: items.filter(
-                      (it) =>
-                        String(
-                          (it.dynamicData || {}).dueDatePriority ??
-                            "Critical Priority"
-                        ) === lab
-                    ).length,
-                    color: "var(--eco-mono-due-critical-bg)",
-                  }))
+                      ),
+                    ]
+                    const segs = labels.map((lab) => ({
+                      flex: items.filter(
+                        (it) =>
+                          String(
+                            (it.dynamicData || {}).dueDatePriority ??
+                              "Critical Priority"
+                          ) === lab
+                      ).length,
+                      color: "var(--eco-mono-due-critical-bg)",
+                    }))
+                    return (
+                      <TableCell
+                        key={col.id}
+                        {...boardAlign(col.id)}
+                        size="medium"
+                      >
+                        <ColumnSummaryBar
+                          segments={segs}
+                          aria-label={t.footerDuePrioritySummary}
+                        />
+                      </TableCell>
+                    )
+                  }
                   return (
                     <TableCell
                       key={col.id}
                       {...boardAlign(col.id)}
                       size="medium"
-                    >
-                      <ColumnSummaryBar
-                        segments={segs}
-                        aria-label={t.footerDuePrioritySummary}
-                      />
-                    </TableCell>
+                      stickyEnd={footerStickyEnd}
+                    />
                   )
-                }
-                return (
-                  <TableCell
-                    key={col.id}
-                    {...boardAlign(col.id)}
-                    size="medium"
-                    stickyEnd={footerStickyEnd}
-                  />
-                )
-              })}
-            </TableRow>
-          </TableFooter>
-        ) : null}
-      </Table>
+                })}
+              </TableRow>
+            </TableFooter>
+          ) : null}
+        </Table>
       )}
     </>
   )

@@ -13,6 +13,7 @@ import {
   Layers,
   Search,
   Sparkles,
+  Star,
   Type,
   UserCircle,
   Users,
@@ -44,6 +45,7 @@ const ESSENTIALS: {
   { id: "notesCategory", icon: ChevronDown, iconClass: "bg-emerald-600" },
   { id: "dueDate", icon: Calendar, iconClass: "bg-violet-500" },
   { id: "budget", icon: Hash, iconClass: "bg-amber-500" },
+  { id: "rating", icon: Star, iconClass: "bg-amber-300" },
 ]
 
 const SUPER_USEFUL: {
@@ -73,6 +75,7 @@ function pickerLabel(
     timeline: "hideColTimeline",
     priority: "hideColPriority",
     budget: "hideColBudget",
+    rating: "hideColRating",
     duePriority: "hideColDue",
     notes: "addColumnPickerText",
     notesCategory: "hideColNotesCategory",

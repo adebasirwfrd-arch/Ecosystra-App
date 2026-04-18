@@ -62,6 +62,15 @@ export const UPDATE_BOARD_METADATA = gql`
   }
 `
 
+export const UPDATE_BOARD_SUBITEM_COLUMNS = gql`
+  mutation UpdateBoardSubitemColumns($id: ID!, $subitemColumns: JSON!) {
+    updateBoardSubitemColumns(id: $id, subitemColumns: $subitemColumns) {
+      id
+      subitemColumns
+    }
+  }
+`
+
 export const CREATE_ITEM = gql`
   mutation CreateItem(
     $name: String!

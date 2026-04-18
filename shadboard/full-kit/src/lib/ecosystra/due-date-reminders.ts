@@ -85,6 +85,17 @@ function resolveDueDateIso(d: Record<string, unknown>): string | null {
   return null
 }
 
+/** Sub-item due dates use `subDueDateIso` / `subDueDate` in `dynamicData`. */
+function resolveSubDueDateIso(d: Record<string, unknown>): string | null {
+  const raw = d.subDueDateIso
+  if (typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.trim())) {
+    return raw.trim()
+  }
+  const disp = d.subDueDate
+  if (typeof disp === "string") return inferIsoFromDisplay(disp)
+  return null
+}
+
 function reminderAlreadySent(
   d: Record<string, unknown>,
   window: DueReminderWindow,
@@ -124,14 +135,26 @@ function boardTaskDeepLink(taskId: string): string {
 type ItemRow = {
   id: string
   name: string
+  parentItemId: string | null
+  parentName: string | null
   dynamicData: unknown
   createdByUserId: string | null
   boardName: string | null
   groupName: string | null
 }
 
+function itemIsDoneForReminder(
+  d: Record<string, unknown>,
+  isSubitem: boolean
+): boolean {
+  if (isSubitem) {
+    return isDoneStatus(d.status) || isDoneStatus(d.taskStatus)
+  }
+  return isDoneStatus(d.taskStatus)
+}
+
 /**
- * Scans top-level tasks with due dates and sends Brevo reminders at 7 / 3 / 1 **calendar** days before due
+ * Scans top-level tasks **and** sub-items with due dates and sends Brevo reminders at 7 / 3 / 1 **calendar** days before due
  * (**Asia/Jakarta, GMT+7**). Idempotent per (task, window, dueIso) via `dynamicData.dueReminderFired`.
  */
 export async function processDueDateReminders(): Promise<{
@@ -144,6 +167,8 @@ export async function processDueDateReminders(): Promise<{
     SELECT
       i.id,
       i.name,
+      i."parentItemId" AS "parentItemId",
+      parent.name AS "parentName",
       i."dynamicData" AS "dynamicData",
       i."createdByUserId" AS "createdByUserId",
       b.name AS "boardName",
@@ -151,14 +176,37 @@ export async function processDueDateReminders(): Promise<{
     FROM public."Item" i
     LEFT JOIN public."Board" b ON b.id = i."boardId"
     LEFT JOIN public."Group" g ON g.id = i."groupId"
-    WHERE i."parentItemId" IS NULL
-      AND (
-        (i."dynamicData"->>'dueDateIso') IS NOT NULL
-        AND (i."dynamicData"->>'dueDateIso') <> ''
-        OR (i."dynamicData"->>'dueDate') IS NOT NULL
-        AND (i."dynamicData"->>'dueDate') <> ''
-        AND (i."dynamicData"->>'dueDate') <> '—'
+    LEFT JOIN public."Item" parent ON parent.id = i."parentItemId"
+    WHERE (
+      (
+        i."parentItemId" IS NULL
+        AND (
+          (
+            (i."dynamicData"->>'dueDateIso') IS NOT NULL
+            AND (i."dynamicData"->>'dueDateIso') <> ''
+          )
+          OR (
+            (i."dynamicData"->>'dueDate') IS NOT NULL
+            AND (i."dynamicData"->>'dueDate') <> ''
+            AND (i."dynamicData"->>'dueDate') <> '—'
+          )
+        )
       )
+      OR (
+        i."parentItemId" IS NOT NULL
+        AND (
+          (
+            (i."dynamicData"->>'subDueDateIso') IS NOT NULL
+            AND (i."dynamicData"->>'subDueDateIso') <> ''
+          )
+          OR (
+            (i."dynamicData"->>'subDueDate') IS NOT NULL
+            AND (i."dynamicData"->>'subDueDate') <> ''
+            AND (i."dynamicData"->>'subDueDate') <> '—'
+          )
+        )
+      )
+    )
   `)
 
   let sent = 0
@@ -166,12 +214,13 @@ export async function processDueDateReminders(): Promise<{
 
   for (const row of rows) {
     const d = (row.dynamicData as Record<string, unknown>) || {}
-    if (isDoneStatus(d.taskStatus)) {
+    const isSubitem = row.parentItemId != null && String(row.parentItemId).trim() !== ""
+    if (itemIsDoneForReminder(d, isSubitem)) {
       skipped++
       continue
     }
 
-    const dueIso = resolveDueDateIso(d)
+    const dueIso = isSubitem ? resolveSubDueDateIso(d) : resolveDueDateIso(d)
     if (!dueIso) {
       skipped++
       continue
@@ -224,9 +273,16 @@ export async function processDueDateReminders(): Promise<{
       continue
     }
 
-    const dueDisplay =
-      (typeof d.dueDate === "string" && d.dueDate.trim()) ||
-      formatDueIsoForEmail(dueIso)
+    const dueDisplay = isSubitem
+      ? (typeof d.subDueDate === "string" && d.subDueDate.trim()
+          ? d.subDueDate.trim()
+          : formatDueIsoForEmail(dueIso))
+      : (typeof d.dueDate === "string" && d.dueDate.trim()) ||
+        formatDueIsoForEmail(dueIso)
+    const taskLabel =
+      row.parentName && String(row.parentName).trim()
+        ? `${String(row.parentName).trim()} › ${row.name}`
+        : row.name
     const deepLink = boardTaskDeepLink(row.id)
     const windowLabel =
       window === "7d" ? "7 days" : window === "3d" ? "3 days" : "1 day"
@@ -236,7 +292,7 @@ export async function processDueDateReminders(): Promise<{
       const ok = await sendDueDateReminderEmail({
         toEmail: r.email,
         toName: r.name,
-        taskName: row.name,
+        taskName: taskLabel,
         boardName: row.boardName || "Board",
         groupName: row.groupName,
         dueDateDisplay: dueDisplay,
@@ -244,7 +300,13 @@ export async function processDueDateReminders(): Promise<{
         windowKey: window,
         windowLabel,
         deepLink,
-        taskStatus: typeof d.taskStatus === "string" ? d.taskStatus : null,
+        taskStatus: isSubitem
+          ? typeof d.status === "string"
+            ? d.status
+            : null
+          : typeof d.taskStatus === "string"
+            ? d.taskStatus
+            : null,
         priority: typeof d.priority === "string" ? d.priority : null,
       })
       if (ok) anyOk = true
