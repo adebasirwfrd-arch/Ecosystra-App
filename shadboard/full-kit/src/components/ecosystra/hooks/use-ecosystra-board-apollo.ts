@@ -233,6 +233,19 @@ function ensureOwnerColumnInOrder(order: string[]): string[] {
   return order
 }
 
+export type DuePriorityLabel = {
+  id: string
+  label: string
+  color: string
+}
+
+export const DEFAULT_DUE_PRIORITY_LABELS: DuePriorityLabel[] = [
+  { id: "high", label: "High Priority", color: "#00C875" },
+  { id: "critical", label: "Critical Priority", color: "#FDAB3D" },
+  { id: "standard", label: "Standard Priority", color: "#E2445C" },
+  { id: "none", label: "", color: "#C4C4C4" },
+]
+
 export function parseBoardTableUiMetadata(
   meta: Record<string, unknown> | null | undefined
 ): {
@@ -248,6 +261,8 @@ export function parseBoardTableUiMetadata(
   groupItemOrders: Record<string, string[]>
   /** Optional display title overrides per column id (persisted `tableColumnTitles`). */
   tableColumnTitles: Record<string, string>
+  /** Custom label text and colors for the 'duePriority' column (persisted `duePriorityLabels`). */
+  duePriorityLabels: DuePriorityLabel[]
 } {
   const rawHidden = meta?.hiddenTableColumnIds
   const hidden = Array.isArray(rawHidden)
@@ -311,12 +326,40 @@ export function parseBoardTableUiMetadata(
 
   const tableColumnTitles: Record<string, string> = {}
   const rawTitles = meta?.tableColumnTitles
-  if (rawTitles && typeof rawTitles === "object" && rawTitles !== null && !Array.isArray(rawTitles)) {
+  if (
+    rawTitles &&
+    typeof rawTitles === "object" &&
+    rawTitles !== null &&
+    !Array.isArray(rawTitles)
+  ) {
     for (const [k, v] of Object.entries(rawTitles)) {
-      if (typeof k === "string" && typeof v === "string" && v.trim()) {
-        tableColumnTitles[k] = v.trim()
+      if (typeof k === "string" && typeof v === "string") {
+        tableColumnTitles[k] = v
       }
     }
+  }
+
+  const duePriorityLabels: DuePriorityLabel[] = []
+  const rawDpl = meta?.duePriorityLabels
+  if (Array.isArray(rawDpl)) {
+    for (const x of rawDpl) {
+      if (
+        x &&
+        typeof x === "object" &&
+        typeof x.id === "string" &&
+        typeof x.label === "string" &&
+        typeof x.color === "string"
+      ) {
+        duePriorityLabels.push({
+          id: x.id,
+          label: x.label,
+          color: x.color,
+        })
+      }
+    }
+  }
+  if (duePriorityLabels.length === 0) {
+    duePriorityLabels.push(...DEFAULT_DUE_PRIORITY_LABELS)
   }
 
   return {
@@ -327,6 +370,7 @@ export function parseBoardTableUiMetadata(
     tableCustomColumns,
     groupItemOrders,
     tableColumnTitles,
+    duePriorityLabels,
   }
 }
 
@@ -617,6 +661,8 @@ export function useEcosystraBoardApollo() {
       tableCustomColumns?: Record<string, TableCustomColumnDef>
       /** Full merged map of column id → display title override */
       tableColumnTitles?: Record<string, string>
+      /** Full merged list for the main-table Due priority column */
+      duePriorityLabels?: DuePriorityLabel[]
     }) => {
       if (!board?.id) return
       try {

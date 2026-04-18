@@ -1615,6 +1615,8 @@ export function EcosystraBoardMainView() {
                           selectionClearVersion={selectionClearVersion}
                           tableColumnTitles={tableUi.tableColumnTitles}
                           onColumnTitleCommit={commitColumnTitle}
+                          duePriorityLabels={tableUi.duePriorityLabels}
+                          patchBoardTableUi={patchBoardTableUi}
                         />
                       </AccordionContent>
                     </EcosystraAccordionItem>

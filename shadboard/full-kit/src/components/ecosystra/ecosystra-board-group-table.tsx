@@ -54,6 +54,7 @@ import type {
 } from "@hello-pangea/dnd"
 import type { CSSProperties, ReactNode, Ref } from "react"
 import type {
+  DuePriorityLabel,
   GqlBoardItem,
   HidableBoardColumnId,
   TableCustomColumnDef,
@@ -107,6 +108,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+
+import { DuePriorityPicker } from "./due-priority-picker"
 import {
   EcosystraBoardAvatar,
   EcosystraBoardAvatarGroup,
@@ -287,32 +290,7 @@ function parseTimelineRange(s: string): DateRange | undefined {
   return { from: fromDate, to: isValid(toDate) ? toDate : undefined }
 }
 
-function DuePill({
-  label,
-  duePriorityLabel,
-}: {
-  label: string
-  duePriorityLabel: string
-}) {
-  const readable = `${duePriorityLabel}: ${label}`
-  return (
-    <span
-      className={cn(
-        bookmark.bookmarkSelectTrigger,
-        "max-w-[220px] truncate shadow-none"
-      )}
-      style={{
-        backgroundColor: "var(--eco-mono-due-critical-bg)",
-        color: "var(--eco-mono-due-critical-fg)",
-      }}
-      aria-label={readable}
-      title={readable}
-    >
-      <span className="truncate">{label}</span>
-      <Sparkles className="size-3 shrink-0 opacity-90" aria-hidden />
-    </span>
-  )
-}
+
 
 const SUBITEM_STATUS2_OPTIONS = ["—", "At risk", "On track"] as const
 
@@ -362,6 +340,66 @@ function InlineNotesPlain({
       aria-label={ariaLabel}
       placeholder={placeholder}
     />
+  )
+}
+
+function BudgetInlineEdit({
+  itemId,
+  value,
+  ariaLabel,
+  onCommit,
+}: {
+  itemId: string
+  value: number
+  ariaLabel: string
+  onCommit: (next: number) => void
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState(String(value))
+
+  useEffect(() => {
+    setDraft(String(value))
+  }, [value])
+
+  const handleCommit = () => {
+    const next = parseFloat(draft)
+    if (!isNaN(next) && next !== value) {
+      onCommit(next)
+    } else {
+      setDraft(String(value))
+    }
+    setIsEditing(false)
+  }
+
+  if (isEditing) {
+    return (
+      <Input
+        type="number"
+        autoFocus
+        className="h-8 max-w-[200px] border-none bg-muted/40 px-2 py-0 text-center shadow-none focus-visible:ring-1 focus-visible:ring-ring"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleCommit()
+          if (e.key === "Escape") {
+            setDraft(String(value))
+            setIsEditing(false)
+          }
+        }}
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className="flex h-8 min-w-[100px] items-center justify-center rounded-md px-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      onClick={() => setIsEditing(true)}
+      aria-label={`${ariaLabel}: ${formatIdr(value)}`}
+    >
+      <span className="truncate">{formatIdr(value)}</span>
+    </button>
   )
 }
 
@@ -989,6 +1027,12 @@ type Props = {
     nextTitle: string,
     fallbackTitle: string
   ) => void
+  /** Board metadata `duePriorityLabels` — options for the Due priority column. */
+  duePriorityLabels: DuePriorityLabel[]
+  /** Persist due-priority label edits (board metadata). */
+  patchBoardTableUi: (partial: {
+    duePriorityLabels: DuePriorityLabel[]
+  }) => void | Promise<void>
 }
 
 export function EcosystraBoardGroupTable({
@@ -1022,6 +1066,8 @@ export function EcosystraBoardGroupTable({
   onColumnTitleCommit,
   onDuplicateBoardColumn,
   onDeleteBoardColumn,
+  duePriorityLabels,
+  patchBoardTableUi,
 }: Props) {
   const isDesktop = useMedia("(min-width: 640px)", false)
   const hidden = useMemo(() => new Set(hiddenColumnIds), [hiddenColumnIds])
@@ -1589,9 +1635,9 @@ export function EcosystraBoardGroupTable({
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-border/80 px-2 font-normal"
+                    className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-0 px-2 font-normal shadow-none hover:bg-muted/50"
                     aria-label={`${t.colDueDate}: ${label}`}
                   >
                     <Check
@@ -1766,18 +1812,14 @@ export function EcosystraBoardGroupTable({
         case "budget":
           return (
             <TableCell key={col.id} {...boardAlign(col.id)} {...cellCommonProps}>
-              <InputSpin
-                className="max-w-[200px]"
+              <BudgetInlineEdit
+                itemId={row.id}
                 value={budgetNumber({ budget: d[fk] } as Record<
                   string,
                   unknown
                 >)}
-                min={0}
-                max={1_000_000_000}
-                step={100}
-                formatDisplay={formatIdr}
-                onChange={(n) => onPatchItem(row.id, { [fk]: n })}
-                aria-label={t.colBudget}
+                onCommit={(n) => onPatchItem(row.id, { [fk]: n })}
+                ariaLabel={t.colBudget}
               />
             </TableCell>
           )
@@ -2033,9 +2075,9 @@ export function EcosystraBoardGroupTable({
               <PopoverTrigger asChild>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-border/80 px-2 font-normal"
+                  className="h-8 max-w-[140px] justify-start gap-1.5 rounded-md border-0 px-2 font-normal shadow-none hover:bg-muted/50"
                   aria-label={`${t.colDueDate}: ${label}`}
                 >
                   <Check
@@ -2191,24 +2233,26 @@ export function EcosystraBoardGroupTable({
       case "budget":
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <InputSpin
-              className="max-w-[200px]"
+            <BudgetInlineEdit
+              itemId={row.id}
               value={budgetNumber(d)}
-              min={0}
-              max={1_000_000_000}
-              step={100}
-              formatDisplay={formatIdr}
-              onChange={(n) => onPatchItem(row.id, { budget: n })}
-              aria-label={t.colBudget}
+              onCommit={(n) => onPatchItem(row.id, { budget: n })}
+              ariaLabel={t.colBudget}
             />
           </TableCell>
         )
       case "duePriority":
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <DuePill
-              label={String(d.dueDatePriority ?? "—")}
-              duePriorityLabel={t.dueDatePriorityLabel}
+            <DuePriorityPicker
+              value={String(d.dueDatePriority ?? "")}
+              labels={duePriorityLabels}
+              onSelect={(labelId) =>
+                onPatchItem(row.id, { dueDatePriority: labelId })
+              }
+              onUpdateLabels={(newLabels) =>
+                void patchBoardTableUi({ duePriorityLabels: newLabels })
+              }
             />
           </TableCell>
         )
