@@ -9,7 +9,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type FocusEvent,
 } from "react"
 import { useApolloClient } from "@apollo/client"
 import {
@@ -29,6 +28,7 @@ import {
 } from "@dnd-kit/sortable"
 import { Draggable, Droppable } from "@hello-pangea/dnd"
 import { format } from "date-fns"
+import { motion } from "framer-motion"
 import { useMedia } from "react-use"
 import { toast } from "sonner"
 import {
@@ -51,7 +51,6 @@ import {
 } from "lucide-react"
 
 import boardSurface from "./ecosystra-board-surface.module.css"
-import { BoardTimelineRangeCommitPopover } from "./board-timeline-range-commit-popover"
 
 import type { TableColumn } from "@/components/ui/ecosystra-table"
 import type { DragEndEvent, DraggableSyntheticListeners } from "@dnd-kit/core"
@@ -60,8 +59,13 @@ import type {
   DraggableProvidedDraggableProps,
   DraggableStateSnapshot,
 } from "@hello-pangea/dnd"
-import type { CSSProperties, ReactNode, Ref } from "react"
+import type { CSSProperties, FocusEvent, ReactNode, Ref } from "react"
 import type { DateRange } from "react-day-picker"
+import type {
+  BoardFacetLabels,
+  BoardFilterColumnMeta,
+} from "./ecosystra-board-filter-engine"
+import type { BoardGroupBySuite } from "./ecosystra-board-group-by-engine"
 import type {
   DuePriorityLabel,
   GqlBoardGroup,
@@ -71,11 +75,11 @@ import type {
   TableCustomColumnDef,
 } from "./hooks/use-ecosystra-board-apollo"
 
+import { WORKSPACE_USERS } from "@/lib/ecosystra/board-gql"
 import {
   getTimelineDuration,
   parseTimelineRange,
 } from "@/lib/ecosystra/board-timeline-format"
-import { WORKSPACE_USERS } from "@/lib/ecosystra/board-gql"
 import { cn, getInitials } from "@/lib/utils"
 
 import {
@@ -120,6 +124,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { BoardColumnLabelPicker } from "./board-column-label-picker"
+import { BoardTimelineRangeCommitPopover } from "./board-timeline-range-commit-popover"
 import { DuePriorityPicker } from "./due-priority-picker"
 import { EcosystraBoardAddColumnPopover } from "./ecosystra-board-add-column-popover"
 import {
@@ -127,15 +132,10 @@ import {
   EcosystraBoardAvatarGroup,
   EcosystraBoardLastUpdatedCell,
 } from "./ecosystra-board-avatars"
-import type {
-  BoardFacetLabels,
-  BoardFilterColumnMeta,
-} from "./ecosystra-board-filter-engine"
-import { buildBoardGroupRowSegments } from "./ecosystra-board-group-by-engine"
-import type { BoardGroupBySuite } from "./ecosystra-board-group-by-engine"
 import { ecoCcFieldKey } from "./ecosystra-board-cc-field-key"
 import { EcosystraBoardEditableColumnHeader } from "./ecosystra-board-editable-column-header"
 import { formatIdr } from "./ecosystra-board-format-idr"
+import { buildBoardGroupRowSegments } from "./ecosystra-board-group-by-engine"
 import { SortableBoardRowTbody } from "./ecosystra-board-sortable-row-tbody"
 import { SortableSubitemTableRow } from "./ecosystra-board-sortable-subitem-row"
 import { EcosystraGrandbookNewList } from "./ecosystra-grandbook"
@@ -267,7 +267,7 @@ const TimelinePill = memo(
       tl: string
       range: DateRange | undefined
       onClear: () => void
-      t: any
+      t: Record<string, string>
     }
   >(({ tl, range, onClear, t, ...props }, ref) => {
     const [isHovered, setIsHovered] = useState(false)
@@ -901,6 +901,44 @@ function BoardRowEmptyGroupDropTarget({
   )
 }
 
+/** Priority when collapsing to a few “primary” columns on narrow mobile. */
+const MOBILE_BOARD_TABLE_PRIORITY: readonly string[] = [
+  "select",
+  "task",
+  "status",
+  "dueDate",
+  "duePriority",
+  "date",
+  "lastUpdated",
+  "owner",
+  "assignee",
+  "rating",
+  "timeline",
+  "notesCategory",
+  "budget",
+  "priority",
+]
+
+function pickNarrowBoardColumnsForMobile(
+  visible: TableColumn[],
+  maxPrimary: number
+): TableColumn[] {
+  const chosen: TableColumn[] = []
+  const picked = new Set<string>()
+  for (const id of MOBILE_BOARD_TABLE_PRIORITY) {
+    const col = visible.find((c) => c.id === id)
+    if (!col) continue
+    chosen.push(col)
+    picked.add(col.id)
+    if (chosen.length >= maxPrimary) break
+  }
+  const addCol = visible.find((c) => c.id === "add")
+  if (addCol && !picked.has("add")) {
+    chosen.push(addCol)
+  }
+  return chosen.length > 0 ? chosen : visible
+}
+
 export type BoardGroupTableLabels = Record<string, string>
 
 type Props = {
@@ -1066,6 +1104,15 @@ function EcosystraBoardGroupTableImpl({
   const [selectedSubitemIds, setSelectedSubitemIds] = useState(
     () => new Set<string>()
   )
+  const [mobileBoardTableExpanded, setMobileBoardTableExpanded] =
+    useState(false)
+  const [mobileSubTableExpanded, setMobileSubTableExpanded] = useState(false)
+
+  useEffect(() => {
+    if (!isDesktop) return
+    setMobileBoardTableExpanded(false)
+    setMobileSubTableExpanded(false)
+  }, [isDesktop])
 
   useEffect(() => {
     setSelectedRowIds(new Set())
@@ -1242,7 +1289,13 @@ function EcosystraBoardGroupTableImpl({
         sticky: lockedSticky.has(c.id) || extraSticky.has(c.id),
       })
     )
-  }, [allColumns, hidden, tableColumnOrder, tableCustomColumns, tablePinnedColumnIds])
+  }, [
+    allColumns,
+    hidden,
+    tableColumnOrder,
+    tableCustomColumns,
+    tablePinnedColumnIds,
+  ])
 
   const subVisibleColumns = useMemo(() => {
     const byId = new Map(allColumns.map((c) => [c.id, c]))
@@ -1278,6 +1331,16 @@ function EcosystraBoardGroupTableImpl({
       })
     )
   }, [allColumns, subHidden, subitemTableUi])
+
+  const boardTableColumns = useMemo(() => {
+    if (isDesktop || mobileBoardTableExpanded) return visibleColumns
+    return pickNarrowBoardColumnsForMobile(visibleColumns, 3)
+  }, [isDesktop, mobileBoardTableExpanded, visibleColumns])
+
+  const subTableColumnsForRender = useMemo(() => {
+    if (isDesktop || mobileSubTableExpanded) return subVisibleColumns
+    return pickNarrowBoardColumnsForMobile(subVisibleColumns, 3)
+  }, [isDesktop, mobileSubTableExpanded, subVisibleColumns])
 
   const columnWidthsPx = columnWidthsPxProp
 
@@ -1323,7 +1386,7 @@ function EcosystraBoardGroupTableImpl({
 
   const getColumnResize = useCallback(
     (col: TableColumn, index: number) => {
-      if (!onColumnWidthCommit || index >= visibleColumns.length - 1)
+      if (!onColumnWidthCommit || index >= boardTableColumns.length - 1)
         return undefined
       const w =
         mergedWidths[col.id] ?? resolveTableColumnWidthPx(col, columnWidthsPx)
@@ -1346,7 +1409,7 @@ function EcosystraBoardGroupTableImpl({
       mergedWidths,
       onColumnWidthCommit,
       t.resizeColumn,
-      visibleColumns.length,
+      boardTableColumns.length,
     ]
   )
 
@@ -1394,7 +1457,10 @@ function EcosystraBoardGroupTableImpl({
 
   const getSubColumnResize = useCallback(
     (col: TableColumn, index: number) => {
-      if (!onSubitemColumnWidthCommit || index >= subVisibleColumns.length - 1)
+      if (
+        !onSubitemColumnWidthCommit ||
+        index >= subTableColumnsForRender.length - 1
+      )
         return undefined
       const w =
         subMergedWidths[col.id] ??
@@ -1418,7 +1484,7 @@ function EcosystraBoardGroupTableImpl({
       subMergedWidths,
       onSubitemColumnWidthCommit,
       t.resizeColumn,
-      subVisibleColumns.length,
+      subTableColumnsForRender.length,
     ]
   )
 
@@ -1466,14 +1532,11 @@ function EcosystraBoardGroupTableImpl({
   )
 
   const rowIdsForSort = useMemo(
-    () =>
-      rowSegments
-        .filter((s) => s.type === "row")
-        .map((s) => s.item.id),
+    () => rowSegments.filter((s) => s.type === "row").map((s) => s.item.id),
     [rowSegments]
   )
 
-  const colSpan = visibleColumns.length
+  const colSpan = boardTableColumns.length
 
   /**
    * Unused when `items.length === 0` — we render empty groups **outside** `Table` so the CTA is
@@ -1616,7 +1679,7 @@ function EcosystraBoardGroupTableImpl({
   ) => {
     const sticky = !!col.sticky
     const stickyLeftPx = stickyLeftPxForColumnIndex(
-      visibleColumns,
+      boardTableColumns,
       mergedWidths,
       index
     )
@@ -1755,7 +1818,7 @@ function EcosystraBoardGroupTableImpl({
   ) => {
     const sticky = !!col.sticky
     const stickyLeftPx = stickyLeftPxForColumnIndex(
-      subVisibleColumns,
+      subTableColumnsForRender,
       subMergedWidths,
       index
     )
@@ -1897,7 +1960,7 @@ function EcosystraBoardGroupTableImpl({
     const d = row.dynamicData || {}
     const sticky = !!col.sticky
     const stickyLeftPx = stickyLeftPxForColumnIndex(
-      visibleColumns,
+      boardTableColumns,
       mergedWidths,
       colIndex
     )
@@ -2941,9 +3004,7 @@ function EcosystraBoardGroupTableImpl({
               <BoardTimelineRangeCommitPopover
                 draftStorageId={`${s.id}:${fk}`}
                 timelineLabel={tl}
-                onCommit={(formatted) =>
-                  onPatchItem(s.id, { [fk]: formatted })
-                }
+                onCommit={(formatted) => onPatchItem(s.id, { [fk]: formatted })}
                 applyLabel={t.timelineApply}
                 cancelLabel={t.timelineCancel}
               >
@@ -3390,7 +3451,10 @@ function EcosystraBoardGroupTableImpl({
           colSpan={colSpan}
           className="bg-sky-50/60 p-0 dark:bg-sky-950/20"
         >
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             id={`subitems-${row.id}`}
             className="border-t border-sky-200/80 p-3 ps-4 dark:border-sky-800/60"
             style={{
@@ -3401,7 +3465,50 @@ function EcosystraBoardGroupTableImpl({
             role="region"
             aria-label={t.subitemsRegionLabel}
           >
-            <div className="overflow-x-auto rounded-md border border-sky-200/70 bg-background/90 dark:border-sky-900/50">
+            <div className="min-w-0 overflow-hidden rounded-md border border-sky-200/70 bg-background/90 dark:border-sky-900/50">
+              {!isDesktop &&
+              (mobileSubTableExpanded ||
+                subTableColumnsForRender.length < subVisibleColumns.length) ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-muted/25 px-2 py-1.5">
+                  {!mobileSubTableExpanded ? (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        {(
+                          t as Record<string, string>
+                        ).mobileTableColumnLimitNotice
+                          ?.replace(
+                            "{shown}",
+                            String(subTableColumnsForRender.length)
+                          )
+                          ?.replace(
+                            "{total}",
+                            String(subVisibleColumns.length)
+                          ) ??
+                          `Showing ${subTableColumnsForRender.length} of ${subVisibleColumns.length} columns.`}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto min-h-11 shrink-0 px-2 py-1 text-xs"
+                        onClick={() => setMobileSubTableExpanded(true)}
+                      >
+                        {(t as Record<string, string>)
+                          .mobileTableShowAllColumns ?? "Show all columns"}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="h-auto min-h-11 px-2 py-1 text-xs"
+                      onClick={() => setMobileSubTableExpanded(false)}
+                    >
+                      {(t as Record<string, string>)
+                        .mobileTableShowFewerColumns ?? "Show fewer columns"}
+                    </Button>
+                  )}
+                </div>
+              ) : null}
               <DndContext
                 sensors={subitemRowSensors}
                 collisionDetection={closestCenter}
@@ -3409,13 +3516,14 @@ function EcosystraBoardGroupTableImpl({
               >
                 <Table
                   id={`eco-subtbl-${groupId}-${row.id}`}
-                  columns={subVisibleColumns}
+                  columns={subTableColumnsForRender}
                   columnWidthsPx={subMergedWidths}
                   emptyState={subTableEmptyFallback}
                   errorState={subTableEmptyFallback}
                   isEmpty={false}
                   size={tableSize}
                   withoutBorder
+                  horizontalScroll={!isDesktop ? "native" : "off"}
                   className="rounded-none border-0 bg-transparent shadow-none"
                 >
                   <TableHeader>
@@ -3431,7 +3539,7 @@ function EcosystraBoardGroupTableImpl({
                             {...provided.droppableProps}
                             size={tableSize}
                           >
-                            {subVisibleColumns.map((col, hi) => (
+                            {subTableColumnsForRender.map((col, hi) => (
                               <Draggable
                                 key={col.id}
                                 draggableId={`subg-${groupId}-p-${row.id}-col-${col.id}`}
@@ -3454,7 +3562,7 @@ function EcosystraBoardGroupTableImpl({
                       </Droppable>
                     ) : (
                       <TableRow size={tableSize}>
-                        {subVisibleColumns.map((col, hi) =>
+                        {subTableColumnsForRender.map((col, hi) =>
                           renderSubitemHeaderCell(col, hi)
                         )}
                       </TableRow>
@@ -3474,10 +3582,10 @@ function EcosystraBoardGroupTableImpl({
                             highlighted={selectedSubitemIds.has(s.id)}
                           >
                             {(listeners) =>
-                              subVisibleColumns.map((c, ci) => {
+                              subTableColumnsForRender.map((c, ci) => {
                                 const sticky = !!c.sticky
                                 const stickyLeftPx = stickyLeftPxForColumnIndex(
-                                  subVisibleColumns,
+                                  subTableColumnsForRender,
                                   subMergedWidths,
                                   ci
                                 )
@@ -3518,7 +3626,7 @@ function EcosystraBoardGroupTableImpl({
                 </Button>
               </div>
             </div>
-          </div>
+          </motion.div>
         </TableCell>
       </TableRow>
     )
@@ -3568,18 +3676,70 @@ function EcosystraBoardGroupTableImpl({
       ) : (
         <Table
           id={`ecosystra-board-table-${groupId}`}
-          columns={visibleColumns}
+          columns={boardTableColumns}
           columnWidthsPx={mergedWidths}
           emptyState={tableErrorFallback}
           errorState={tableErrorFallback}
           isEmpty={false}
           size={tableSize}
+          horizontalScroll={!isDesktop ? "native" : "off"}
           className={cn(boardSurface.monoTableWrap, "bg-transparent")}
         >
           <TableCaption className="sr-only">
             {t.tableCaptionGroup.replace("{name}", groupName)}
           </TableCaption>
           <TableHeader>
+            {!isDesktop &&
+            (mobileBoardTableExpanded ||
+              boardTableColumns.length < visibleColumns.length) ? (
+              <TableRow size={tableSize} className="bg-muted/25">
+                <th
+                  colSpan={colSpan}
+                  scope="colgroup"
+                  className="border-b border-border px-3 py-2 text-start align-middle font-normal text-foreground"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {!mobileBoardTableExpanded ? (
+                      <>
+                        <span className="text-xs text-muted-foreground">
+                          {(
+                            t as Record<string, string>
+                          ).mobileTableColumnLimitNotice
+                            ?.replace(
+                              "{shown}",
+                              String(boardTableColumns.length)
+                            )
+                            ?.replace(
+                              "{total}",
+                              String(visibleColumns.length)
+                            ) ??
+                            `Showing ${boardTableColumns.length} of ${visibleColumns.length} columns.`}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="h-auto min-h-11 shrink-0 px-2 py-1 text-xs"
+                          onClick={() => setMobileBoardTableExpanded(true)}
+                        >
+                          {(t as Record<string, string>)
+                            .mobileTableShowAllColumns ?? "Show all columns"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto min-h-11 px-2 py-1 text-xs"
+                        onClick={() => setMobileBoardTableExpanded(false)}
+                      >
+                        {(t as Record<string, string>)
+                          .mobileTableShowFewerColumns ?? "Show fewer columns"}
+                      </Button>
+                    )}
+                  </div>
+                </th>
+              </TableRow>
+            ) : null}
             {enableColumnDrag ? (
               <Droppable
                 droppableId={`board-columns-${groupId}`}
@@ -3592,7 +3752,7 @@ function EcosystraBoardGroupTableImpl({
                     {...provided.droppableProps}
                     size={tableSize}
                   >
-                    {visibleColumns.map((col, hi) => (
+                    {boardTableColumns.map((col, hi) => (
                       <Draggable
                         key={col.id}
                         draggableId={`g-${groupId}-col-${col.id}`}
@@ -3615,7 +3775,7 @@ function EcosystraBoardGroupTableImpl({
               </Droppable>
             ) : (
               <TableRow>
-                {visibleColumns.map((col, hi) => renderHeaderCell(col, hi))}
+                {boardTableColumns.map((col, hi) => renderHeaderCell(col, hi))}
               </TableRow>
             )}
           </TableHeader>
@@ -3650,7 +3810,7 @@ function EcosystraBoardGroupTableImpl({
                       className="group/row"
                       highlighted={selectedRowIds.has(row.id)}
                     >
-                      {visibleColumns.map((col, ci) =>
+                      {boardTableColumns.map((col, ci) =>
                         renderBodyCell(col, row, ci)
                       )}
                     </TableRow>
@@ -3711,7 +3871,7 @@ function EcosystraBoardGroupTableImpl({
                             className="group/row"
                             highlighted={selectedRowIds.has(row.id)}
                           >
-                            {visibleColumns.map((col, ci) =>
+                            {boardTableColumns.map((col, ci) =>
                               renderBodyCell(col, row, ci, listeners)
                             )}
                           </TableRow>
@@ -3745,7 +3905,7 @@ function EcosystraBoardGroupTableImpl({
           {items.length > 0 ? (
             <TableFooter>
               <TableRow className="bg-[color:var(--eco-board-footer-bg)]">
-                {visibleColumns.map((col) => {
+                {boardTableColumns.map((col) => {
                   const footerStickyEnd = !!col.stickyEnd
                   if (col.id === "budget") {
                     return (

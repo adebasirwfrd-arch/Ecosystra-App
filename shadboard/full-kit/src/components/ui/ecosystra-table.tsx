@@ -1,7 +1,17 @@
 "use client"
 
-import { forwardRef, useMemo } from "react"
-import { GripVertical, Info, MoreHorizontal } from "lucide-react"
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import useEmblaCarousel from "embla-carousel-react"
+import { GripVertical, Info } from "lucide-react"
+
+import mobileNativeScroll from "./ecosystra-table-mobile-native.module.css"
 
 import type { LucideIcon } from "lucide-react"
 import type {
@@ -149,6 +159,17 @@ export type EcosystraTableProps = {
   children: ReactNode
   /** Merged pixel widths per column id (resize + defaults); drives `<colgroup>` */
   columnWidthsPx?: Record<string, number>
+  /**
+   * Horizontal scroll strategy for wide tables.
+   * - `off` — normal `overflow-auto` on the wrapper.
+   * - `embla` — Embla `dragFree` (momentum via carousel).
+   * - `native` — native overflow + iOS momentum, scroll-snap on data columns, dynamic sticky shadow.
+   */
+  horizontalScroll?: "off" | "embla" | "native"
+  /**
+   * @deprecated Use `horizontalScroll="embla"` instead.
+   */
+  useEmblaMobileHorizontal?: boolean
 }
 
 export function Table({
@@ -165,7 +186,12 @@ export function Table({
   "data-testid": dataTestId,
   children,
   columnWidthsPx,
+  horizontalScroll: horizontalScrollProp,
+  useEmblaMobileHorizontal = false,
 }: EcosystraTableProps) {
+  const horizontalScroll =
+    horizontalScrollProp ?? (useEmblaMobileHorizontal ? "embla" : "off")
+
   /** Sum of column widths so `table-fixed` + `w-full` does not compress cols below colgroup on narrow viewports (mobile horizontal scroll). */
   const tableMinWidthPx = useMemo(
     () =>
@@ -175,6 +201,36 @@ export function Table({
       ),
     [columns, columnWidthsPx]
   )
+
+  const [emblaRef, emblaApi] = useEmblaCarousel(
+    {
+      axis: "x",
+      dragFree: true,
+      containScroll: "trimSnaps",
+      active: horizontalScroll === "embla",
+    },
+    []
+  )
+
+  const nativeScrollRef = useRef<HTMLDivElement>(null)
+  const [horizScrolled, setHorizScrolled] = useState(false)
+
+  const syncNativeScrollShadow = useCallback(() => {
+    const el = nativeScrollRef.current
+    if (!el) return
+    setHorizScrolled(el.scrollLeft > 1)
+  }, [])
+
+  useEffect(() => {
+    if (horizontalScroll !== "native") return
+    syncNativeScrollShadow()
+  }, [horizontalScroll, syncNativeScrollShadow, tableMinWidthPx, columns])
+
+  useEffect(() => {
+    if (horizontalScroll !== "embla" || !emblaApi) return
+    const id = requestAnimationFrame(() => emblaApi.reInit())
+    return () => cancelAnimationFrame(id)
+  }, [horizontalScroll, emblaApi, tableMinWidthPx, columns])
 
   if (dataState?.isError) {
     return (
@@ -206,45 +262,56 @@ export function Table({
     )
   }
 
-  return (
-    <div
-      data-slot="ecosystra-table-wrap"
+  const tableEl = (
+    <table
+      id={id}
+      data-testid={dataTestId}
+      data-size={size}
       className={cn(
-        "relative isolate w-full min-w-0 overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
-        className
+        "w-full table-fixed caption-bottom border-separate border-spacing-0 text-sm",
+        !withoutBorder && "border border-border",
+        "[&_tbody>tr>td]:border-b [&_tbody>tr>td]:border-border",
+        "[&_thead>tr>th]:border-b [&_thead>tr>th]:border-border"
       )}
-      style={style}
+      style={{ minWidth: tableMinWidthPx }}
     >
-      <table
-        id={id}
-        data-testid={dataTestId}
-        data-size={size}
-        className={cn(
-          "w-full table-fixed caption-bottom border-separate border-spacing-0 text-sm",
-          !withoutBorder && "border border-border",
-          "[&_tbody>tr>td]:border-b [&_tbody>tr>td]:border-border",
-          "[&_thead>tr>th]:border-b [&_thead>tr>th]:border-border"
-        )}
-        style={{ minWidth: tableMinWidthPx }}
-      >
-        <colgroup>
-          {columns.map((col) => (
-            <col
-              key={col.id}
-              style={{
-                width: resolveTableColumnWidthPx(col, columnWidthsPx),
-              }}
-            />
-          ))}
-        </colgroup>
-        {dataState?.isLoading ? (
-          <>
-            <TableHeader>
-              <TableRow size={size}>
+      <colgroup>
+        {columns.map((col) => (
+          <col
+            key={col.id}
+            style={{
+              width: resolveTableColumnWidthPx(col, columnWidthsPx),
+            }}
+          />
+        ))}
+      </colgroup>
+      {dataState?.isLoading ? (
+        <>
+          <TableHeader>
+            <TableRow size={size}>
+              {columns.map((col, ci) => (
+                <TableHeaderCell
+                  key={col.id}
+                  title={col.title ?? col.id}
+                  size={size}
+                  sticky={!!col.sticky && !col.stickyEnd}
+                  stickyEnd={col.stickyEnd}
+                  stickyLeftClassName={col.stickyLeft}
+                  stickyLeftPx={
+                    col.stickyEnd
+                      ? undefined
+                      : stickyLeftPxForColumnIndex(columns, columnWidthsPx, ci)
+                  }
+                />
+              ))}
+            </TableRow>
+          </TableHeader>
+          <tbody>
+            {Array.from({ length: 5 }).map((_, ri) => (
+              <TableRow key={ri} size={size}>
                 {columns.map((col, ci) => (
-                  <TableHeaderCell
+                  <TableCell
                     key={col.id}
-                    title={col.title ?? col.id}
                     size={size}
                     sticky={!!col.sticky && !col.stickyEnd}
                     stickyEnd={col.stickyEnd}
@@ -258,41 +325,65 @@ export function Table({
                             ci
                           )
                     }
-                  />
+                  >
+                    <LoadingCellPlaceholder type={col.loadingStateType} />
+                  </TableCell>
                 ))}
               </TableRow>
-            </TableHeader>
-            <tbody>
-              {Array.from({ length: 5 }).map((_, ri) => (
-                <TableRow key={ri} size={size}>
-                  {columns.map((col, ci) => (
-                    <TableCell
-                      key={col.id}
-                      size={size}
-                      sticky={!!col.sticky && !col.stickyEnd}
-                      stickyEnd={col.stickyEnd}
-                      stickyLeftClassName={col.stickyLeft}
-                      stickyLeftPx={
-                        col.stickyEnd
-                          ? undefined
-                          : stickyLeftPxForColumnIndex(
-                              columns,
-                              columnWidthsPx,
-                              ci
-                            )
-                      }
-                    >
-                      <LoadingCellPlaceholder type={col.loadingStateType} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </tbody>
-          </>
-        ) : (
-          children
+            ))}
+          </tbody>
+        </>
+      ) : (
+        children
+      )}
+    </table>
+  )
+
+  if (horizontalScroll === "native") {
+    return (
+      <div
+        ref={nativeScrollRef}
+        data-slot="ecosystra-table-scroll"
+        data-horiz-scrolled={horizScrolled ? "true" : "false"}
+        onScroll={syncNativeScrollShadow}
+        className={cn(
+          mobileNativeScroll.scrollNative,
+          "relative isolate w-full min-w-0 touch-pan-x",
+          className
         )}
-      </table>
+        style={style}
+      >
+        {tableEl}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      data-slot="ecosystra-table-wrap"
+      className={cn(
+        "relative isolate w-full min-w-0",
+        horizontalScroll === "embla"
+          ? "touch-pan-x overflow-hidden"
+          : "overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
+        className
+      )}
+      style={style}
+    >
+      {horizontalScroll === "embla" ? (
+        <div ref={emblaRef} className="w-full overflow-hidden">
+          <div className="flex min-w-0">
+            <div
+              className="box-border shrink-0 grow-0"
+              style={{ width: tableMinWidthPx, minWidth: tableMinWidthPx }}
+            >
+              {tableEl}
+            </div>
+          </div>
+        </div>
+      ) : (
+        tableEl
+      )}
     </div>
   )
 }

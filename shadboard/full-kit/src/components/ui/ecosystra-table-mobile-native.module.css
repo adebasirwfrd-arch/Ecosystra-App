@@ -1,0 +1,53 @@
+/**
+ * Monday-style horizontal scroll for board tables on small viewports.
+ * Paired with `[data-slot="ecosystra-table-scroll"]` from `ecosystra-table.tsx`.
+ */
+
+.scrollNative {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.scrollNative::-webkit-scrollbar {
+  display: none;
+}
+
+/* Scroll columns snap to readable column starts; sticky anchor columns stay unsnapped. */
+.scrollNative :is(td, th):not([data-sticky]) {
+  scroll-snap-align: start;
+  min-width: 120px;
+}
+
+/* Row chrome — Apple-style minimum touch target on mobile-native scroll. */
+.scrollNative :is(tbody, thead) tr {
+  min-height: 44px;
+}
+
+/*
+ * Depth cue: default sticky shadow from Tailwind is always-on; soften at rest,
+ * emphasize once the sheet has scrolled horizontally.
+ */
+.scrollNative[data-horiz-scrolled="false"] :is(th, td)[data-sticky="true"] {
+  box-shadow: none !important;
+}
+
+.scrollNative[data-horiz-scrolled="true"] :is(th, td)[data-sticky="true"] {
+  box-shadow:
+    4px 0 14px -4px rgb(15 23 42 / 0.18),
+    1px 0 0 0 rgb(15 23 42 / 0.06) !important;
+}
+
+:global(.dark) .scrollNative[data-horiz-scrolled="true"] :is(th, td)[data-sticky="true"] {
+  box-shadow:
+    4px 0 18px -4px rgb(0 0 0 / 0.55),
+    1px 0 0 0 rgb(255 255 255 / 0.08) !important;
+}
+
+/* Very narrow phones — Monday-style fixed anchor width for the sticky rail */
+@media (max-width: 379px) {
+  .scrollNative :is(th, td)[data-sticky="true"] {
+    min-width: 140px;
+  }
+}
