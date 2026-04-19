@@ -102,6 +102,7 @@
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
     "date-fns": "3.6.0",
+    "dexie": "^4.4.2",
     "embla-carousel-autoplay": "8.5.1",
     "embla-carousel-react": "8.5.1",
     "emoji-picker-react": "4.12.2",

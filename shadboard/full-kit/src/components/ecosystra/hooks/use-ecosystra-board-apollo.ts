@@ -1,7 +1,12 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
-import { useMutation, useQuery } from "@apollo/client"
+import {
+  type ApolloClient,
+  useApolloClient,
+  useMutation,
+  useQuery,
+} from "@apollo/client"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import type { DictionaryType } from "@/lib/get-dictionary"
@@ -27,6 +32,20 @@ import {
   WORKSPACE_USERS,
 } from "@/lib/ecosystra/board-gql"
 
+import {
+  mergeDynamicDataPatchIntoBoard,
+  readItemDynamicDataFromBoard,
+  readItemUpdatedAtFromBoard,
+} from "@/lib/ecosystra/board-dynamic-data-cache"
+import { withPerItemDynamicPatchQueue } from "@/lib/ecosystra/board-item-dynamic-patch-queue"
+import {
+  addOrMergeDynamicDataOutbox,
+  deleteMutation,
+  isBoardLocalDbAvailable,
+  loadCachedBoardPayload,
+  saveBoardPayloadToLocal,
+} from "@/lib/ecosystra/board-local-db"
+import { scheduleUpdateItemDynamicDataDrain } from "@/lib/ecosystra/board-mutation-outbox-drain"
 import {
   parseTableGroupBySuite,
   type BoardGroupBySuite,
@@ -787,6 +806,7 @@ function gqlErrorMessage(err: unknown): string {
 export function useEcosystraBoardApollo() {
   const dict = useOptionalEcosystraDictionary()
   const toastMsg = useMemo(() => boardToastMessages(dict), [dict])
+  const client = useApolloClient()
 
   const { data, previousData, loading, error, refetch } = useQuery<{
     getOrCreateBoard: GqlBoard
@@ -795,6 +815,41 @@ export function useEcosystraBoardApollo() {
     nextFetchPolicy: "cache-first",
     notifyOnNetworkStatusChange: true,
   })
+
+  /** IndexedDB → Apollo: instant last board while `getOrCreateBoard` refetches. */
+  useLayoutEffect(() => {
+    void (async () => {
+      try {
+        try {
+          const existing = client.cache.readQuery<{ getOrCreateBoard: GqlBoard }>({
+            query: GET_OR_CREATE_BOARD,
+          })
+          if (existing?.getOrCreateBoard?.id) return
+        } catch {
+          /* cache miss */
+        }
+        const cached = await loadCachedBoardPayload()
+        const board = cached as GqlBoard | null
+        if (!board?.id) return
+        client.writeQuery({
+          query: GET_OR_CREATE_BOARD,
+          data: { getOrCreateBoard: board },
+        })
+      } catch {
+        /* private mode / Dexie unavailable */
+      }
+    })()
+  }, [client])
+
+  /** Server → IndexedDB: background persistence after successful load. */
+  useEffect(() => {
+    const b = data?.getOrCreateBoard
+    if (!b?.id) return
+    const t = window.setTimeout(() => {
+      void saveBoardPayloadToLocal(b)
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [data?.getOrCreateBoard])
 
   const board = data?.getOrCreateBoard ?? previousData?.getOrCreateBoard
 
@@ -818,9 +873,6 @@ export function useEcosystraBoardApollo() {
     refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
   })
   const [updateItem] = useMutation(UPDATE_ITEM, {
-    refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
-  })
-  const [updateItemDynamicData] = useMutation(UPDATE_ITEM_DYNAMIC_DATA, {
     refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
   })
   const [deleteItem] = useMutation(DELETE_ITEM, {
@@ -862,6 +914,34 @@ export function useEcosystraBoardApollo() {
       refetchQueries: [{ query: GET_OR_CREATE_BOARD }],
     }
   )
+
+  const [updateItemDynamicDataMutation] = useMutation(UPDATE_ITEM_DYNAMIC_DATA, {
+    update(cache, { data }) {
+      if (!data?.updateItemDynamicData) return
+      const { id, dynamicData } = data.updateItemDynamicData
+      try {
+        const prev = cache.readQuery<{ getOrCreateBoard: GqlBoard }>({
+          query: GET_OR_CREATE_BOARD,
+        })
+        const b = prev?.getOrCreateBoard
+        if (!b?.id) return
+        const nextBoard = mergeDynamicDataPatchIntoBoard(
+          b,
+          id,
+          (dynamicData ?? {}) as Record<string, unknown>
+        ) as GqlBoard | null
+        if (nextBoard) {
+          cache.writeQuery({
+            query: GET_OR_CREATE_BOARD,
+            data: { getOrCreateBoard: nextBoard },
+          })
+          void saveBoardPayloadToLocal(nextBoard)
+        }
+      } catch {
+        /* cache read/write */
+      }
+    },
+  })
 
   const tableUi = useMemo(
     () => parseBoardTableUiMetadata(board?.metadata ?? undefined),
@@ -976,15 +1056,84 @@ export function useEcosystraBoardApollo() {
 
   const patchItemField = useCallback(
     async (itemId: string, patch: Record<string, unknown>) => {
-      try {
-        await updateItemDynamicData({
-          variables: { id: itemId, dynamicData: patch },
+      await withPerItemDynamicPatchQueue(itemId, async () => {
+        const readBoard = (): GqlBoard | null => {
+          try {
+            return (
+              client.cache.readQuery<{ getOrCreateBoard: GqlBoard }>({
+                query: GET_OR_CREATE_BOARD,
+              })?.getOrCreateBoard ?? null
+            )
+          } catch {
+            return data?.getOrCreateBoard ?? previousData?.getOrCreateBoard ?? null
+          }
+        }
+
+        const current = readBoard()
+        if (!current?.id) {
+          toast.error(gqlErrorMessage(new Error("Board not loaded")))
+          return
+        }
+
+        let outRowId: string | null = null
+        let cumulative = patch
+        if (isBoardLocalDbAvailable()) {
+          const baseUpdatedAt = readItemUpdatedAtFromBoard(current, itemId)
+          const coalesced = await addOrMergeDynamicDataOutbox(itemId, patch, baseUpdatedAt)
+          if (coalesced) {
+            outRowId = coalesced.rowId
+            cumulative = coalesced.cumulativeDynamicData
+          }
+        }
+
+        const mergedBoard = mergeDynamicDataPatchIntoBoard(
+          current,
+          itemId,
+          cumulative
+        ) as GqlBoard | null
+        if (!mergedBoard) {
+          toast.error(gqlErrorMessage(new Error("Task not found on board")))
+          return
+        }
+
+        // Optimistic UI: full board tree + Dexie snapshot
+        client.writeQuery({
+          query: GET_OR_CREATE_BOARD,
+          data: { getOrCreateBoard: mergedBoard },
         })
-      } catch (e) {
-        toast.error(gqlErrorMessage(e))
-      }
+        void saveBoardPayloadToLocal(mergedBoard)
+
+        const dynamicDataForOptimistic =
+          readItemDynamicDataFromBoard(mergedBoard, itemId) ?? cumulative
+
+        try {
+          await updateItemDynamicDataMutation({
+            variables: { id: itemId, dynamicData: cumulative },
+            optimisticResponse: {
+              updateItemDynamicData: {
+                __typename: "Item",
+                id: itemId,
+                dynamicData: dynamicDataForOptimistic,
+              },
+            },
+          })
+          if (outRowId) {
+            await deleteMutation(outRowId)
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console -- offline / retry debugging
+          console.error("[ecosystra] Sync failed; mutation kept in Dexie for retry", e)
+          toast.error(gqlErrorMessage(e))
+          scheduleUpdateItemDynamicDataDrain(client as ApolloClient<object>)
+        }
+      })
     },
-    [updateItemDynamicData]
+    [
+      client,
+      data?.getOrCreateBoard,
+      previousData?.getOrCreateBoard,
+      updateItemDynamicDataMutation,
+    ]
   )
 
   const renameItem = useCallback(

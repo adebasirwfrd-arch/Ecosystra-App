@@ -7,6 +7,7 @@ import type { LocaleType } from "@/types"
 
 import { userData } from "@/data/user"
 
+import { clearBoardLocalCache } from "@/lib/ecosystra/board-local-db"
 import { ensureLocalizedPathname } from "@/lib/i18n"
 import { getInitials } from "@/lib/utils"
 
@@ -85,11 +86,12 @@ export function UserDropdown({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() =>
-            signOut({
+          onClick={() => {
+            void clearBoardLocalCache()
+            void signOut({
               callbackUrl: ensureLocalizedPathname("/sign-in", locale),
             })
-          }
+          }}
         >
           <LogOut className="me-2 size-4" />
           {dictionary.navigation.userNav.signOut}

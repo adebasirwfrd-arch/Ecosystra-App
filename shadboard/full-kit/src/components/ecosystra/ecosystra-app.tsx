@@ -6,6 +6,7 @@ import { signOut, useSession } from "next-auth/react"
 
 import type { LocaleType } from "@/types"
 
+import { clearBoardLocalCache } from "@/lib/ecosystra/board-local-db"
 import { ensureLocalizedPathname } from "@/lib/i18n"
 
 import { useEcosystraViewPrefetch } from "./hooks/use-ecosystra-view-prefetch"
@@ -43,14 +44,15 @@ export function EcosystraApp() {
             initialView={initialView}
             locale={locale}
             shellUser={shellUser}
-            onShellSignOut={() =>
-              signOut({
+            onShellSignOut={() => {
+              void clearBoardLocalCache()
+              void signOut({
                 callbackUrl: ensureLocalizedPathname(
                   "/sign-in",
                   locale as LocaleType
                 ),
               })
-            }
+            }}
           />
         </EcosystraPageChrome>
       </EcosystraAlertBannerProvider>
