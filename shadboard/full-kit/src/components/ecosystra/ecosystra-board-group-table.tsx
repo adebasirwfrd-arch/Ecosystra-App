@@ -1210,7 +1210,7 @@ function EcosystraBoardGroupTableImpl({
         stickyEnd: true,
       },
     ],
-    [t]
+    [t, isDesktop]
   )
 
   const visibleColumns = useMemo(() => {

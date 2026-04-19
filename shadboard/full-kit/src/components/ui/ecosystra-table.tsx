@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef } from "react"
+import { forwardRef, useMemo } from "react"
 import { GripVertical, Info, MoreHorizontal } from "lucide-react"
 
 import type { LucideIcon } from "lucide-react"
@@ -166,6 +166,16 @@ export function Table({
   children,
   columnWidthsPx,
 }: EcosystraTableProps) {
+  /** Sum of column widths so `table-fixed` + `w-full` does not compress cols below colgroup on narrow viewports (mobile horizontal scroll). */
+  const tableMinWidthPx = useMemo(
+    () =>
+      columns.reduce(
+        (sum, col) => sum + resolveTableColumnWidthPx(col, columnWidthsPx),
+        0
+      ),
+    [columns, columnWidthsPx]
+  )
+
   if (dataState?.isError) {
     return (
       <div
@@ -199,7 +209,10 @@ export function Table({
   return (
     <div
       data-slot="ecosystra-table-wrap"
-      className={cn("relative isolate w-full min-w-0 overflow-auto", className)}
+      className={cn(
+        "relative isolate w-full min-w-0 overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
+        className
+      )}
       style={style}
     >
       <table
@@ -212,6 +225,7 @@ export function Table({
           "[&_tbody>tr>td]:border-b [&_tbody>tr>td]:border-border",
           "[&_thead>tr>th]:border-b [&_thead>tr>th]:border-border"
         )}
+        style={{ minWidth: tableMinWidthPx }}
       >
         <colgroup>
           {columns.map((col) => (
