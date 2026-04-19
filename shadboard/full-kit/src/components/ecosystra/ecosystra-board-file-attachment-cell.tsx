@@ -168,6 +168,8 @@ export function EcosystraBoardFileAttachmentCell({
   const [preview, setPreview] = useState<BoardDriveAttachment | null>(null)
   const [uppyModalOpen, setUppyModalOpen] = useState(false)
   const [uppy, setUppy] = useState<Uppy | null>(null)
+  /** Mount Uppy modal after hydration so `target={document.body}` is valid (escapes table stacking contexts). */
+  const [uppyPortalReady, setUppyPortalReady] = useState(false)
 
   const storageKey = attachmentsField ?? FILES_ATTACHMENTS_KEY
   const attachments = parseFilesAttachments(dynamicData, storageKey)
@@ -178,6 +180,11 @@ export function EcosystraBoardFileAttachmentCell({
     process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY?.trim() ?? ""
 
   useEffect(() => {
+    setUppyPortalReady(true)
+  }, [])
+
+  useEffect(() => {
+    const uploadEndpoint = `${window.location.origin}/api/ecosystra/board-drive-upload`
     const u = new Uppy({
       id: `ecosystra-board-${itemId}-${storageKey}`,
       autoProceed: false,
@@ -190,12 +197,13 @@ export function EcosystraBoardFileAttachmentCell({
         taskName: safeFolderSegment(taskName),
       },
     }).use(XHRUpload, {
-      endpoint: "/api/ecosystra/board-drive-upload",
+      endpoint: uploadEndpoint,
       method: "POST",
       fieldName: "file",
       formData: true,
       bundle: false,
-      withCredentials: true,
+      /** Same-origin: cookies still sent; false avoids rare XHR + credentialed quirks on some networks. */
+      withCredentials: false,
       allowedMetaFields: ["groupName", "taskName"],
       getResponseData(xhr) {
         try {
@@ -427,10 +435,11 @@ export function EcosystraBoardFileAttachmentCell({
         )}
       </div>
 
-      {uppy ? (
+      {uppy && uppyPortalReady ? (
         <DashboardModal
           uppy={uppy}
           open={uppyModalOpen}
+          target={document.body}
           onRequestClose={() => {
             setUppyModalOpen(false)
             void uppy.cancelAll()
