@@ -5,7 +5,7 @@ import { useMedia } from "react-use"
 const MOBILE_BREAKPOINT = 1024
 
 export function useIsMobile() {
-  const isMobile = useMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+  const isMobile = useMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`, false)
 
   return isMobile
 }

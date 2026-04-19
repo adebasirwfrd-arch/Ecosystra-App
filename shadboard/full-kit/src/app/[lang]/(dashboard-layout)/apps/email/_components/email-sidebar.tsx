@@ -16,7 +16,7 @@ import { EmailSidebarList } from "./email-sidebar-list"
 
 export function EmailSidebar() {
   const { isEmailSidebarOpen, setIsEmailSidebarOpen } = useEmailContext()
-  const isMediumOrSmaller = useMedia("(max-width: 767px)")
+  const isMediumOrSmaller = useMedia("(max-width: 767px)", false)
 
   // Content to display in the chat sidebar
   const content = (

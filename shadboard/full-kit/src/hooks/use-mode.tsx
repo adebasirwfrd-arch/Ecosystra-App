@@ -6,7 +6,8 @@ import { useSettings } from "@/hooks/use-settings"
 
 export function useIsDarkMode() {
   const { settings } = useSettings()
-  const isDarkModePreferred = useMedia("(prefers-color-scheme: dark)")
+  /** `false` default avoids SSR vs first client paint mismatch (react-use useMedia + window.matchMedia). */
+  const isDarkModePreferred = useMedia("(prefers-color-scheme: dark)", false)
 
   let resolvedMode = settings.mode
 

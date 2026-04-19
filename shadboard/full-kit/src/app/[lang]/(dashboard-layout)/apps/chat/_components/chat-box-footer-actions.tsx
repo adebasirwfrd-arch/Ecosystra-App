@@ -20,7 +20,7 @@ import { FilesUploader } from "./files-uploader"
 import { ImagesUploader } from "./images-uploader"
 
 export function ChatBoxFooterActions() {
-  const isMobile = useMedia("(max-width: 480px)")
+  const isMobile = useMedia("(max-width: 480px)", false)
   const [imagesDialogOpen, setImagesDialogOpen] = useState(false)
   const [filesDialogOpen, setFilesDialogOpen] = useState(false)
 

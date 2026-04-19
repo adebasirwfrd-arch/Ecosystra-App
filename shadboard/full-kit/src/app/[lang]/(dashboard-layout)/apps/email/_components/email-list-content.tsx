@@ -16,7 +16,7 @@ export function EmailListContent({
   displayedEmails: EmailType[]
   filteredEmails: EmailType[]
 }) {
-  const isMediumOrSmaller = useMedia("(max-width: 767px)")
+  const isMediumOrSmaller = useMedia("(max-width: 767px)", false)
 
   return (
     <CardContent className="flex-1 h-full flex flex-col p-0">
