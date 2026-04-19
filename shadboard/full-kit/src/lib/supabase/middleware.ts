@@ -3,10 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import type { Database } from "@/lib/supabase/database.types"
 
-/**
- * Refresh Supabase Auth cookies on the edge (modal.md §2.3).
- * No-op when Supabase env is not configured.
- */
+/** Refresh Supabase Auth cookies on the edge. No-op when Supabase env is not configured. */
 export async function updateSupabaseSession(
   request: NextRequest
 ): Promise<NextResponse> {

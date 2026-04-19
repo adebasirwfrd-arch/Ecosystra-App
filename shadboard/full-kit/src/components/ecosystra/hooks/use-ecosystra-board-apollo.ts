@@ -521,8 +521,7 @@ function parseTableSortRules(raw: unknown): BoardTableSortRule[] {
     const o = x as Record<string, unknown>
     const id = typeof o.id === "string" ? o.id.trim() : ""
     if (!id) continue
-    const direction: "asc" | "desc" =
-      o.direction === "desc" ? "desc" : "asc"
+    const direction: "asc" | "desc" = o.direction === "desc" ? "desc" : "asc"
     let columnId: string | null = null
     if (typeof o.columnId === "string" && o.columnId.trim()) {
       columnId = o.columnId.trim()
@@ -789,11 +788,19 @@ export function useEcosystraBoardApollo() {
   const dict = useOptionalEcosystraDictionary()
   const toastMsg = useMemo(() => boardToastMessages(dict), [dict])
 
-  const { data, loading, error, refetch } = useQuery<{
+  const { data, previousData, loading, error, refetch } = useQuery<{
     getOrCreateBoard: GqlBoard
-  }>(GET_OR_CREATE_BOARD, { fetchPolicy: "cache-and-network" })
+  }>(GET_OR_CREATE_BOARD, {
+    fetchPolicy: "cache-first",
+    nextFetchPolicy: "cache-first",
+    notifyOnNetworkStatusChange: true,
+  })
 
-  const board = data?.getOrCreateBoard
+  const board = data?.getOrCreateBoard ?? previousData?.getOrCreateBoard
+
+  /** Full-page skeleton only on first load — keep showing board during refetch. */
+  const boardInitialLoading =
+    loading && !data?.getOrCreateBoard && !previousData?.getOrCreateBoard
 
   const [viewTab, setViewTab] = useState<BoardViewTab>("table")
   const [openByGroupId, setOpenByGroupId] = useState<Record<string, boolean>>(
@@ -1240,6 +1247,7 @@ export function useEcosystraBoardApollo() {
   return {
     board,
     loading,
+    boardInitialLoading,
     error,
     refetch,
     viewTab,

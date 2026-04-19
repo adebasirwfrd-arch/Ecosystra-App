@@ -129,7 +129,7 @@ export function Sidebar({ dictionary }: { dictionary: DictionaryType }) {
     <SidebarWrapper side={isRTL ? "right" : "left"}>
       <SidebarHeader>
         <Link
-          href={ensureLocalizedPathname("/", locale)}
+          href={ensureLocalizedPathname("/apps/ecosystra", locale)}
           className="w-fit flex items-center gap-2 text-foreground font-black p-2 pb-0 mb-2"
           onClick={() => isMobile && setOpenMobile(!openMobile)}
         >

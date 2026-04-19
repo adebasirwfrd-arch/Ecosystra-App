@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate src/lib/supabase/database.types.ts (modal.md §2.6).
+# Generate src/lib/supabase/database.types.ts
 set -uo pipefail
 cd "$(dirname "$0")/.."
 

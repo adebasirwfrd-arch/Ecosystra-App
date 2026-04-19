@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import GraphQLJSON from "graphql-type-json";
-import type { Prisma } from "@/generated/prisma";
+import { Prisma } from "@/generated/prisma";
 import type { AuthState } from "./auth";
 import { db as prisma, withPrismaRetry } from "@/lib/prisma";
 import { logItemFieldChange } from "./audit";
@@ -300,6 +300,10 @@ async function getViewer(ctx: GqlContext) {
   if (!email) {
     throw new Error("UNAUTHORIZED");
   }
+  const cached = ctx.prismaUser;
+  if (cached?.email && cached.email.trim().toLowerCase() === email) {
+    return cached;
+  }
   return withPrismaRetry(async () => {
     const existing = await prisma.ecoUser.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
@@ -357,17 +361,170 @@ async function requireWorkspaceAccess(
   if (!m) throw new Error("FORBIDDEN");
 }
 
-async function loadBoardWithTree(boardId: string) {
-  return prisma.ecoBoard.findUniqueOrThrow({
-    where: { id: boardId },
-    include: {
-      groups: true,
+/** Fields needed for board UI + GraphQL `Item` / `Group` — avoids loading unused relations (faster DB + JSON). */
+const ecoUserBoardPick = {
+  id: true,
+  name: true,
+  email: true,
+  avatarUrl: true,
+  status: true,
+} as const;
+
+const ecoItemLeafSelect = {
+  id: true,
+  name: true,
+  boardId: true,
+  groupId: true,
+  parentItemId: true,
+  createdByUserId: true,
+  createdAt: true,
+  updatedAt: true,
+  dynamicData: true,
+  createdBy: { select: ecoUserBoardPick },
+} as const;
+
+const ecoItemWithSubitemsSelect = {
+  ...ecoItemLeafSelect,
+  subitems: {
+    orderBy: { createdAt: "asc" as const },
+    select: ecoItemLeafSelect,
+  },
+} as const;
+
+const boardTreeSelect = {
+  id: true,
+  name: true,
+  workspaceId: true,
+  columns: true,
+  subitemColumns: true,
+  createdAt: true,
+  groups: {
+    orderBy: { id: "asc" as const },
+    select: {
+      id: true,
+      name: true,
+      color: true,
+      boardId: true,
       items: {
         where: { parentItemId: null },
-        include: { subitems: true },
+        orderBy: { createdAt: "asc" as const },
+        select: ecoItemWithSubitemsSelect,
       },
     },
+  },
+} as const;
+
+/** Populated on board-loaded items to avoid N+1 `lastUpdatedBy` audit queries. */
+const ITEM_LAST_UPDATED_PREFETCH = Symbol.for(
+  "ecosystra.itemLastUpdatedByPrefetch"
+);
+
+type ItemWithPrefetchMeta = {
+  id: string;
+  createdByUserId?: string | null;
+  createdBy?: {
+    id: string;
+    name: string | null;
+    email: string;
+    avatarUrl: string | null;
+    status: string | null;
+  } | null;
+  subitems?: ItemWithPrefetchMeta[];
+  [ITEM_LAST_UPDATED_PREFETCH]?: {
+    hasAuditRow: boolean;
+    auditActor: {
+      id: string;
+      name: string | null;
+      email: string;
+      avatarUrl: string | null;
+      status: string | null;
+    } | null;
+  };
+};
+
+function collectBoardItemIdsFromTree(board: {
+  groups: Array<{ items: ItemWithPrefetchMeta[] }>;
+}): string[] {
+  const ids: string[] = [];
+  for (const g of board.groups) {
+    for (const it of g.items) {
+      ids.push(it.id);
+      for (const s of it.subitems ?? []) ids.push(s.id);
+    }
+  }
+  return ids;
+}
+
+async function prefetchLastUpdatedByForBoardItems(board: {
+  groups: Array<{ items: ItemWithPrefetchMeta[] }>;
+}): Promise<void> {
+  const ids = [...new Set(collectBoardItemIdsFromTree(board))];
+  if (!ids.length) return;
+
+  const auditRows = await prisma.$queryRaw<
+    Array<{ itemId: string; actorUserId: string | null }>
+  >(
+    Prisma.sql`
+      SELECT DISTINCT ON ("itemId") "itemId", "actorUserId"
+      FROM "TaskAuditLog"
+      WHERE "itemId" IN (${Prisma.join(ids)})
+      ORDER BY "itemId", "createdAt" DESC
+    `
+  );
+
+  const actorIds = [
+    ...new Set(
+      auditRows.map((r) => r.actorUserId).filter((x): x is string => Boolean(x))
+    ),
+  ];
+  const actors =
+    actorIds.length > 0
+      ? await prisma.ecoUser.findMany({ where: { id: { in: actorIds } } })
+      : [];
+  const actorById = new Map(actors.map((a) => [a.id, a]));
+
+  type AuditActor = NonNullable<
+    NonNullable<ItemWithPrefetchMeta[typeof ITEM_LAST_UPDATED_PREFETCH]>["auditActor"]
+  >;
+  const auditMetaByItemId = new Map<
+    string,
+    { hasAuditRow: boolean; auditActor: AuditActor | null }
+  >();
+  for (const row of auditRows) {
+    auditMetaByItemId.set(row.itemId, {
+      hasAuditRow: true,
+      auditActor: row.actorUserId
+        ? actorById.get(row.actorUserId) ?? null
+        : null,
+    });
+  }
+
+  const walk = (item: ItemWithPrefetchMeta) => {
+    const meta = auditMetaByItemId.get(item.id);
+    if (meta) {
+      item[ITEM_LAST_UPDATED_PREFETCH] = meta;
+    } else {
+      item[ITEM_LAST_UPDATED_PREFETCH] = {
+        hasAuditRow: false,
+        auditActor: null,
+      };
+    }
+    for (const s of item.subitems ?? []) walk(s);
+  };
+  for (const g of board.groups) {
+    for (const it of g.items) walk(it);
+  }
+}
+
+async function loadBoardWithTree(boardId: string) {
+  const board = await prisma.ecoBoard.findUniqueOrThrow({
+    where: { id: boardId },
+    select: boardTreeSelect,
   });
+  await prefetchLastUpdatedByForBoardItems(
+    board as unknown as { groups: Array<{ items: ItemWithPrefetchMeta[] }> }
+  );
+  return board;
 }
 
 const MAX_TASK_ASSIGNEES = 25;
@@ -694,6 +851,21 @@ export const resolvers = {
   JSON: GraphQLJSON,
 
   Board: {
+    /** Fallback when board payload was not built with `boardTreeInclude` root `items`. */
+    items: async (board: { id: string; items?: unknown[] }) => {
+      if (Array.isArray(board.items)) return board.items;
+      return prisma.ecoItem.findMany({
+        where: { boardId: board.id, parentItemId: null },
+        orderBy: { createdAt: "asc" },
+        include: {
+          createdBy: true,
+          subitems: {
+            orderBy: { createdAt: "asc" },
+            include: { createdBy: true },
+          },
+        },
+      });
+    },
     createdAt: (board: { createdAt?: Date }) =>
       board.createdAt instanceof Date
         ? board.createdAt.toISOString()
@@ -739,13 +911,36 @@ export const resolvers = {
       item.updatedAt instanceof Date
         ? item.updatedAt.toISOString()
         : String(item.updatedAt ?? ""),
-    lastUpdatedBy: async (item: { id: string; createdByUserId?: string | null }) => {
+    lastUpdatedBy: async (
+      item: ItemWithPrefetchMeta & { id: string; createdByUserId?: string | null }
+    ) => {
+      const p = item[ITEM_LAST_UPDATED_PREFETCH];
+      if (p !== undefined) {
+        if (p.hasAuditRow) {
+          if (p.auditActor) return p.auditActor;
+          if (item.createdBy) return item.createdBy;
+          if (item.createdByUserId) {
+            return prisma.ecoUser.findUnique({
+              where: { id: item.createdByUserId },
+            });
+          }
+          return null;
+        }
+        if (item.createdBy) return item.createdBy;
+        if (item.createdByUserId) {
+          return prisma.ecoUser.findUnique({
+            where: { id: item.createdByUserId },
+          });
+        }
+        return null;
+      }
       const lastAudit = await prisma.ecoTaskAuditLog.findFirst({
         where: { itemId: item.id },
         orderBy: { createdAt: "desc" },
         include: { actor: true },
       });
       if (lastAudit?.actor) return lastAudit.actor;
+      if (item.createdBy) return item.createdBy;
       if (item.createdByUserId) {
         return prisma.ecoUser.findUnique({ where: { id: item.createdByUserId } });
       }
@@ -766,17 +961,22 @@ export const resolvers = {
 
       const membership = await prisma.ecoMember.findFirst({
         where: { userId: viewer.id },
-        include: {
+        select: {
           workspace: {
-            include: {
-              boards: { orderBy: { createdAt: "asc" }, take: 1 },
+            select: {
+              boards: {
+                orderBy: { createdAt: "asc" },
+                take: 1,
+                select: { id: true },
+              },
             },
           },
         },
       });
 
-      if (membership?.workspace.boards[0]) {
-        return loadBoardWithTree(membership.workspace.boards[0].id);
+      const firstBoardId = membership?.workspace.boards[0]?.id;
+      if (firstBoardId) {
+        return loadBoardWithTree(firstBoardId);
       }
 
       const legacy = await prisma.ecoBoard.findFirst({
@@ -813,7 +1013,7 @@ export const resolvers = {
         return loadBoardWithTree(legacy.id);
       }
 
-      return prisma.$transaction(async (tx) => {
+      const newBoardId = await prisma.$transaction(async (tx) => {
         const ws = await tx.ecoWorkspace.create({
           data: { name: "Main workspace", description: "" },
         });
@@ -845,17 +1045,9 @@ export const resolvers = {
         } catch {
           /* optional */
         }
-        return tx.ecoBoard.findUniqueOrThrow({
-          where: { id: board.id },
-          include: {
-            groups: true,
-            items: {
-              where: { parentItemId: null },
-              include: { subitems: true },
-            },
-          },
-        });
+        return board.id;
       });
+      return loadBoardWithTree(newBoardId);
     },
 
     getBoard: async (_: unknown, { id }: { id: string }) => {

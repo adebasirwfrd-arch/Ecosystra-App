@@ -9,7 +9,7 @@ import type { Database } from "@/lib/supabase/database.types"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 /**
- * Server Components, Server Actions, Route Handlers (modal.md §2.2).
+ * Supabase server client for Server Components, Server Actions, and Route Handlers.
  * Respects RLS for the user whose session cookies are on the request.
  */
 export async function createSupabaseServerClient(): Promise<

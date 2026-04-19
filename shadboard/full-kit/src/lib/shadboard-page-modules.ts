@@ -3,13 +3,9 @@
  * Add new keys here when wiring additional areas (e.g. ecosystra) to the same table.
  */
 export const SHADBOARD_PAGE_MODULES = [
-  "analytics",
-  "crm",
-  "ecommerce",
   "email",
   "chat",
   "calendar",
-  "kanban",
 ] as const
 
 export type ShadboardPageModule = (typeof SHADBOARD_PAGE_MODULES)[number]

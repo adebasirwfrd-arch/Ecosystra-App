@@ -23,20 +23,6 @@ export function getInitials(fullName: string) {
 
 export const isEven = (num: number) => num % 2 === 0
 
-export function getCreditCardBrandName(number: string) {
-  const re = {
-    visa: /^4/,
-    mastercard: /^5[1-5]/,
-    amex: /^3[47]/,
-    discover: /^6(?:011|5)/,
-  }
-
-  for (const [type, regex] of Object.entries(re)) {
-    if (regex.test(number)) return type
-  }
-  return "unknown"
-}
-
 export function remToPx(rem: number) {
   // Get the root font size (default is 16px if not set otherwise)
   const rootFontSize = parseFloat(

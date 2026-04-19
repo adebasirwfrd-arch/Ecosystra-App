@@ -3,12 +3,7 @@ import type { LucideIcon, icons } from "lucide-react"
 import type { ComponentType, SVGAttributes } from "react"
 import type { z } from "zod"
 import type { radii, themes } from "./configs/themes"
-import type { ComingSoonSchema } from "./schemas/coming-soon-schema"
-import type { ForgotPasswordSchema } from "./schemas/forgot-passward-schema"
-import type { NewPasswordSchema } from "./schemas/new-passward-schema"
-import type { RegisterSchema } from "./schemas/register-schema"
 import type { SignInSchema } from "./schemas/sign-in-schema"
-import type { VerifyEmailSchema } from "./schemas/verify-email-schema"
 
 export type LayoutType = "vertical" | "horizontal"
 
@@ -156,14 +151,4 @@ export interface FileType {
   url: string
 }
 
-export type ForgotPasswordFormType = z.infer<typeof ForgotPasswordSchema>
-
-export type NewPasswordFormType = z.infer<typeof NewPasswordSchema>
-
-export type RegisterFormType = z.infer<typeof RegisterSchema>
-
 export type SignInFormType = z.infer<typeof SignInSchema>
-
-export type VerifyEmailFormType = z.infer<typeof VerifyEmailSchema>
-
-export type ComingSoonFormType = z.infer<typeof ComingSoonSchema>

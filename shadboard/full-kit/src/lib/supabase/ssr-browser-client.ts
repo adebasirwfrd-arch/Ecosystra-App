@@ -8,9 +8,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 let singleton: SupabaseClient<Database> | null = null
 
 /**
- * Browser client aligned with `@supabase/ssr` + server cookie refresh (modal.md §2.2).
- * Prefer this for **user session** + RLS-bound queries from the client.
- * For anon-only Realtime (no auth cookie), `getSupabaseBrowserClient` in `browser-client.ts` may stay in use until migrated.
+ * Browser client aligned with `@supabase/ssr` and server cookie refresh.
+ * Prefer this for user session + RLS-bound queries from the client.
  */
 export function getSupabaseSsrBrowserClient(): SupabaseClient<Database> | null {
   if (typeof window === "undefined") return null

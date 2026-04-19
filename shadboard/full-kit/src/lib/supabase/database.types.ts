@@ -1,7 +1,7 @@
 /**
  * Replace with generated types:
- * `supabase gen types typescript --project-id … > src/lib/supabase/database.types.ts`
- * (modal.md §2.6).
+ * `supabase gen types typescript --linked > src/lib/supabase/database.types.ts`
+ * (see `scripts/supabase-gen-types.sh`).
  */
 export type Json =
   | string

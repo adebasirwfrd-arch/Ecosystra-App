@@ -13,6 +13,7 @@ import {
   getPreferredLocale,
   isPathnameMissingLocale,
 } from "@/lib/i18n"
+import { sanitizeAppHomePathname } from "@/lib/app-default-home"
 import { ensureRedirectPathname, ensureWithoutPrefix } from "@/lib/utils"
 
 function redirect(pathname: string, request: NextRequest) {
@@ -38,9 +39,9 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   /**
-   * Browsers sometimes resolve a relative href like `dashboards/analytics` against
+   * Browsers sometimes resolve a relative href (e.g. `apps/ecosystra`) against
    * the wrong base (e.g. document path treated as `/favicon.ico`), producing
-   * `/favicon.ico/dashboards/analytics`. That breaks Next (500 + _document /_app
+   * `/favicon.ico/apps/ecosystra`. That breaks Next (500 + _document /_app
    * noise). Strip the bogus prefix and redirect to the real path.
    */
   if (pathname.startsWith("/favicon.ico/")) {
@@ -73,7 +74,7 @@ export async function middleware(request: NextRequest) {
 
     // Redirect authenticated users away from guest routes
     if (isAuthenticated && isGuest) {
-      return redirect(process.env.HOME_PATHNAME || "/", request)
+      return redirect(sanitizeAppHomePathname(process.env.HOME_PATHNAME), request)
     }
 
     // Redirect unauthenticated users from protected routes to sign-in
@@ -122,13 +123,12 @@ export const config = {
      * - _next/image (image optimization files)
      * - sitemap.xml, robots.txt (metadata files)
      * - images folder
-     * - docs
      *
      * Note: Do not exclude `favicon.ico` here — that also skipped `/favicon.ico/...`
      * bogus URLs so our `/favicon.ico/*` fix in middleware never ran. Real
      * `/favicon.ico` is cheap to pass through; `next.config` redirect also strips
      * bad `/favicon.ico/:path*` requests.
      */
-    "/((?!api|_next/static|_next/image|sitemap.xml|robots.txt|images|docs).*)",
+    "/((?!api|_next/static|_next/image|sitemap.xml|robots.txt|images).*)",
   ],
 }

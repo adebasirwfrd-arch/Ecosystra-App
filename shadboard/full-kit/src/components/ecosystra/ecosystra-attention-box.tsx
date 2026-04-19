@@ -10,7 +10,8 @@
  *
  * **Variants (`type`)** — `primary`, `neutral`, `positive`, `warning`, `negative`.
  *
- * **Accessibility** — Set `closeButtonAriaLabel` when `onClose` is present (Vibe `closeButtonAriaLabel`). Prefer `dictionary.ecosystraApp.chrome.attentionBox.defaultCloseLabel` or a specific string.
+ * **Accessibility** — Set `closeButtonAriaLabel` when `onClose` is present; you can use
+ * `dictionary.ecosystraApp.chrome.attentionBox.defaultCloseLabel` or a specific string.
  *
  * **Do (Vibe)** — Brief **title** plus **body**; optional **link** / **action** with actions aligned for scanning.
  * **Don’t** — Title-only explanations; attention box **not** tied to specific content; random colors outside the five types (handled by base styles).

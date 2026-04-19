@@ -65,7 +65,7 @@ export function UserDropdown({
         <DropdownMenuGroup className="max-w-48">
           <DropdownMenuItem asChild>
             <Link
-              href={ensureLocalizedPathname("/pages/account/profile", locale)}
+              href={ensureLocalizedPathname("/apps/ecosystra/profile", locale)}
             >
               <User className="me-2 size-4" />
               {dictionary.navigation.userNav.profile}
@@ -73,7 +73,10 @@ export function UserDropdown({
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link
-              href={ensureLocalizedPathname("/pages/account/settings", locale)}
+              href={ensureLocalizedPathname(
+                "/apps/ecosystra/settings",
+                locale
+              )}
             >
               <UserCog className="me-2 size-4" />
               {dictionary.navigation.userNav.settings}

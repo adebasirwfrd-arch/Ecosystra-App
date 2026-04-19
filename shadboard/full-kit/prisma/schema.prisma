@@ -1,9 +1,15 @@
 datasource db {
   provider = "postgresql"
-  // Prisma CLI (`db push`, `migrate`) uses this only. Use your Supabase **pooler** URI here
-  // if direct `db.*:5432` is unreachable from your machine — no separate `directUrl` required.
-  url      = env("DATABASE_URL")
-  schemas  = ["nextauth", "shadboard_content", "public"]
+  // Prisma CLI (`db push`, `migrate`) reads `DATABASE_URL` only.
+  //
+  // Supabase (pick one for this var):
+  // - **Direct** `db.<project>.supabase.co:5432` — lowest latency when reachable (dev laptop / same-region VPS).
+  // - **Transaction pooler** `…pooler.supabase.com:6543?pgbouncer=true&connection_limit=1` — when :5432 is blocked
+  //   or for serverless; `src/lib/prisma.ts` may still prefer `DIRECT_URL` at runtime unless `PRISMA_USE_POOLER=true`.
+  // - **Session pooler** (Dashboard → Connect → “Session mode”) — port 5432 on the pooler host; use Prisma’s
+  //   `?pgbouncer=true` only for transaction mode :6543, not for session pooler unless Supabase docs say otherwise.
+  url     = env("DATABASE_URL")
+  schemas = ["nextauth", "shadboard_content", "public"]
 }
 
 generator client {
@@ -96,7 +102,7 @@ model VerificationToken {
   @@schema("nextauth")
 }
 
-// Serialized page/module UI state for Shadboard dashboards & apps (JSON document per module).
+// Serialized page/module UI state (JSON document per module: email, chat, calendar).
 model ShadboardPageContent {
   id        String   @id @default(uuid())
   module    String   @unique
@@ -104,97 +110,6 @@ model ShadboardPageContent {
   updatedAt DateTime @updatedAt
 
   @@map("shadboard_page_content")
-  @@schema("shadboard_content")
-}
-
-// CRM operational data — shared by /dashboards/crm (aggregates) and /apps/sales-management (CRUD).
-model CrmDeal {
-  id            String    @id @default(uuid())
-  title         String
-  companyName   String
-  amount        Decimal   @db.Decimal(14, 2)
-  currency      String    @default("USD")
-  /// LEAD | PROPOSAL | NEGOTIATION | CLOSED_WON | CLOSED_LOST
-  stage         String
-  /// socialMedia | emailCampaigns | referrals | website | other
-  leadSource    String
-  countryCode   String    @db.VarChar(8)
-  countryName   String
-  ownerName     String
-  ownerEmail    String
-  ownerAvatar   String?
-  probability   Int?
-  expectedClose DateTime?
-  notes         String?
-  closedAt      DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  @@index([stage])
-  @@index([leadSource])
-  @@index([countryCode])
-  @@index([ownerEmail])
-  @@index([createdAt])
-  @@index([closedAt])
-  @@map("crm_deal")
-  @@schema("shadboard_content")
-}
-
-model CrmProject {
-  id        String   @id @default(uuid())
-  name      String
-  progress  Int
-  startDate DateTime
-  dueDate   DateTime
-  /// On Track | At Risk | On Hold
-  status    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("crm_project")
-  @@schema("shadboard_content")
-}
-
-model CrmActivity {
-  id              String   @id @default(uuid())
-  /// email | supportTicket | dealUpdate | call | meeting | note
-  type            String
-  iconName        String
-  fill            String
-  title           String
-  description     String
-  status          String?
-  occurredAt      DateTime
-  assignedMembers Json
-  createdAt       DateTime @default(now())
-
-  @@index([occurredAt])
-  @@map("crm_activity")
-  @@schema("shadboard_content")
-}
-
-model CrmFeedback {
-  id              String   @id @default(uuid())
-  name            String
-  email           String
-  avatar          String
-  rating          Decimal  @db.Decimal(4, 2)
-  feedbackMessage String
-  createdAt       DateTime
-
-  @@map("crm_feedback")
-  @@schema("shadboard_content")
-}
-
-model CrmSalesRep {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  avatar    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("crm_sales_rep")
   @@schema("shadboard_content")
 }
 

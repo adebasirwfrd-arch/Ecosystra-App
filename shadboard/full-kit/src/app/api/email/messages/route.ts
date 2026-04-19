@@ -11,7 +11,7 @@ const querySchema = z.object({
   filter: z.string().min(1).default("inbox"),
 })
 
-/** REST read path for inbox (modal.md §2.4) — prefer over GraphQL when `NEXT_PUBLIC_EMAIL_API=rest`. */
+/** REST read path for inbox when `NEXT_PUBLIC_EMAIL_API=rest`. */
 export async function GET(req: Request) {
   const gate = await requireApiSession()
   if (gate.error) return gate.error

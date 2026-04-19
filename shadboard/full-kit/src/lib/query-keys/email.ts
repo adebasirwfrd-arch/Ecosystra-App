@@ -1,6 +1,6 @@
 /**
- * Query key factory untuk domain email (modal.md §2.5 — konsistensi invalidasi).
- * Email UI saat ini memakai Context + reducer; factory ini siap dipakai saat migrasi ke TanStack Query.
+ * Query key factory for the email domain.
+ * Email UI uses Context + reducer today; this factory is ready if you adopt TanStack Query.
  */
 export const emailQueryKeys = {
   all: ["email"] as const,

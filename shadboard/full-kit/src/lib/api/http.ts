@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
 
-/** Standard error body (modal.md §2.4). */
+/** Standard JSON error body for Route Handlers. */
 export function jsonError(
   message: string,
   status = 400,

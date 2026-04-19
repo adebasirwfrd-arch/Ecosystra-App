@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local runtime error sink (see /api/error-logs)
 /logs/
+
+# one-off DB dumps (scripts/migrate-to-new-supabase.sh); may contain PII
+/scripts/migration-dumps/

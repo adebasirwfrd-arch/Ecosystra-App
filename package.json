@@ -9,7 +9,8 @@
     "db:generate": "pnpm --filter shadboard-nextjs-full-kit run db:generate",
     "db:push": "pnpm --filter shadboard-nextjs-full-kit run db:push",
     "db:studio": "pnpm --filter shadboard-nextjs-full-kit run db:studio",
-    "migrate": "pnpm --filter shadboard-nextjs-full-kit run migrate"
+    "migrate": "pnpm --filter shadboard-nextjs-full-kit run migrate",
+    "migrate:deploy": "pnpm --filter shadboard-nextjs-full-kit run migrate:deploy"
   },
   "devDependencies": {
     "next": "15.5.15"

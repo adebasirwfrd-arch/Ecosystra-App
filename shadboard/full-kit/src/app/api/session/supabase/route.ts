@@ -2,10 +2,7 @@ import { jsonError, jsonOk } from "@/lib/api/http"
 import { isSupabaseConfigured } from "@/lib/supabase/env"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
-/**
- * Thin health/session probe for Supabase cookie auth (modal.md §2.4).
- * Does not replace NextAuth — use during migration to verify SSR wiring.
- */
+/** Health/session probe for Supabase cookie auth (does not replace NextAuth). */
 export async function GET() {
   if (!isSupabaseConfigured()) {
     return jsonError("Supabase is not configured", 503)

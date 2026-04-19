@@ -1,4 +1,10 @@
-import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client"
+import { ApolloClient, InMemoryCache, createHttpLink, from } from "@apollo/client"
+
+import {
+  createEcosystraPerfApolloLink,
+  installEcosystraPerfGlobal,
+  isEcosystraClientPerfEnabled,
+} from "@/lib/ecosystra-client-perf"
 
 /**
  * Vercel / docs typo: `https://host/graphql` hits no Next route → HTML 404.
@@ -78,12 +84,24 @@ async function ecosystraGraphqlFetch(
 export function createEcosystraGraphqlClient() {
   const uri = resolveGraphqlUri()
 
-  return new ApolloClient({
-    link: createHttpLink({
-      uri,
-      credentials: "include",
-      fetch: ecosystraGraphqlFetch,
-    }),
+  const httpLink = createHttpLink({
+    uri,
+    credentials: "include",
+    fetch: ecosystraGraphqlFetch,
+  })
+
+  const link = isEcosystraClientPerfEnabled()
+    ? from([createEcosystraPerfApolloLink(), httpLink])
+    : httpLink
+
+  const client = new ApolloClient({
+    link,
     cache: new InMemoryCache(),
   })
+
+  if (typeof window !== "undefined" && isEcosystraClientPerfEnabled()) {
+    installEcosystraPerfGlobal()
+  }
+
+  return client
 }

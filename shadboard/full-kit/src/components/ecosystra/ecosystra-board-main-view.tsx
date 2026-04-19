@@ -216,7 +216,7 @@ export function EcosystraBoardMainView() {
 
   const {
     board,
-    loading,
+    boardInitialLoading,
     error,
     refetch,
     viewTab,
@@ -314,7 +314,8 @@ export function EcosystraBoardMainView() {
       take: 8,
     },
     skip: !board?.workspaceId,
-    fetchPolicy: "cache-and-network",
+    fetchPolicy: "cache-first",
+    nextFetchPolicy: "cache-first",
   })
 
   const { data: boardRosterUsers } = useQuery(WORKSPACE_USERS, {
@@ -324,7 +325,8 @@ export function EcosystraBoardMainView() {
       take: 80,
     },
     skip: !board?.workspaceId,
-    fetchPolicy: "cache-and-network",
+    fetchPolicy: "cache-first",
+    nextFetchPolicy: "cache-first",
   })
 
   const mergedWorkspaceUsers = useMemo(() => {
@@ -1711,7 +1713,7 @@ export function EcosystraBoardMainView() {
       >
         {boardAnnouncement}
       </div>
-      {loading && !board ? (
+      {boardInitialLoading ? (
         <div
           className="flex flex-col gap-3 p-2"
           role="status"
@@ -1779,6 +1781,12 @@ export function EcosystraBoardMainView() {
                     onBlur={() => {
                       if (titleDraft.trim() && titleDraft !== board.name) {
                         void renameBoard(titleDraft.trim())
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        e.currentTarget.blur()
                       }
                     }}
                   />

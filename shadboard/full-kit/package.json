@@ -3,10 +3,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "private": true,
-  "author": {
-    "name": "Layth Alqadhi",
-    "url": "https://github.com/LaythAlqadhi"
-  },
+  "description": "Ecosystra web app",
   "scripts": {
     "dev": "next dev",
     "dev:3002": "next dev -p 3002",
@@ -23,11 +20,11 @@
     "lint:fix": "next lint --fix",
     "format": "prettier --ignore-path .gitignore --write .",
     "migrate": "dotenv -e .env.local -- prisma migrate dev",
+    "migrate:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "db:push": "dotenv -e .env.local -- prisma db push",
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "db:migrate-from-sqlite": "dotenv -e .env.local -- node scripts/migrate-sqlite-auth.cjs",
     "db:seed-page-content": "pnpm exec dotenv -e .env.local -- tsx scripts/seed-shadboard-page-content.ts",
-    "db:seed-crm": "pnpm exec dotenv -e .env.local -- tsx scripts/seed-crm-tables.ts",
     "postinstall": "prisma generate",
     "verify:ecosystra-contrast": "node scripts/verify-ecosystra-contrast.mjs"
   },
@@ -53,9 +50,6 @@
     "@fullcalendar/timegrid": "6.1.15",
     "@hello-pangea/dnd": "18.0.1",
     "@hookform/resolvers": "3.9.0",
-    "@mdx-js/loader": "3.1.0",
-    "@mdx-js/react": "3.1.0",
-    "@next/mdx": "15.5.15",
     "@prisma/client": "5.20.0",
     "@radix-ui/react-accessible-icon": "1.1.0",
     "@radix-ui/react-accordion": "1.2.0",
@@ -145,7 +139,6 @@
     "@tailwindcss/typography": "0.5.15",
     "@types/eslint__eslintrc": "2.1.2",
     "@types/graphql-type-json": "^0.3.5",
-    "@types/mdx": "2.0.13",
     "@types/negotiator": "0.6.3",
     "@types/node": "20",
     "@types/react": "19.0.12",

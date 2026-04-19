@@ -28,7 +28,7 @@ export function BottomBarHeader({
     <div className="container flex h-14 justify-between items-center gap-4">
       <ToggleMobileSidebar />
       <Link
-        href={ensureLocalizedPathname("/", locale)}
+        href={ensureLocalizedPathname("/apps/ecosystra", locale)}
         className="hidden items-center gap-2 text-foreground font-black lg:flex"
       >
         <Image

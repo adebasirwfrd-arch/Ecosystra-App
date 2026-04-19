@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Check,
   ChevronLeft,
@@ -42,9 +42,9 @@ export function ColorGridPicker({
 }) {
   return (
     <div className="grid grid-cols-5 gap-1.5">
-      {PALETTE.flat().map((c) => (
+      {PALETTE.flat().map((c, i) => (
         <button
-          key={c}
+          key={`sw-${i}-${c}`}
           type="button"
           onClick={() => onSelect(c)}
           className={cn(
@@ -127,6 +127,8 @@ export function BoardLabelCustomizer({
   onUpdateLabels: (newLabels: DuePriorityLabel[]) => void
 }) {
   const [localLabels, setLocalLabels] = useState(labels)
+  const localLabelsRef = useRef(localLabels)
+  localLabelsRef.current = localLabels
 
   useEffect(() => {
     setLocalLabels(labels)
@@ -188,7 +190,42 @@ export function BoardLabelCustomizer({
 
             <Input
               value={l.label}
-              onChange={(e) => updateOne(l.id, { label: e.target.value })}
+              onChange={(e) => {
+                const v = e.target.value
+                setLocalLabels((prev) =>
+                  prev.map((x) => (x.id === l.id ? { ...x, label: v } : x))
+                )
+              }}
+              onBlur={() => {
+                // Never call `onUpdateLabels` inside a `setState` updater — it triggers Apollo/parent
+                // updates during render and React throws (see react.dev/link/setstate-in-render).
+                const cur = localLabelsRef.current
+                const localRow = cur.find((x) => x.id === l.id)
+                if (!localRow) return
+                const parentRow = labels.find((o) => o.id === l.id)
+                const unchanged =
+                  parentRow != null &&
+                  parentRow.label === localRow.label &&
+                  parentRow.color === localRow.color
+                if (!unchanged) onUpdateLabels(cur)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                }
+                if (e.key === "Escape") {
+                  const parentRow = labels.find((o) => o.id === l.id)
+                  if (parentRow) {
+                    setLocalLabels((prev) =>
+                      prev.map((x) =>
+                        x.id === l.id ? { ...x, label: parentRow.label } : x
+                      )
+                    )
+                  }
+                  e.currentTarget.blur()
+                }
+              }}
               className="h-8 border-transparent px-2 py-1 text-sm transition-colors hover:border-muted focus:border-input focus-visible:ring-1"
               placeholder="Label name..."
             />

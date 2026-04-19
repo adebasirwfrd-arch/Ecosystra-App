@@ -4,6 +4,7 @@ import * as jose from "jose"
 import type { NextAuthOptions } from "next-auth"
 import type { Adapter } from "next-auth/adapters"
 
+import { rewriteLegacyDashboardPathname } from "@/lib/app-default-home"
 import { db } from "@/lib/prisma"
 
 import CredentialsProvider from "next-auth/providers/credentials"
@@ -47,9 +48,10 @@ const nextAuthUrl = process.env.NEXTAUTH_URL || "http://localhost:3000"
 export const authOptions: NextAuthOptions = {
   // Use Prisma adapter for database interaction
   // More info: https://next-auth.js.org/getting-started/adapter
-  debug: process.env.NODE_ENV === "development",
+  // Verbose `[next-auth][warn][DEBUG_ENABLED]` and extra logs only when explicitly enabled.
+  debug: process.env.NEXTAUTH_DEBUG === "true",
   logger:
-    process.env.NODE_ENV === "development"
+    process.env.NEXTAUTH_DEBUG === "true"
       ? {
           error(code, ...rest: unknown[]) {
             console.error("[next-auth]", code, ...rest)
@@ -147,13 +149,23 @@ export const authOptions: NextAuthOptions = {
      * but different origin, which breaks session + looks like "back to login".
      */
     async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) return `${baseUrl}${url}`
+      const withRewrittenPath = (pathAndQuery: string) => {
+        const q = pathAndQuery.indexOf("?")
+        const path = q >= 0 ? pathAndQuery.slice(0, q) : pathAndQuery
+        const tail = q >= 0 ? pathAndQuery.slice(q) : ""
+        return `${rewriteLegacyDashboardPathname(path)}${tail}`
+      }
+      if (url.startsWith("/")) return `${baseUrl}${withRewrittenPath(url)}`
       try {
         const next = new URL(url)
         const base = new URL(baseUrl)
-        if (next.origin === base.origin) return url
+        if (next.origin === base.origin) {
+          next.pathname = rewriteLegacyDashboardPathname(next.pathname)
+          return next.toString()
+        }
         if (next.hostname === base.hostname) {
-          return `${base.origin}${next.pathname}${next.search}${next.hash}`
+          const path = rewriteLegacyDashboardPathname(next.pathname)
+          return `${base.origin}${path}${next.search}${next.hash}`
         }
       } catch {
         /* ignore invalid url */

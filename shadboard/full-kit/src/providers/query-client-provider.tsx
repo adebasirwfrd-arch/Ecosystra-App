@@ -5,9 +5,7 @@ import { useState } from "react"
 
 import type { ReactNode } from "react"
 
-/**
- * Global TanStack Query defaults (modal.md §2.5 — staleTime, controlled refetch).
- */
+/** Global TanStack Query defaults (staleTime, refetch behaviour). */
 export function QueryClientProviderWrapper({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>

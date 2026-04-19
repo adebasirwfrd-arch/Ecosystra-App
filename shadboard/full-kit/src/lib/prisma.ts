@@ -30,6 +30,27 @@ function isSupabasePoolerUrl(url: string): boolean {
   return !!u && u.hostname.includes("pooler.supabase.com")
 }
 
+/**
+ * Transaction pooler (:6543) + many Next.js instances: without `connection_limit=1`
+ * Prisma can open too many server-side connections and latency spikes follow.
+ * Appends safe defaults only when missing (does not override your query string).
+ */
+function ensureSupabasePrismaPoolParams(url: string): string {
+  const u = parseDbUrl(url)
+  if (!u || !u.hostname.toLowerCase().includes("pooler.supabase.com")) {
+    return url
+  }
+  const lower = url.toLowerCase()
+  const add: string[] = []
+  if (!lower.includes("connection_limit=")) add.push("connection_limit=1")
+  if (!lower.includes("pgbouncer=true") && u.port === "6543") {
+    add.push("pgbouncer=true")
+  }
+  if (add.length === 0) return url
+  const q = add.join("&")
+  return url.includes("?") ? `${url}&${q}` : `${url}?${q}`
+}
+
 /** When true, PrismaClient uses `DATABASE_URL` (pooler :6543) even if `DIRECT_URL` is set. Use if `db.*.supabase.co:5432` is unreachable (IPv6 / firewall / ISP) but the pooler works. */
 function prismaWantsPoolerRuntime(): boolean {
   const v = process.env.PRISMA_USE_POOLER?.trim().toLowerCase()
@@ -71,7 +92,8 @@ function prismaDatasourceUrl() {
 }
 
 const prismaClientSingleton = () => {
-  const url = prismaDatasourceUrl()
+  const raw = prismaDatasourceUrl()
+  const url = raw ? ensureSupabasePrismaPoolParams(raw) : raw
   return new PrismaClient(
     url
       ? {

@@ -7,7 +7,9 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type FocusEvent,
 } from "react"
 import { useApolloClient } from "@apollo/client"
 import {
@@ -207,16 +209,36 @@ function clampBoardRating(raw: unknown): number {
 
 const BoardRatingStars = memo(function BoardRatingStars({
   value,
-  onChange,
+  onCommit,
   ariaLabel,
 }: {
   value: unknown
-  onChange: (next: number) => void
+  /** Persists when focus leaves the star group (click elsewhere / Tab) or on Enter. */
+  onCommit: (next: number) => void
   ariaLabel: string
 }) {
   const committed = clampBoardRating(value)
+  const [draft, setDraft] = useState(committed)
   const [hover, setHover] = useState<number | null>(null)
-  const display = hover ?? committed
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const display = hover ?? draft
+
+  useEffect(() => {
+    setDraft(committed)
+  }, [committed])
+
+  const flushIfDirty = useCallback(() => {
+    const cur = draftRef.current
+    if (cur !== committed) onCommit(cur)
+  }, [committed, onCommit])
+
+  const handleContainerBlur = (e: FocusEvent<HTMLDivElement>) => {
+    const rt = e.relatedTarget
+    if (rt instanceof Node && e.currentTarget.contains(rt)) return
+    setHover(null)
+    flushIfDirty()
+  }
 
   return (
     <div
@@ -224,6 +246,7 @@ const BoardRatingStars = memo(function BoardRatingStars({
       aria-label={ariaLabel}
       className="flex items-center justify-center gap-0.5 py-0.5"
       onMouseLeave={() => setHover(null)}
+      onBlur={handleContainerBlur}
     >
       {[1, 2, 3, 4, 5].map((i) => (
         <button
@@ -234,11 +257,23 @@ const BoardRatingStars = memo(function BoardRatingStars({
             i <= display ? "text-amber-400" : "text-muted-foreground/35"
           )}
           aria-label={`${i} of 5`}
-          aria-pressed={i <= committed}
+          aria-pressed={i <= display}
           onMouseEnter={() => setHover(i)}
           onFocus={() => setHover(i)}
           onBlur={() => setHover(null)}
-          onClick={() => onChange(committed === i ? 0 : i)}
+          onClick={() => setDraft((cur) => (cur === i ? 0 : i))}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setDraft(committed)
+              setHover(null)
+              e.currentTarget.blur()
+            }
+            if (e.key === "Enter") {
+              e.preventDefault()
+              flushIfDirty()
+              e.currentTarget.blur()
+            }
+          }}
         >
           <Star
             className={cn("size-[1.05rem]", i <= display && "fill-current")}
@@ -1049,7 +1084,7 @@ type Props = {
   }) => void | Promise<void | boolean>
 }
 
-export function EcosystraBoardGroupTable({
+function EcosystraBoardGroupTableImpl({
   groupId,
   groupName,
   workspaceId,
@@ -2262,7 +2297,7 @@ export function EcosystraBoardGroupTable({
             >
               <BoardRatingStars
                 value={d[fk]}
-                onChange={(n) => onPatchItem(row.id, { [fk]: n })}
+                onCommit={(n) => onPatchItem(row.id, { [fk]: n })}
                 ariaLabel={t.colRating}
               />
             </TableCell>
@@ -2744,7 +2779,7 @@ export function EcosystraBoardGroupTable({
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
             <BoardRatingStars
               value={d.rating}
-              onChange={(n) => onPatchItem(row.id, { rating: n })}
+              onCommit={(n) => onPatchItem(row.id, { rating: n })}
               ariaLabel={t.colRating}
             />
           </TableCell>
@@ -2934,7 +2969,7 @@ export function EcosystraBoardGroupTable({
             <div key={col.id} className="flex min-w-0 justify-center px-0.5">
               <BoardRatingStars
                 value={sd[fk] ?? sd.rating}
-                onChange={(n) => onPatchItem(s.id, { [fk]: n })}
+                onCommit={(n) => onPatchItem(s.id, { [fk]: n })}
                 ariaLabel={t.colRating}
               />
             </div>
@@ -3324,7 +3359,7 @@ export function EcosystraBoardGroupTable({
           <div key={col.id} className="flex min-w-0 justify-center px-0.5">
             <BoardRatingStars
               value={sd.rating}
-              onChange={(n) => onPatchItem(s.id, { rating: n })}
+              onCommit={(n) => onPatchItem(s.id, { rating: n })}
               ariaLabel={t.colRating}
             />
           </div>
@@ -3967,3 +4002,6 @@ export function EcosystraBoardGroupTable({
     </>
   )
 }
+
+EcosystraBoardGroupTableImpl.displayName = "EcosystraBoardGroupTable"
+export const EcosystraBoardGroupTable = memo(EcosystraBoardGroupTableImpl)

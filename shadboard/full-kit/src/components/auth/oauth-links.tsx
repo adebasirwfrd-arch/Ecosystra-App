@@ -8,6 +8,7 @@ import type { LocaleType } from "@/types"
 
 import { oauthLinksData } from "@/data/oauth-links"
 
+import { sanitizeAppHomePathname } from "@/lib/app-default-home"
 import { ensureLocalizedPathname } from "@/lib/i18n"
 
 import { buttonVariants } from "@/components/ui/button"
@@ -18,7 +19,9 @@ export function OAuthLinks() {
   const [loading, setLoading] = useState(false)
 
   const homePath = ensureLocalizedPathname(
-    process.env.NEXT_PUBLIC_HOME_PATHNAME || "/dashboards/analytics",
+    sanitizeAppHomePathname(
+      process.env.NEXT_PUBLIC_HOME_PATHNAME || "/apps/ecosystra"
+    ),
     locale
   )
 

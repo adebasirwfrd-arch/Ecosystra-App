@@ -6,7 +6,7 @@ import { jsonError } from "@/lib/api/http"
 import type { Session } from "next-auth"
 import type { NextResponse } from "next/server"
 
-/** Route Handlers: require NextAuth session (modal.md §2.4 — verify user server-side). */
+/** Route Handlers: require an authenticated NextAuth session. */
 export async function requireApiSession(): Promise<
   { session: Session; error: null } | { session: null; error: NextResponse }
 > {
