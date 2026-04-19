@@ -127,6 +127,8 @@
       "colLastUpdated": "Last updated",
       "colFiles": "Files",
       "colTimelineInfo": "Displayed as a blue range pill; pick a date to set the label.",
+      "timelineApply": "Save",
+      "timelineCancel": "Cancel",
       "hideColStatus": "Status",
       "hideColDueDate": "Due date",
       "hideColDate": "Date",

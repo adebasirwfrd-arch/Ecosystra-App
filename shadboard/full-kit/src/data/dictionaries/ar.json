@@ -127,6 +127,8 @@
       "colLastUpdated": "آخر تحديث",
       "colFiles": "الملفات",
       "colTimelineInfo": "يُعرض كشريط زمني أزرق؛ اختر تاريخًا لتعيين النص.",
+      "timelineApply": "حفظ",
+      "timelineCancel": "إلغاء",
       "hideColStatus": "الحالة",
       "hideColDueDate": "تاريخ الاستحقاق",
       "hideColDate": "تاريخ",

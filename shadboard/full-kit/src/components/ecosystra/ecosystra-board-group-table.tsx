@@ -28,7 +28,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { Draggable, Droppable } from "@hello-pangea/dnd"
-import { differenceInDays, format, isValid } from "date-fns"
+import { format } from "date-fns"
 import { useMedia } from "react-use"
 import { toast } from "sonner"
 import {
@@ -51,6 +51,7 @@ import {
 } from "lucide-react"
 
 import boardSurface from "./ecosystra-board-surface.module.css"
+import { BoardTimelineRangeCommitPopover } from "./board-timeline-range-commit-popover"
 
 import type { TableColumn } from "@/components/ui/ecosystra-table"
 import type { DragEndEvent, DraggableSyntheticListeners } from "@dnd-kit/core"
@@ -70,6 +71,10 @@ import type {
   TableCustomColumnDef,
 } from "./hooks/use-ecosystra-board-apollo"
 
+import {
+  getTimelineDuration,
+  parseTimelineRange,
+} from "@/lib/ecosystra/board-timeline-format"
 import { WORKSPACE_USERS } from "@/lib/ecosystra/board-gql"
 import { cn, getInitials } from "@/lib/utils"
 
@@ -168,37 +173,6 @@ function resolveNotesCategoryDisplayLabel(
   if (hit) return hit.label
   const norm = normalizeNotesCategory(s)
   return labels.find((l) => l.label === norm)?.label ?? norm
-}
-
-function formatTimelineRange(range: DateRange | undefined): string {
-  if (!range?.from) return "—"
-
-  const curYear = new Date().getFullYear()
-
-  if (!range.to) {
-    const showYear = range.from.getFullYear() !== curYear
-    return format(range.from, showYear ? "MMM d, yyyy" : "MMM d")
-  }
-
-  const { from, to } = range
-  const showYear =
-    from.getFullYear() !== curYear || to.getFullYear() !== curYear
-
-  if (from.getFullYear() === to.getFullYear()) {
-    if (from.getMonth() === to.getMonth()) {
-      const suffix = showYear ? `, ${from.getFullYear()}` : ""
-      return `${format(from, "MMM d")} - ${format(to, "d")}${suffix}`
-    }
-    const suffix = showYear ? `, ${from.getFullYear()}` : ""
-    return `${format(from, "MMM d")} - ${format(to, "MMM d")}${suffix}`
-  }
-  return `${format(from, "MMM d, yyyy")} - ${format(to, "MMM d, yyyy")}`
-}
-
-function getTimelineDuration(range: DateRange | undefined): string {
-  if (!range?.from || !range.to) return ""
-  const days = differenceInDays(range.to, range.from) + 1
-  return `${days}d`
 }
 
 function clampBoardRating(raw: unknown): number {
@@ -339,60 +313,6 @@ const TimelinePill = memo(
   })
 )
 TimelinePill.displayName = "TimelinePill"
-
-function parseTimelineRange(s: string): DateRange | undefined {
-  if (!s || s === "—" || s === "") return undefined
-
-  // Normalize: handle both " - " and "–"
-  const normalized = s.replace(/–/g, "-")
-  const parts = normalized.split("-").map((p) => p.trim())
-
-  if (parts.length === 1) {
-    const d = new Date(parts[0])
-    return isValid(d) ? { from: d, to: undefined } : undefined
-  }
-
-  // Concise Format Logic: "Apr 18 - 19" or "Apr 18 - 19, 2026"
-  let fromPart = parts[0]
-  let toPart = parts[1]
-
-  // Detect year in the whole string
-  const yearMatch = s.match(/, (\d{4})/)
-  const targetYear = yearMatch
-    ? parseInt(yearMatch[1], 10)
-    : new Date().getFullYear()
-
-  // Detect month in fromPart
-  const monthMatch = fromPart.match(/^[A-Za-z]{3}/)
-  const monthStr = monthMatch ? monthMatch[0] : ""
-
-  // If toPart is just a day number (e.g. "19" or "19, 2026")
-  if (/^\d+/.test(toPart) && !/[A-Za-z]/.test(toPart)) {
-    toPart = `${monthStr} ${toPart}`
-  }
-
-  // Ensure year is applied if missing
-  const fromDate = new Date(fromPart)
-  if (
-    isValid(fromDate) &&
-    fromDate.getFullYear() === 2001 &&
-    !fromPart.includes("2001")
-  ) {
-    fromDate.setFullYear(targetYear)
-  }
-
-  const toDate = new Date(toPart)
-  if (
-    isValid(toDate) &&
-    toDate.getFullYear() === 2001 &&
-    !toPart.includes("2001")
-  ) {
-    toDate.setFullYear(targetYear)
-  }
-
-  if (!isValid(fromDate)) return undefined
-  return { from: fromDate, to: isValid(toDate) ? toDate : undefined }
-}
 
 function InlineNotesPlain({
   itemId,
@@ -2226,27 +2146,22 @@ function EcosystraBoardGroupTableImpl({
               {...boardAlign(col.id)}
               {...cellCommonProps}
             >
-              <Popover>
-                <PopoverTrigger asChild>
-                  <TimelinePill
-                    tl={tl}
-                    range={range}
-                    t={t}
-                    onClear={() => onPatchItem(row.id, { [fk]: null })}
-                  />
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    selected={range}
-                    onSelect={(nextRange) => {
-                      onPatchItem(row.id, {
-                        [fk]: formatTimelineRange(nextRange),
-                      })
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
+              <BoardTimelineRangeCommitPopover
+                draftStorageId={`${row.id}:${fk}`}
+                timelineLabel={tl}
+                onCommit={(formatted) =>
+                  onPatchItem(row.id, { [fk]: formatted })
+                }
+                applyLabel={t.timelineApply}
+                cancelLabel={t.timelineCancel}
+              >
+                <TimelinePill
+                  tl={tl}
+                  range={range}
+                  t={t}
+                  onClear={() => onPatchItem(row.id, { [fk]: null })}
+                />
+              </BoardTimelineRangeCommitPopover>
             </TableCell>
           )
         }
@@ -2708,27 +2623,22 @@ function EcosystraBoardGroupTableImpl({
         const range = parseTimelineRange(tl)
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <Popover>
-              <PopoverTrigger asChild>
-                <TimelinePill
-                  tl={tl}
-                  range={range}
-                  t={t}
-                  onClear={() => onPatchItem(row.id, { timeline: null })}
-                />
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="range"
-                  selected={range}
-                  onSelect={(nextRange) => {
-                    onPatchItem(row.id, {
-                      timeline: formatTimelineRange(nextRange),
-                    })
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
+            <BoardTimelineRangeCommitPopover
+              draftStorageId={`${row.id}:timeline`}
+              timelineLabel={tl}
+              onCommit={(formatted) =>
+                onPatchItem(row.id, { timeline: formatted })
+              }
+              applyLabel={t.timelineApply}
+              cancelLabel={t.timelineCancel}
+            >
+              <TimelinePill
+                tl={tl}
+                range={range}
+                t={t}
+                onClear={() => onPatchItem(row.id, { timeline: null })}
+              />
+            </BoardTimelineRangeCommitPopover>
           </TableCell>
         )
       }
@@ -3028,27 +2938,22 @@ function EcosystraBoardGroupTableImpl({
           const range = parseTimelineRange(tl)
           return (
             <div key={col.id} className="flex min-w-0 justify-center px-0.5">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <TimelinePill
-                    tl={tl}
-                    range={range}
-                    t={t}
-                    onClear={() => onPatchItem(s.id, { [fk]: null })}
-                  />
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    selected={range}
-                    onSelect={(nextRange) => {
-                      onPatchItem(s.id, {
-                        [fk]: formatTimelineRange(nextRange),
-                      })
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
+              <BoardTimelineRangeCommitPopover
+                draftStorageId={`${s.id}:${fk}`}
+                timelineLabel={tl}
+                onCommit={(formatted) =>
+                  onPatchItem(s.id, { [fk]: formatted })
+                }
+                applyLabel={t.timelineApply}
+                cancelLabel={t.timelineCancel}
+              >
+                <TimelinePill
+                  tl={tl}
+                  range={range}
+                  t={t}
+                  onClear={() => onPatchItem(s.id, { [fk]: null })}
+                />
+              </BoardTimelineRangeCommitPopover>
             </div>
           )
         }
@@ -3403,27 +3308,22 @@ function EcosystraBoardGroupTableImpl({
         const range = parseTimelineRange(tl)
         return (
           <div key={col.id} className="flex min-w-0 justify-center px-0.5">
-            <Popover>
-              <PopoverTrigger asChild>
-                <TimelinePill
-                  tl={tl}
-                  range={range}
-                  t={t}
-                  onClear={() => onPatchItem(s.id, { timeline: null })}
-                />
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="range"
-                  selected={range}
-                  onSelect={(nextRange) => {
-                    onPatchItem(s.id, {
-                      timeline: formatTimelineRange(nextRange),
-                    })
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
+            <BoardTimelineRangeCommitPopover
+              draftStorageId={`${s.id}:subtimeline`}
+              timelineLabel={tl}
+              onCommit={(formatted) =>
+                onPatchItem(s.id, { timeline: formatted })
+              }
+              applyLabel={t.timelineApply}
+              cancelLabel={t.timelineCancel}
+            >
+              <TimelinePill
+                tl={tl}
+                range={range}
+                t={t}
+                onClear={() => onPatchItem(s.id, { timeline: null })}
+              />
+            </BoardTimelineRangeCommitPopover>
           </div>
         )
       }
