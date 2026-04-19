@@ -1,6 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLazyQuery, useQuery } from "@apollo/client"
 import {
@@ -103,6 +111,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -207,6 +216,23 @@ function buildRowOrderDraft(
     )
   }
   return out
+}
+
+function focusOpenDialogTitle(e: Event) {
+  e.preventDefault()
+  window.requestAnimationFrame(() => {
+    const el = document.querySelector(
+      '[data-slot="dialog-content"][data-state="open"] [data-slot="dialog-title"]'
+    )
+    if (el instanceof HTMLElement) el.focus()
+  })
+}
+
+/** Radix DropdownMenu + Dialog can leave `body { pointer-events: none }` — clicks appear as a freeze. */
+function unlockBodyPointerEvents(): void {
+  queueMicrotask(() => {
+    document.body.style.removeProperty("pointer-events")
+  })
 }
 
 export function EcosystraBoardMainView() {
@@ -827,8 +853,11 @@ export function EcosystraBoardMainView() {
     [mergedWorkspaceUsers]
   )
 
+  /** Defer heavy board tree work so Main Thread tetap responsif setelah refetch besar ("paradox of performance"). */
+  const deferredFilteredGroups = useDeferredValue(filteredGroups)
+
   const sortedGroups = useMemo(() => {
-    const base = filteredGroups.map((g) => ({
+    const base = deferredFilteredGroups.map((g) => ({
       ...g,
       items: g.items.filter((it) => {
         if (
@@ -892,7 +921,7 @@ export function EcosystraBoardMainView() {
       }),
     }))
   }, [
-    filteredGroups,
+    deferredFilteredGroups,
     activeSortRules,
     resolveUserSortLabel,
     personFilterUserIds,
@@ -1740,7 +1769,11 @@ export function EcosystraBoardMainView() {
               variant="outline"
               size="sm"
               className="border-destructive/60"
-              onClick={() => void refetch()}
+              onClick={() =>
+                startTransition(() => {
+                  void refetch()
+                })
+              }
             >
               {bt.retryBoard}
             </Button>
@@ -1817,7 +1850,13 @@ export function EcosystraBoardMainView() {
                         {bt.toolbarBoardMenuTitle}
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onSelect={() => void refetch()}>
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          startTransition(() => {
+                            void refetch()
+                          })
+                        }
+                      >
                         {bt.menuRefreshBoard}
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -1829,12 +1868,18 @@ export function EcosystraBoardMainView() {
                         {bt.menuCopyBoardId}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onSelect={() => setSheetActivityOpen(true)}
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          setSheetActivityOpen(true)
+                        }}
                       >
                         {bt.menuBoardActivity}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onSelect={() => setMediaDialogOpen(true)}
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          setMediaDialogOpen(true)
+                        }}
                       >
                         {bt.menuMediaModal}
                       </DropdownMenuItem>
@@ -2062,7 +2107,12 @@ export function EcosystraBoardMainView() {
                       >
                         {bt.newTaskMenuPrimary}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setNewGroupOpen(true)}>
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          setNewGroupOpen(true)
+                        }}
+                      >
                         {bt.newTaskMenuGroup}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -2479,7 +2529,13 @@ export function EcosystraBoardMainView() {
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>{bt.toolbarMore}</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => void refetch()}>
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        startTransition(() => {
+                          void refetch()
+                        })
+                      }
+                    >
                       {bt.menuRefreshBoard}
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -2804,20 +2860,21 @@ export function EcosystraBoardMainView() {
                 setNewGroupStep(0)
                 setNewGroupNotes("")
                 setNewGroupColor("#579BFC")
+                unlockBodyPointerEvents()
               }
             }}
           >
             <DialogContent
               className="w-[calc(100dvw-16px)] sm:max-w-md"
-              onOpenAutoFocus={(e) => {
+              aria-describedby={undefined}
+              onOpenAutoFocus={focusOpenDialogTitle}
+              onCloseAutoFocus={(e) => {
                 e.preventDefault()
-                window.requestAnimationFrame(() => {
-                  document.getElementById("eco-dialog-new-group-title")?.focus()
-                })
+                unlockBodyPointerEvents()
               }}
             >
               <DialogHeader>
-                <DialogTitle id="eco-dialog-new-group-title" tabIndex={-1}>
+                <DialogTitle tabIndex={-1}>
                   {bt.dialogNewGroupTitle}
                 </DialogTitle>
               </DialogHeader>
@@ -2969,7 +3026,10 @@ export function EcosystraBoardMainView() {
             open={saveFilterViewOpen}
             onOpenChange={setSaveFilterViewOpen}
           >
-            <DialogContent className="w-[calc(100dvw-16px)] sm:max-w-md">
+            <DialogContent
+              className="w-[calc(100dvw-16px)] sm:max-w-md"
+              aria-describedby={undefined}
+            >
               <DialogHeader>
                 <DialogTitle>{bt.saveViewDialogTitle}</DialogTitle>
               </DialogHeader>
@@ -3009,7 +3069,10 @@ export function EcosystraBoardMainView() {
             open={pinColumnsDialogOpen}
             onOpenChange={setPinColumnsDialogOpen}
           >
-            <DialogContent className="w-[calc(100dvw-16px)] sm:max-w-md">
+            <DialogContent
+              className="w-[calc(100dvw-16px)] sm:max-w-md"
+              aria-describedby={undefined}
+            >
               <DialogHeader>
                 <DialogTitle>{bt.pinColumnsDialogTitle}</DialogTitle>
               </DialogHeader>
@@ -3105,21 +3168,14 @@ export function EcosystraBoardMainView() {
           <Dialog open={mediaDialogOpen} onOpenChange={setMediaDialogOpen}>
             <DialogContent
               className="w-[calc(100dvw-16px)] sm:max-w-lg"
-              onOpenAutoFocus={(e) => {
-                e.preventDefault()
-                window.requestAnimationFrame(() => {
-                  document.getElementById("eco-dialog-media-title")?.focus()
-                })
-              }}
+              onOpenAutoFocus={focusOpenDialogTitle}
             >
               <DialogHeader>
-                <DialogTitle id="eco-dialog-media-title" tabIndex={-1}>
+                <DialogTitle tabIndex={-1}>
                   {bt.mediaModalTitle}
                 </DialogTitle>
+                <DialogDescription>{bt.mediaModalDesc}</DialogDescription>
               </DialogHeader>
-              <p className="text-sm text-muted-foreground">
-                {bt.mediaModalDesc}
-              </p>
               <MediaGrid
                 className="mt-2"
                 data={[

@@ -26,7 +26,9 @@
     "db:migrate-from-sqlite": "dotenv -e .env.local -- node scripts/migrate-sqlite-auth.cjs",
     "db:seed-page-content": "pnpm exec dotenv -e .env.local -- tsx scripts/seed-shadboard-page-content.ts",
     "postinstall": "prisma generate",
-    "verify:ecosystra-contrast": "node scripts/verify-ecosystra-contrast.mjs"
+    "verify:ecosystra-contrast": "node scripts/verify-ecosystra-contrast.mjs",
+    "perf:explain-board": "dotenv -e .env.local -- tsx scripts/ecosystra-explain-board-load.ts",
+    "db:verify-indexing": "dotenv -e .env.local -- prisma db execute --file prisma/sql/verify-ecosystra-advanced-indexing.sql"
   },
   "engines": {
     "node": ">=22",

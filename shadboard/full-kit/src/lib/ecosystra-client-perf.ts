@@ -121,7 +121,16 @@ export function installEcosystraPerfGlobal(): void {
     help: (): void => {
       // eslint-disable-next-line no-console -- intentional perf harness for manual QA
       console.info(
-        "[ecosystra-perf] Set NEXT_PUBLIC_ECOSYSTRA_PERF_LOG=true, restart dev, reproduce slowness, then run __ecosystraPerf.dump()"
+        "[ecosystra-perf] Client: set NEXT_PUBLIC_ECOSYSTRA_PERF_LOG=true, restart dev, reproduce, then __ecosystraPerf.dump()."
+      )
+      console.info(
+        "[ecosystra-perf] Server DB phases: set ECOSYSTRA_SERVER_PERF=1 in .env.local, restart dev; compare terminal [ecosystra-server-perf] lines to DevTools Performance (Network + main thread)."
+      )
+      console.info(
+        "[ecosystra-perf] EXPLAIN board audit query: pnpm perf:explain-board (optionally pass board UUID after --)."
+      )
+      console.info(
+        "[ecosystra-perf] DB cepat tapi UI lambat? Cek Chrome Performance (Main) + Network — Index Only Scan tidak membantu jika Main Thread atau refetch JSON besar memblokir sebelum/sesudah request."
       )
     },
   }

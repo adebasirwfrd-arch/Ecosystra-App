@@ -20,6 +20,7 @@ import {
   buildEcosystraBoardAbsoluteUrl,
   getPublicSiteOrigin,
 } from "./app-url";
+import { isEcosystraServerPerfEnabled, logEcosystraServerPerf } from "./server-perf";
 
 import { i18n } from "@/configs/i18n";
 
@@ -516,14 +517,37 @@ async function prefetchLastUpdatedByForBoardItems(board: {
   }
 }
 
-async function loadBoardWithTree(boardId: string) {
+async function loadBoardWithTree(
+  boardId: string,
+  perfParent?: { op: string; phasePrefix?: string }
+) {
+  const perf = isEcosystraServerPerfEnabled();
+  const tBoard = perf ? performance.now() : 0;
   const board = await prisma.ecoBoard.findUniqueOrThrow({
     where: { id: boardId },
     select: boardTreeSelect,
   });
+  const prismaMs = perf ? performance.now() - tBoard : 0;
+  const tPrefetch = perf ? performance.now() : 0;
   await prefetchLastUpdatedByForBoardItems(
     board as unknown as { groups: Array<{ items: ItemWithPrefetchMeta[] }> }
   );
+  const prefetchMs = perf ? performance.now() - tPrefetch : 0;
+  if (perf) {
+    const tree = board as unknown as {
+      groups: Array<{ items: ItemWithPrefetchMeta[] }>;
+    };
+    const itemIds = collectBoardItemIdsFromTree(tree);
+    logEcosystraServerPerf({
+      op: perfParent?.op ?? "loadBoardWithTree",
+      phase: `${perfParent?.phasePrefix ?? ""}loadBoardWithTree`,
+      boardId,
+      prismaBoardGraphMs: Math.round(prismaMs * 10) / 10,
+      prefetchLastUpdatedMs: Math.round(prefetchMs * 10) / 10,
+      loadBoardTotalMs: Math.round((prismaMs + prefetchMs) * 10) / 10,
+      itemCountForPrefetch: itemIds.length,
+    });
+  }
   return board;
 }
 
@@ -957,7 +981,20 @@ export const resolvers = {
 
   Query: {
     getOrCreateBoard: async (_: unknown, __: unknown, ctx: GqlContext) => {
+      const perf = isEcosystraServerPerfEnabled();
+      const t0 = perf ? performance.now() : 0;
+      const mark = (phase: string, extra?: Record<string, unknown>) => {
+        if (!perf) return;
+        logEcosystraServerPerf({
+          op: "GetOrCreateBoard",
+          phase,
+          sinceStartMs: Math.round((performance.now() - t0) * 10) / 10,
+          ...extra,
+        });
+      };
+
       const viewer = await getViewer(ctx);
+      mark("after_getViewer", { viewerId: viewer.id });
 
       const membership = await prisma.ecoMember.findFirst({
         where: { userId: viewer.id },
@@ -973,16 +1010,23 @@ export const resolvers = {
           },
         },
       });
+      mark("after_membershipLookup");
 
       const firstBoardId = membership?.workspace.boards[0]?.id;
       if (firstBoardId) {
-        return loadBoardWithTree(firstBoardId);
+        const board = await loadBoardWithTree(firstBoardId, {
+          op: "GetOrCreateBoard",
+          phasePrefix: "path=memberBoard ",
+        });
+        mark("after_loadBoardWithTree", { path: "memberBoard", boardId: firstBoardId });
+        return board;
       }
 
       const legacy = await prisma.ecoBoard.findFirst({
         orderBy: { createdAt: "asc" },
         include: { workspace: true },
       });
+      mark("after_legacyBoardLookup");
 
       if (legacy) {
         await prisma.ecoMember.upsert({
@@ -1010,7 +1054,13 @@ export const resolvers = {
         } catch {
           /* permify optional */
         }
-        return loadBoardWithTree(legacy.id);
+        mark("after_legacyUpserts");
+        const board = await loadBoardWithTree(legacy.id, {
+          op: "GetOrCreateBoard",
+          phasePrefix: "path=legacy ",
+        });
+        mark("after_loadBoardWithTree", { path: "legacy", boardId: legacy.id });
+        return board;
       }
 
       const newBoardId = await prisma.$transaction(async (tx) => {
@@ -1047,11 +1097,17 @@ export const resolvers = {
         }
         return board.id;
       });
-      return loadBoardWithTree(newBoardId);
+      mark("after_createWorkspaceTransaction", { newBoardId });
+      const createdBoard = await loadBoardWithTree(newBoardId, {
+        op: "GetOrCreateBoard",
+        phasePrefix: "path=new ",
+      });
+      mark("after_loadBoardWithTree", { path: "new", boardId: newBoardId });
+      return createdBoard;
     },
 
     getBoard: async (_: unknown, { id }: { id: string }) => {
-      return loadBoardWithTree(id);
+      return loadBoardWithTree(id, { op: "getBoard" });
     },
 
     getItems: async (_: unknown, { boardId }: { boardId: string }) => {
@@ -1327,8 +1383,23 @@ export const resolvers = {
       { id, metadata }: { id: string; metadata: unknown },
       ctx: GqlContext
     ) => {
+      const perf = isEcosystraServerPerfEnabled();
+      const t0 = perf ? performance.now() : 0;
+      const mark = (phase: string, extra?: Record<string, unknown>) => {
+        if (!perf) return;
+        logEcosystraServerPerf({
+          op: "UpdateBoardMetadata",
+          phase,
+          boardId: id,
+          sinceStartMs: Math.round((performance.now() - t0) * 10) / 10,
+          ...extra,
+        });
+      };
+
       await getViewer(ctx);
+      mark("after_getViewer");
       const board = await prisma.ecoBoard.findUnique({ where: { id } });
+      mark("after_findUnique");
       const existingColumns = board?.columns;
       const definitions = Array.isArray(existingColumns)
         ? existingColumns
@@ -1340,12 +1411,16 @@ export const resolvers = {
         existingColumns && typeof existingColumns === "object" && !Array.isArray(existingColumns)
           ? (existingColumns as { metadata?: Record<string, unknown> }).metadata || {}
           : {};
-      return prisma.ecoBoard.update({
+      const updated = await prisma.ecoBoard.update({
         where: { id },
         data: {
           columns: { definitions, metadata: { ...existingMetadata, ...(metadata as object) } } as Prisma.InputJsonValue,
         },
       });
+      mark("after_update", {
+        definitionsCount: definitions.length,
+      });
+      return updated;
     },
 
     createItem: async (

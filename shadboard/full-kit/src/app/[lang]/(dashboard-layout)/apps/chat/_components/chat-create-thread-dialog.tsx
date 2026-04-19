@@ -149,7 +149,6 @@ export function ChatCreateThreadDialog({
     <Dialog open={open} onOpenChange={handleDialogChange}>
       <DialogContent
         className="gap-0 overflow-hidden rounded-xl border bg-background p-0 shadow-lg sm:max-w-lg"
-        aria-describedby={undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
         <div className="border-b bg-muted/40 px-6 py-4">

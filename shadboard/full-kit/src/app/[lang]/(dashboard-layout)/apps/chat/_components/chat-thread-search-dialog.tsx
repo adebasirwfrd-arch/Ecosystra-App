@@ -64,7 +64,6 @@ export function ChatThreadSearchDialog({
     >
       <DialogContent
         className="rounded-lg sm:max-w-md"
-        aria-describedby={undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>

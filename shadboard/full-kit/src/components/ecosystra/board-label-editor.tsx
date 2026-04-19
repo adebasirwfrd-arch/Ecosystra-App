@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { startTransition, useEffect, useRef, useState } from "react"
 import {
   Check,
   ChevronLeft,
@@ -21,6 +21,18 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import type { DuePriorityLabel } from "./hooks/use-ecosystra-board-apollo"
+
+/** Never call parent/Apollo updates synchronously from the same stack as child setState (blur/focus can interleave with render and trigger React #418). */
+function scheduleLabelsCommit(
+  onUpdateLabels: (next: DuePriorityLabel[]) => void,
+  next: DuePriorityLabel[]
+) {
+  queueMicrotask(() => {
+    startTransition(() => {
+      onUpdateLabels(next)
+    })
+  })
+}
 
 const PALETTE = [
   ["#00C875", "#9CD326", "#CAB641", "#FFCB00", "#FFAD00"],
@@ -137,7 +149,7 @@ export function BoardLabelCustomizer({
   const updateOne = (id: string, patch: Partial<DuePriorityLabel>) => {
     const next = localLabels.map((l) => (l.id === id ? { ...l, ...patch } : l))
     setLocalLabels(next)
-    onUpdateLabels(next)
+    scheduleLabelsCommit(onUpdateLabels, next)
   }
 
   const addLabel = () => {
@@ -148,13 +160,13 @@ export function BoardLabelCustomizer({
     }
     const newList = [...localLabels, next]
     setLocalLabels(newList)
-    onUpdateLabels(newList)
+    scheduleLabelsCommit(onUpdateLabels, newList)
   }
 
   const removeLabel = (id: string) => {
     const next = localLabels.filter((l) => l.id !== id)
     setLocalLabels(next)
-    onUpdateLabels(next)
+    scheduleLabelsCommit(onUpdateLabels, next)
   }
 
   return (
@@ -207,7 +219,7 @@ export function BoardLabelCustomizer({
                   parentRow != null &&
                   parentRow.label === localRow.label &&
                   parentRow.color === localRow.color
-                if (!unchanged) onUpdateLabels(cur)
+                if (!unchanged) scheduleLabelsCommit(onUpdateLabels, cur)
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {

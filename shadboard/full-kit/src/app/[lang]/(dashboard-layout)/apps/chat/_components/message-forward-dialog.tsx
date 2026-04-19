@@ -38,7 +38,7 @@ export function MessageForwardDialog({
         if (!o) setPicked(null)
       }}
     >
-      <DialogContent className="rounded-lg sm:max-w-md" aria-describedby={undefined}>
+      <DialogContent className="rounded-lg sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Forward message</DialogTitle>
           <DialogDescription>

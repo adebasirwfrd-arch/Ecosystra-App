@@ -829,7 +829,10 @@ export function BoardAdvancedFiltersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(90dvh,720px)] w-[calc(100dvw-24px)] max-w-3xl overflow-y-auto">
+      <DialogContent
+        className="max-h-[min(90dvh,720px)] w-[calc(100dvw-24px)] max-w-3xl overflow-y-auto"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-baseline gap-2 text-base">
             {dict.advancedFiltersTitle}

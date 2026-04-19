@@ -110,6 +110,13 @@ export function ChatCallOverlay() {
             hideDialogClose
           )}
         >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Active call</DialogTitle>
+            <DialogDescription>
+              {callUsesVideo ? "Video" : "Voice"} call with{" "}
+              {remoteLabel || "contact"}.
+            </DialogDescription>
+          </DialogHeader>
           <div className="relative flex h-full min-h-[320px] w-full items-center justify-center bg-black">
             <video
               ref={remoteVideoRef}

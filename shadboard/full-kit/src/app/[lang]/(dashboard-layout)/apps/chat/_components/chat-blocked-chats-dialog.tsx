@@ -45,7 +45,7 @@ export function ChatBlockedChatsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-lg sm:max-w-md" aria-describedby={undefined}>
+      <DialogContent className="rounded-lg sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Blocked chats</DialogTitle>
           <DialogDescription>

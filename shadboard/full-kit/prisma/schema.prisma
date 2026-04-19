@@ -155,9 +155,23 @@ model EcoBoard {
   subitemColumns  Json         @default("[]")
   groups          EcoGroup[]
   items           EcoItem[]
+  taskSummary     EcoBoardTaskSummary?
   createdAt       DateTime     @default(now())
 
   @@map("Board")
+  @@schema("public")
+}
+
+/// Incremental per-board counts (maintained by DB trigger on Item). Prefer over BoardTaskRollup MV for hot paths.
+model EcoBoardTaskSummary {
+  boardId           String    @id
+  board             EcoBoard  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  totalItems        BigInt    @default(0)
+  rootTasks         BigInt    @default(0)
+  subitems          BigInt    @default(0)
+  lastItemUpdatedAt DateTime?
+
+  @@map("BoardTaskSummary")
   @@schema("public")
 }
 
