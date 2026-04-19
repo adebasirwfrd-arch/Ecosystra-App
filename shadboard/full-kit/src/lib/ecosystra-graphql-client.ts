@@ -1,10 +1,22 @@
-import { ApolloClient, InMemoryCache, createHttpLink, from } from "@apollo/client"
+import { ApolloClient, InMemoryCache, from } from "@apollo/client"
+import { BatchHttpLink } from "@apollo/client/link/batch-http"
+import { createPersistedQueryLink } from "@apollo/client/link/persisted-queries"
 
 import {
   createEcosystraPerfApolloLink,
   installEcosystraPerfGlobal,
   isEcosystraClientPerfEnabled,
 } from "@/lib/ecosystra-client-perf"
+
+/** SHA-256 hex (lowercase) of the printed document — must match server APQ registry. */
+function sha256Hex(message: string): Promise<string> {
+  const data = new TextEncoder().encode(message)
+  return crypto.subtle.digest("SHA-256", data).then((buffer) =>
+    Array.from(new Uint8Array(buffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+  )
+}
 
 /**
  * Vercel / docs typo: `https://host/graphql` hits no Next route → HTML 404.
@@ -84,15 +96,22 @@ async function ecosystraGraphqlFetch(
 export function createEcosystraGraphqlClient() {
   const uri = resolveGraphqlUri()
 
-  const httpLink = createHttpLink({
+  const persistedQueriesLink = createPersistedQueryLink({
+    sha256: sha256Hex,
+    useGETForHashedQueries: false,
+  })
+
+  const batchHttpLink = new BatchHttpLink({
     uri,
     credentials: "include",
     fetch: ecosystraGraphqlFetch,
+    batchMax: 10,
+    batchInterval: 20,
   })
 
   const link = isEcosystraClientPerfEnabled()
-    ? from([createEcosystraPerfApolloLink(), httpLink])
-    : httpLink
+    ? from([createEcosystraPerfApolloLink(), persistedQueriesLink, batchHttpLink])
+    : from([persistedQueriesLink, batchHttpLink])
 
   const client = new ApolloClient({
     link,

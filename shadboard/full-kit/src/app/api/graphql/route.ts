@@ -8,6 +8,10 @@ import type { AuthState } from "@/lib/ecosystra/auth";
 import { resolveAuth } from "@/lib/ecosystra/auth";
 import { isSuperUserEmail } from "@/lib/ecosystra/superuser";
 import { db as prisma } from "@/lib/prisma";
+import {
+  apolloPersistedQueryNotFoundBody,
+  resolvePersistedGraphqlPayload,
+} from "@/lib/ecosystra/persisted-query-registry";
 
 const GQL_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -106,11 +110,56 @@ function toGraphqlErrorResponse(message: string, status: number): NextResponse {
   return NextResponse.json({ errors: [{ message }] }, { status, headers: GQL_CORS_HEADERS });
 }
 
+async function executeGraphqlOne(
+  server: ApolloServer<GqlContext>,
+  context: GqlContext,
+  body: unknown
+): Promise<Record<string, unknown>> {
+  if (!body || typeof body !== "object") {
+    return { data: null, errors: [{ message: "Invalid GraphQL payload" }] };
+  }
+
+  const resolved = resolvePersistedGraphqlPayload(body as Record<string, unknown>);
+  if (!resolved.ok) {
+    if (resolved.kind === "persisted_query_not_found") {
+      return apolloPersistedQueryNotFoundBody();
+    }
+    return { data: null, errors: [{ message: "Missing query for GraphQL request" }] };
+  }
+
+  const result = await server.executeOperation(
+    {
+      query: resolved.query,
+      variables: resolved.variables as Record<string, unknown> | undefined,
+      operationName: resolved.operationName,
+    },
+    { contextValue: context }
+  );
+
+  if (result.body.kind === "single") {
+    const { data, errors, extensions } = result.body.singleResult;
+    return extensions !== undefined ? { data, errors, extensions } : { data, errors };
+  }
+
+  return { data: null, errors: [{ message: "Streaming not supported" }] };
+}
+
+async function executeGraphqlPayload(
+  server: ApolloServer<GqlContext>,
+  context: GqlContext,
+  body: unknown
+): Promise<unknown> {
+  if (Array.isArray(body)) {
+    return Promise.all(body.map((entry) => executeGraphqlOne(server, context, entry)));
+  }
+  return executeGraphqlOne(server, context, body);
+}
+
 async function handleGraphQL(req: NextRequest): Promise<NextResponse> {
   try {
     const server = getServer();
 
-    let body: Record<string, unknown>;
+    let body: unknown;
 
     if (req.method === "GET") {
       const { searchParams } = new URL(req.url);
@@ -130,7 +179,7 @@ async function handleGraphQL(req: NextRequest): Promise<NextResponse> {
       };
     } else {
       try {
-        body = (await req.json()) as Record<string, unknown>;
+        body = await req.json();
       } catch {
         return toGraphqlErrorResponse("Invalid JSON body", 400);
       }
@@ -138,24 +187,8 @@ async function handleGraphQL(req: NextRequest): Promise<NextResponse> {
 
     const context = await buildContext(req);
 
-    const result = await server.executeOperation(
-      {
-        query: body.query as string,
-        variables: body.variables as Record<string, unknown> | undefined,
-        operationName: body.operationName as string | undefined,
-      },
-      { contextValue: context }
-    );
-
-    if (result.body.kind === "single") {
-      const { data, errors } = result.body.singleResult;
-      return NextResponse.json({ data, errors }, { status: 200, headers: GQL_CORS_HEADERS });
-    }
-
-    return NextResponse.json(
-      { errors: [{ message: "Streaming not supported" }] },
-      { status: 400, headers: GQL_CORS_HEADERS }
-    );
+    const out = await executeGraphqlPayload(server, context, body);
+    return NextResponse.json(out, { status: 200, headers: GQL_CORS_HEADERS });
   } catch (e) {
     console.error("[api/graphql]", e);
     const detail =
