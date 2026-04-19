@@ -93,6 +93,20 @@ export function driveDownloadUrl(driveId: string): string {
   return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveId)}`
 }
 
+/** Same-origin stream for inline preview (images, PDFs); requires app session. */
+export function driveMediaProxyUrl(
+  driveId: string,
+  fileName?: string | null
+): string {
+  const params = new URLSearchParams({ id: driveId })
+  if (fileName?.trim()) params.set("fn", fileName.trim())
+  return `/api/ecosystra/board-drive-media?${params.toString()}`
+}
+
 export function isImageMime(mime: string): boolean {
   return mime.startsWith("image/")
+}
+
+export function isPdfMime(mime: string): boolean {
+  return mime === "application/pdf"
 }

@@ -66,6 +66,8 @@ export type BoardFileAttachmentCellLabels = {
   fileCellUploadFailed: string
   fileCellRemove: string
   fileCellPreviewTitle: string
+  /** Shown when inline preview fails; optional (drawer has a default). */
+  fileCellPreviewUnavailable?: string
   fileCellOpenDrive: string
   fileCellDownload: string
   fileCellPickFromDrive: string
@@ -445,6 +447,7 @@ export function EcosystraBoardFileAttachmentCell({
         file={preview}
         labels={{
           previewTitle: labels.fileCellPreviewTitle,
+          previewUnavailable: labels.fileCellPreviewUnavailable,
           openInDrive: labels.fileCellOpenDrive,
           download: labels.fileCellDownload,
         }}

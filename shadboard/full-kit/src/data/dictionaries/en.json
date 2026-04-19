@@ -144,6 +144,7 @@
       "fileCellUploadFailed": "Could not upload to Google Drive",
       "fileCellRemove": "Remove file",
       "fileCellPreviewTitle": "Preview file",
+      "fileCellPreviewUnavailable": "Preview could not be loaded. Try Open in Google Drive or Download.",
       "fileCellOpenDrive": "Open in Google Drive",
       "fileCellDownload": "Download",
       "fileCellPickFromDrive": "Pick from Google Drive",

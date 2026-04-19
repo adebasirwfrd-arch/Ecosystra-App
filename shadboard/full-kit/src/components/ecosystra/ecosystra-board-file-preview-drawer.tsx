@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { PhotoProvider, PhotoView } from "react-photo-view"
 import { ExternalLink, X } from "lucide-react"
 
@@ -7,8 +8,10 @@ import type { BoardDriveAttachment } from "@/lib/ecosystra/board-drive-attachmen
 
 import {
   driveDownloadUrl,
+  driveMediaProxyUrl,
   drivePreviewEmbedUrl,
   isImageMime,
+  isPdfMime,
 } from "@/lib/ecosystra/board-drive-attachment"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +32,8 @@ type Labels = {
   previewTitle: string
   openInDrive: string
   download: string
+  /** Optional: shown when inline image/PDF proxy fails to load */
+  previewUnavailable?: string
 }
 
 export function EcosystraBoardFilePreviewDrawer({
@@ -44,10 +49,53 @@ export function EcosystraBoardFilePreviewDrawer({
 }) {
   if (!file) return null
 
-  const previewUrl = drivePreviewEmbedUrl(file.driveId)
   const downloadUrl = driveDownloadUrl(file.driveId)
   const image = isImageMime(file.mimeType)
-  const imgSrc = file.thumbnail || previewUrl
+  const pdf = isPdfMime(file.mimeType)
+  const mediaSrc = driveMediaProxyUrl(file.driveId, file.fileName)
+  const embedFallbackUrl = drivePreviewEmbedUrl(file.driveId)
+
+  return (
+    <PreviewDrawerBody
+      open={open}
+      onOpenChange={onOpenChange}
+      file={file}
+      labels={labels}
+      downloadUrl={downloadUrl}
+      image={image}
+      pdf={pdf}
+      mediaSrc={mediaSrc}
+      embedFallbackUrl={embedFallbackUrl}
+    />
+  )
+}
+
+function PreviewDrawerBody({
+  open,
+  onOpenChange,
+  file,
+  labels,
+  downloadUrl,
+  image,
+  pdf,
+  mediaSrc,
+  embedFallbackUrl,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  file: BoardDriveAttachment
+  labels: Labels
+  downloadUrl: string
+  image: boolean
+  pdf: boolean
+  mediaSrc: string
+  embedFallbackUrl: string
+}) {
+  const [mediaFailed, setMediaFailed] = useState(false)
+
+  useEffect(() => {
+    setMediaFailed(false)
+  }, [file.driveId, open])
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -81,23 +129,45 @@ export function EcosystraBoardFilePreviewDrawer({
         </DrawerHeader>
 
         <div className="min-h-0 flex-1 overflow-hidden bg-muted/20">
-          {image ? (
+          {mediaFailed ? (
+            <div className="flex h-[min(50vh,420px)] flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground sm:h-[calc(100vh-240px)]">
+              <p>
+                {labels.previewUnavailable ??
+                  "Preview could not be loaded. Try Open in Google Drive or Download."}
+              </p>
+              <iframe
+                title={file.fileName}
+                src={embedFallbackUrl}
+                className="h-full min-h-[200px] w-full max-w-full flex-1 rounded-md border border-border bg-background"
+                allow="fullscreen"
+              />
+            </div>
+          ) : image ? (
             <PhotoProvider>
               <div className="flex max-h-[55vh] items-center justify-center p-3 sm:max-h-[calc(100vh-180px)]">
-                <PhotoView src={imgSrc}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- remote Drive thumbnail */}
+                <PhotoView src={mediaSrc}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- same-origin Drive proxy */}
                   <img
-                    src={imgSrc}
+                    src={mediaSrc}
                     alt=""
                     className="max-h-[50vh] max-w-full cursor-zoom-in rounded-md object-contain shadow-sm sm:max-h-[calc(100vh-220px)]"
+                    onError={() => setMediaFailed(true)}
                   />
                 </PhotoView>
               </div>
             </PhotoProvider>
+          ) : pdf ? (
+            <iframe
+              title={file.fileName}
+              src={mediaSrc}
+              className="h-[min(70vh,560px)] w-full border-0 sm:h-[calc(100vh-200px)]"
+              allow="fullscreen"
+              onError={() => setMediaFailed(true)}
+            />
           ) : (
             <iframe
               title={file.fileName}
-              src={previewUrl}
+              src={embedFallbackUrl}
               className="h-[min(70vh,560px)] w-full border-0 sm:h-[calc(100vh-200px)]"
               allow="fullscreen"
             />

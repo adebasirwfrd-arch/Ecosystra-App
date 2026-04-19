@@ -968,6 +968,9 @@ function boardFileAttachmentLabels(
     fileCellUploadFailed: r.fileCellUploadFailed ?? "Upload failed",
     fileCellRemove: r.fileCellRemove ?? "Remove file",
     fileCellPreviewTitle: r.fileCellPreviewTitle ?? "Preview",
+    fileCellPreviewUnavailable:
+      r.fileCellPreviewUnavailable ??
+      "Preview could not be loaded. Try Open in Google Drive or Download.",
     fileCellOpenDrive: r.fileCellOpenDrive ?? "Open in Google Drive",
     fileCellDownload: r.fileCellDownload ?? "Download",
     fileCellPickFromDrive: r.fileCellPickFromDrive ?? "Pick from Drive",

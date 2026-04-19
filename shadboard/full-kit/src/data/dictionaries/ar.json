@@ -144,6 +144,7 @@
       "fileCellUploadFailed": "تعذر الرفع إلى Google Drive",
       "fileCellRemove": "إزالة الملف",
       "fileCellPreviewTitle": "معاينة الملف",
+      "fileCellPreviewUnavailable": "تعذر تحميل المعاينة. جرّب «فتح في Google Drive» أو «تنزيل».",
       "fileCellOpenDrive": "فتح في Google Drive",
       "fileCellDownload": "تنزيل",
       "fileCellPickFromDrive": "اختيار من Google Drive",
