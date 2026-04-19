@@ -753,7 +753,7 @@ function AssigneePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[calc(100vw-32px)] p-3 sm:w-80"
+        className="w-[calc(100dvw-32px)] p-3 sm:w-80"
         align="start"
       >
         {hasPeople ? (

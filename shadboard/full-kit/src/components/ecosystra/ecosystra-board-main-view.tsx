@@ -2095,7 +2095,7 @@ export function EcosystraBoardMainView() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
-                    className="w-[calc(100vw-32px)] sm:w-80"
+                    className="w-[calc(100dvw-32px)] sm:w-80"
                     align="start"
                   >
                     <p className="mb-2 text-xs text-muted-foreground">
@@ -2808,7 +2808,7 @@ export function EcosystraBoardMainView() {
             }}
           >
             <DialogContent
-              className="w-[calc(100vw-16px)] sm:max-w-md"
+              className="w-[calc(100dvw-16px)] sm:max-w-md"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {
@@ -2969,7 +2969,7 @@ export function EcosystraBoardMainView() {
             open={saveFilterViewOpen}
             onOpenChange={setSaveFilterViewOpen}
           >
-            <DialogContent className="w-[calc(100vw-16px)] sm:max-w-md">
+            <DialogContent className="w-[calc(100dvw-16px)] sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>{bt.saveViewDialogTitle}</DialogTitle>
               </DialogHeader>
@@ -3009,7 +3009,7 @@ export function EcosystraBoardMainView() {
             open={pinColumnsDialogOpen}
             onOpenChange={setPinColumnsDialogOpen}
           >
-            <DialogContent className="w-[calc(100vw-16px)] sm:max-w-md">
+            <DialogContent className="w-[calc(100dvw-16px)] sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>{bt.pinColumnsDialogTitle}</DialogTitle>
               </DialogHeader>
@@ -3031,7 +3031,7 @@ export function EcosystraBoardMainView() {
 
           <Sheet open={sheetActivityOpen} onOpenChange={setSheetActivityOpen}>
             <SheetContent
-              className="flex w-[100vw] flex-col sm:max-w-md"
+              className="flex w-full max-w-[100dvw] flex-col sm:max-w-md"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {
@@ -3050,7 +3050,7 @@ export function EcosystraBoardMainView() {
 
           <Sheet open={selectionSheetOpen} onOpenChange={setSelectionSheetOpen}>
             <SheetContent
-              className="flex w-[100vw] flex-col gap-4 sm:max-w-md"
+              className="flex w-full max-w-[100dvw] flex-col gap-4 sm:max-w-md"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {
@@ -3104,7 +3104,7 @@ export function EcosystraBoardMainView() {
 
           <Dialog open={mediaDialogOpen} onOpenChange={setMediaDialogOpen}>
             <DialogContent
-              className="w-[calc(100vw-16px)] sm:max-w-lg"
+              className="w-[calc(100dvw-16px)] sm:max-w-lg"
               onOpenAutoFocus={(e) => {
                 e.preventDefault()
                 window.requestAnimationFrame(() => {

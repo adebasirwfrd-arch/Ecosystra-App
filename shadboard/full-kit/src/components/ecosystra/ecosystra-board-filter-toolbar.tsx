@@ -143,7 +143,7 @@ export function BoardPersonFilterPopover({
 
   return (
     <PopoverContent
-      className="w-[calc(100vw-32px)] p-0 sm:w-[min(100vw-32px,22rem)]"
+      className="w-[calc(100dvw-32px)] p-0 sm:w-[min(100dvw-32px,22rem)]"
       align="start"
     >
       <div className="flex items-start justify-between gap-2 border-b border-border/60 px-3 py-2">
@@ -616,7 +616,7 @@ export function BoardQuickFiltersPanel({
 
   return (
     <PopoverContent
-      className="w-[calc(100vw-24px)] max-w-[min(100vw-24px,56rem)] border-2 border-border/80 p-0 shadow-md"
+      className="w-[calc(100dvw-24px)] max-w-[min(100dvw-24px,56rem)] border-2 border-border/80 p-0 shadow-md"
       align="start"
     >
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border/60 px-3 py-2 sm:px-4">
@@ -646,7 +646,7 @@ export function BoardQuickFiltersPanel({
             onApplySavedView={onApplySavedView}
             onRenameSavedView={onRenameSavedView}
             onDeleteSavedView={onDeleteSavedView}
-            selectTriggerClassName="w-[min(140px,calc(100vw-120px))]"
+            selectTriggerClassName="w-[min(140px,calc(100dvw-120px))]"
           />
           <Button
             type="button"
@@ -829,7 +829,7 @@ export function BoardAdvancedFiltersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(90vh,720px)] w-[calc(100vw-24px)] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[min(90dvh,720px)] w-[calc(100dvw-24px)] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-baseline gap-2 text-base">
             {dict.advancedFiltersTitle}
@@ -848,7 +848,7 @@ export function BoardAdvancedFiltersDialog({
             onApplySavedView={onApplySavedView}
             onRenameSavedView={onRenameSavedView}
             onDeleteSavedView={onDeleteSavedView}
-            selectTriggerClassName="w-[min(160px,calc(100vw-120px))]"
+            selectTriggerClassName="w-[min(160px,calc(100dvw-120px))]"
           />
           <Button
             type="button"

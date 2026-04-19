@@ -170,7 +170,7 @@ export function EcosystraBoardAddColumnPopover({
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-[min(100vw-2rem,22rem)] p-0 shadow-lg"
+        className="w-[min(100dvw-2rem,22rem)] p-0 shadow-lg"
         sideOffset={8}
       >
         <div className="flex flex-col gap-0">

@@ -38,7 +38,9 @@ export function EcosystraPageChrome({ children }: { children: ReactNode }) {
       className={cn(
         vibe.chromeRoot,
         "relative flex min-h-0 w-full min-w-0 flex-1 flex-col",
-        "gap-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-12)] md:gap-[var(--vibe-space-16)]"
+        "gap-[var(--vibe-space-8)] sm:gap-[var(--vibe-space-12)] md:gap-[var(--vibe-space-16)]",
+        /* iOS home indicator */
+        "pb-[env(safe-area-inset-bottom,0px)]"
       )}
     >
       <a

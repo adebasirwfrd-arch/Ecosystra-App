@@ -11,7 +11,7 @@ import "../globals.css"
 import { Providers } from "@/providers"
 
 import type { LocaleType } from "@/types"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import type { ReactNode } from "react"
 
 import { Toaster as Sonner } from "@/components/ui/sonner"
@@ -26,6 +26,17 @@ export const metadata: Metadata = {
   },
   description: "",
   metadataBase: safeMetadataBase(),
+}
+
+/** Mobile browsers + notched devices: correct scaling, safe areas, no UI zoom surprises. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
 }
 
 // Define fonts for the application
@@ -67,7 +78,7 @@ export default async function RootLayout(props: {
         suppressHydrationWarning
         className={cn(
           "[&:lang(en)]:font-lato [&:lang(ar)]:font-cairo", // Set font styles based on the language
-          "bg-background text-foreground antialiased overscroll-none", // Set background, text, , anti-aliasing styles, and overscroll behavior
+          "bg-background text-foreground antialiased overscroll-x-none overscroll-y-auto", // avoid horizontal rubber-band; allow vertical scroll
           latoFont.variable, // Include Lato font variable
           cairoFont.variable // Include Cairo font variable
         )}

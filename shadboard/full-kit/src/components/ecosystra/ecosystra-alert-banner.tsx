@@ -163,7 +163,7 @@ export function EcosystraAlertBanner(props: EcosystraAlertBannerProps) {
         className
       )}
     >
-      <div className="mx-auto flex max-w-[100vw] items-start gap-3 px-[var(--vibe-space-16)] py-[var(--vibe-space-12)] md:px-[var(--vibe-space-24)]">
+      <div className="mx-auto flex max-w-[100dvw] items-start gap-3 px-[var(--vibe-space-16)] py-[var(--vibe-space-12)] md:px-[var(--vibe-space-24)]">
         <div className="min-w-0 flex-1 text-sm leading-snug">
           {ariaLive === "off" ? (
             message

@@ -17,7 +17,7 @@ export function HorizontalLayout({
       <Sidebar dictionary={dictionary} />
       <div className="w-full">
         <HorizontalLayoutHeader dictionary={dictionary} />
-        <main className="min-h-[calc(100svh-9.85rem)] bg-muted/40">
+        <main className="min-h-[calc(100dvh-9.85rem)] bg-muted/40">
           {children}
         </main>
         <Footer />

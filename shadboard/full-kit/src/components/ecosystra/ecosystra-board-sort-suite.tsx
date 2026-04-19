@@ -281,7 +281,7 @@ export function EcosystraBoardSortSuiteContent({
   }, [sortRules, onSortRulesChange])
 
   return (
-    <div className="w-[min(100vw-32px,26rem)] space-y-3 p-1">
+    <div className="w-[min(100dvw-32px,26rem)] space-y-3 p-1">
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border/60 pb-2">
         <div className="flex min-w-0 items-center gap-1">
           <span className="text-sm font-semibold text-foreground">

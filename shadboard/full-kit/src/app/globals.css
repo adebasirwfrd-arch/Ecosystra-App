@@ -156,8 +156,16 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* iOS Safari: respect user font size; avoid auto-zoom on orientation */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     @apply bg-background text-foreground;
+    /* Home indicator / notch — horizontal inset avoids edge-to-edge overflow on sheets */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 }
 

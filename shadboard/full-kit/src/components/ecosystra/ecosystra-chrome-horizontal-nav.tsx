@@ -49,7 +49,7 @@ export function EcosystraChromeHorizontalNav({
               prefetch
               aria-current={active ? "page" : undefined}
               className={cn(
-                "inline-flex shrink-0 items-center gap-[var(--vibe-space-4)] rounded-md px-[var(--vibe-space-8)] py-[var(--vibe-space-8)] text-xs font-medium transition-colors sm:gap-[var(--vibe-space-8)] sm:px-[var(--vibe-space-12)] sm:text-sm",
+                "touch-manipulation inline-flex shrink-0 items-center gap-[var(--vibe-space-4)] rounded-md px-[var(--vibe-space-8)] py-[var(--vibe-space-8)] text-xs font-medium transition-colors sm:gap-[var(--vibe-space-8)] sm:px-[var(--vibe-space-12)] sm:text-sm",
                 "border-b-2 border-transparent",
                 "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 active

@@ -55,7 +55,7 @@ export function EcosystraBoardHideSuiteContent({
       : "indeterminate"
 
   return (
-    <div className="flex w-[min(100vw-32px,22rem)] flex-col gap-3">
+    <div className="flex w-[min(100dvw-32px,22rem)] flex-col gap-3">
       <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border/60 pb-2">
         <span className="text-sm font-semibold text-foreground">
           {dict.hideSuiteTitle}
