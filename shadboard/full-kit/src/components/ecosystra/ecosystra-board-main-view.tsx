@@ -42,6 +42,11 @@ import boardSurface from "./ecosystra-board-surface.module.css"
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core"
 import type { DropResult } from "@hello-pangea/dnd"
 import type {
+  AdvancedFilterNode,
+  BoardFilterColumnMeta,
+} from "./ecosystra-board-filter-engine"
+import type { BoardPinColumnRow } from "./ecosystra-board-pin-columns-content"
+import type {
   BoardGroupBySuite,
   BoardTableSortRule,
   GqlBoardItem,
@@ -58,38 +63,12 @@ import {
   normalizePinnedColumnIds,
   orderWithColumnBeforeAdd,
   readAssigneeUserIdsFromDynamic,
+  readGroupTableUiByGroupId,
   reorderArray,
+  resolveMainTableUiForGroup,
   sortItemsByOrder,
   useEcosystraBoardApollo,
 } from "./hooks/use-ecosystra-board-apollo"
-import {
-  BoardAdvancedFiltersDialog,
-  BoardPersonFilterPopover,
-  BoardQuickFiltersPanel,
-} from "./ecosystra-board-filter-toolbar"
-import {
-  GROUP_FACET_COLUMN_ID,
-  advancedTreeIsActive,
-  buildBoardFilterColumns,
-  compareForBoardSort,
-  itemMatchesAdvancedRoot,
-  itemMatchesQuickSelections,
-  itemPersonMatch,
-  safeParseAdvancedRoot,
-  type AdvancedFilterNode,
-  type BoardFilterColumnMeta,
-} from "./ecosystra-board-filter-engine"
-import {
-  coerceGroupByOrder,
-  groupColumnMetaStub,
-} from "./ecosystra-board-group-by-engine"
-import { EcosystraBoardGroupBySuiteContent } from "./ecosystra-board-group-by-suite"
-import {
-  EcosystraBoardPinColumnsContent,
-  type BoardPinColumnRow,
-} from "./ecosystra-board-pin-columns-content"
-import { EcosystraBoardHideSuiteContent } from "./ecosystra-board-hide-suite"
-import { EcosystraBoardSortSuiteContent } from "./ecosystra-board-sort-suite"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -133,7 +112,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
   SheetContent,
@@ -151,14 +129,37 @@ import {
   EcosystraAccordionItem,
 } from "./ecosystra-accordion"
 import { EcosystraAttentionBox } from "./ecosystra-attention-box"
+import { ecoCcFieldKey } from "./ecosystra-board-cc-field-key"
+import {
+  GROUP_FACET_COLUMN_ID,
+  advancedTreeIsActive,
+  buildBoardFilterColumns,
+  compareForBoardSort,
+  itemMatchesAdvancedRoot,
+  itemMatchesQuickSelections,
+  itemPersonMatch,
+  safeParseAdvancedRoot,
+} from "./ecosystra-board-filter-engine"
+import {
+  BoardAdvancedFiltersDialog,
+  BoardPersonFilterPopover,
+  BoardQuickFiltersPanel,
+} from "./ecosystra-board-filter-toolbar"
 import { EcosystraBoardGroupAccordionTrigger } from "./ecosystra-board-group-accordion-trigger"
+import {
+  coerceGroupByOrder,
+  groupColumnMetaStub,
+} from "./ecosystra-board-group-by-engine"
+import { EcosystraBoardGroupBySuiteContent } from "./ecosystra-board-group-by-suite"
 import {
   EcosystraBoardGroupColorButton,
   EcosystraBoardGroupEditableName,
 } from "./ecosystra-board-group-header"
-import { ecoCcFieldKey } from "./ecosystra-board-cc-field-key"
 import { EcosystraBoardGroupTable } from "./ecosystra-board-group-table"
+import { EcosystraBoardHideSuiteContent } from "./ecosystra-board-hide-suite"
 import { EcosystraBoardKanbanView } from "./ecosystra-board-kanban-view"
+import { EcosystraBoardPinColumnsContent } from "./ecosystra-board-pin-columns-content"
+import { EcosystraBoardSortSuiteContent } from "./ecosystra-board-sort-suite"
 import { useEcosystraDictionary } from "./ecosystra-dictionary-context"
 import {
   EcosystraGrandbookDialogBody,
@@ -268,6 +269,7 @@ export function EcosystraBoardMainView() {
     addSubitemBoardColumn,
     patchSubitemBoardTableUi,
     patchBoardTableUi,
+    patchGroupBoardTableUi,
     patchGroup,
     setTaskOwner,
     setTaskAssignees,
@@ -298,8 +300,7 @@ export function EcosystraBoardMainView() {
   const [apiSearchDetailsOpen, setApiSearchDetailsOpen] = useState(false)
   const [apiMigrationOpen, setApiMigrationOpen] = useState(false)
   const [personFilterUserIds, setPersonFilterUserIds] = useState<string[]>([])
-  const [personIncludeUnassigned, setPersonIncludeUnassigned] =
-    useState(false)
+  const [personIncludeUnassigned, setPersonIncludeUnassigned] = useState(false)
   const [boardFilterQuick, setBoardFilterQuick] = useState<
     Record<string, string[]>
   >({})
@@ -365,16 +366,17 @@ export function EcosystraBoardMainView() {
     return [...m.values()]
   }, [boardRosterUsers?.workspaceUsers, peopleData?.workspaceUsers])
 
-  const onColumnWidthCommit = useCallback(
-    (columnId: string, widthPx: number) => {
-      void patchBoardTableUi({
-        tableColumnWidthsPx: {
-          ...tableUi.columnWidthsPx,
-          [columnId]: widthPx,
-        },
+  const columnWidthCommitForGroup = useCallback(
+    (groupId: string) => (columnId: string, widthPx: number) => {
+      const gt = resolveMainTableUiForGroup(
+        board?.metadata as Record<string, unknown> | undefined,
+        groupId
+      )
+      void patchGroupBoardTableUi(groupId, {
+        tableColumnWidthsPx: { ...gt.columnWidthsPx, [columnId]: widthPx },
       })
     },
-    [patchBoardTableUi, tableUi.columnWidthsPx]
+    [board?.metadata, patchGroupBoardTableUi]
   )
 
   const onSubitemColumnWidthCommit = useCallback(
@@ -404,21 +406,45 @@ export function EcosystraBoardMainView() {
     ]
   )
 
+  /** Union of custom columns / order hints across groups (toolbar filters stay board-wide). */
+  const filterTableUi = useMemo(() => {
+    const mergedCustom = { ...tableUi.tableCustomColumns }
+    const by = readGroupTableUiByGroupId(
+      board?.metadata as Record<string, unknown> | undefined
+    )
+    for (const scoped of Object.values(by)) {
+      if (scoped.tableCustomColumns) {
+        Object.assign(mergedCustom, scoped.tableCustomColumns)
+      }
+    }
+    const extraIds = new Set<string>()
+    for (const scoped of Object.values(by)) {
+      for (const id of scoped.tableColumnOrder ?? []) extraIds.add(id)
+    }
+    const baseOrder = tableUi.tableColumnOrder
+    const tail = [...extraIds].filter((id) => !baseOrder.includes(id))
+    return {
+      ...tableUi,
+      tableCustomColumns: mergedCustom,
+      tableColumnOrder: [...baseOrder, ...tail],
+    }
+  }, [board?.metadata, tableUi])
+
   const filterableColumns = useMemo(
     () =>
       buildBoardFilterColumns({
-        tableColumnOrder: tableUi.tableColumnOrder,
-        hiddenColumnIds: tableUi.hiddenColumnIds,
-        tableCustomColumns: tableUi.tableCustomColumns,
-        tableColumnTitles: tableUi.tableColumnTitles,
+        tableColumnOrder: filterTableUi.tableColumnOrder,
+        hiddenColumnIds: filterTableUi.hiddenColumnIds,
+        tableCustomColumns: filterTableUi.tableCustomColumns,
+        tableColumnTitles: filterTableUi.tableColumnTitles,
         dict: t,
       }),
     [
       t,
-      tableUi.hiddenColumnIds,
-      tableUi.tableColumnOrder,
-      tableUi.tableCustomColumns,
-      tableUi.tableColumnTitles,
+      filterTableUi.hiddenColumnIds,
+      filterTableUi.tableColumnOrder,
+      filterTableUi.tableCustomColumns,
+      filterTableUi.tableColumnTitles,
     ]
   )
 
@@ -644,24 +670,16 @@ export function EcosystraBoardMainView() {
           subitemPinnedColumnIds?: unknown
         }
         setPersonFilterUserIds(
-          Array.isArray(p.personUserIds)
-            ? (p.personUserIds as string[])
-            : []
+          Array.isArray(p.personUserIds) ? (p.personUserIds as string[]) : []
         )
         setPersonIncludeUnassigned(!!p.personIncludeUnassigned)
-        if (
-          p.quick &&
-          typeof p.quick === "object" &&
-          !Array.isArray(p.quick)
-        ) {
+        if (p.quick && typeof p.quick === "object" && !Array.isArray(p.quick)) {
           setBoardFilterQuick(p.quick as Record<string, string[]>)
         } else {
           setBoardFilterQuick({})
         }
         const ar =
-          p.advancedRoot != null
-            ? safeParseAdvancedRoot(p.advancedRoot)
-            : null
+          p.advancedRoot != null ? safeParseAdvancedRoot(p.advancedRoot) : null
         setAdvancedFilterRoot(ar)
         if (Array.isArray(p.sortRules)) {
           const nextSort: BoardTableSortRule[] = []
@@ -682,11 +700,7 @@ export function EcosystraBoardMainView() {
           void patchBoardTableUi({ tableSortRules: nextSort })
         }
         const rawGb = p.groupBySuite
-        if (
-          rawGb &&
-          typeof rawGb === "object" &&
-          !Array.isArray(rawGb)
-        ) {
+        if (rawGb && typeof rawGb === "object" && !Array.isArray(rawGb)) {
           const o = rawGb as Record<string, unknown>
           const columnId =
             typeof o.columnId === "string" ? o.columnId.trim() : ""
@@ -814,7 +828,12 @@ export function EcosystraBoardMainView() {
         toast.error(bt.filterAiFailed)
       }
     },
-    [filterableColumns, bt.filterAiFailed, bt.filterAiInvalid, bt.filterAiApplied]
+    [
+      filterableColumns,
+      bt.filterAiFailed,
+      bt.filterAiInvalid,
+      bt.filterAiApplied,
+    ]
   )
 
   const commitSortRules = useCallback(
@@ -837,9 +856,7 @@ export function EcosystraBoardMainView() {
 
   const activeSortRules = useMemo(
     () =>
-      sortRules.filter(
-        (r) => r.columnId && sortColumnIdSet.has(r.columnId)
-      ),
+      sortRules.filter((r) => r.columnId && sortColumnIdSet.has(r.columnId)),
     [sortRules, sortColumnIdSet]
   )
 
@@ -860,13 +877,7 @@ export function EcosystraBoardMainView() {
     const base = deferredFilteredGroups.map((g) => ({
       ...g,
       items: g.items.filter((it) => {
-        if (
-          !itemPersonMatch(
-            it,
-            personFilterUserIds,
-            personIncludeUnassigned
-          )
-        )
+        if (!itemPersonMatch(it, personFilterUserIds, personIncludeUnassigned))
           return false
         if (
           !itemMatchesQuickSelections(
@@ -1132,22 +1143,20 @@ export function EcosystraBoardMainView() {
     [moveItemToGroup, patchBoardTableUi, tableUi.groupItemOrders]
   )
 
-  const addCustomBoardColumn = useCallback(
-    (kind: HidableBoardColumnId) => {
-      const newId = newCustomTableColumnId()
-      const nextOrder = orderWithColumnBeforeAdd(
-        tableUi.tableColumnOrder,
-        newId
+  const addCustomBoardColumnForGroup = useCallback(
+    (groupId: string, kind: HidableBoardColumnId) => {
+      const gt = resolveMainTableUiForGroup(
+        board?.metadata as Record<string, unknown> | undefined,
+        groupId
       )
-      void patchBoardTableUi({
-        tableColumnOrder: nextOrder,
-        tableCustomColumns: {
-          ...tableUi.tableCustomColumns,
-          [newId]: { kind },
-        },
+      const newId = newCustomTableColumnId()
+      const nextOrder = orderWithColumnBeforeAdd(gt.tableColumnOrder, newId)
+      void patchGroupBoardTableUi(groupId, {
+        tableColumnOrder: ensureAddColumnLastInOrder(nextOrder),
+        tableCustomColumns: { ...gt.tableCustomColumns, [newId]: { kind } },
       })
     },
-    [patchBoardTableUi, tableUi.tableColumnOrder, tableUi.tableCustomColumns]
+    [board?.metadata, patchGroupBoardTableUi]
   )
 
   const duplicateSubitemBoardColumn = useCallback(
@@ -1250,10 +1259,13 @@ export function EcosystraBoardMainView() {
     [patchSubitemBoardTableUi, subitemTableUi]
   )
 
-  const duplicateBoardColumn = useCallback(
-    async (columnId: string) => {
-      const { tableColumnOrder, tableCustomColumns, tableColumnTitles } =
-        tableUi
+  const duplicateBoardColumnForGroup = useCallback(
+    async (groupId: string, columnId: string) => {
+      const gt = resolveMainTableUiForGroup(
+        board?.metadata as Record<string, unknown> | undefined,
+        groupId
+      )
+      const { tableColumnOrder, tableCustomColumns, tableColumnTitles } = gt
       const colIdx = tableColumnOrder.indexOf(columnId)
       if (colIdx < 0) return
 
@@ -1278,7 +1290,7 @@ export function EcosystraBoardMainView() {
         nextTitles[newId] = `${tableColumnTitles[columnId]} (Copy)`
       }
 
-      await patchBoardTableUi({
+      await patchGroupBoardTableUi(groupId, {
         tableColumnOrder: nextOrder,
         tableCustomColumns: nextCustom,
         tableColumnTitles: nextTitles,
@@ -1304,8 +1316,9 @@ export function EcosystraBoardMainView() {
           })()
 
       const targetKey = ecoCcFieldKey(newId)
-      const allItems = board?.groups.flatMap((g) => g.items) || []
-      const itemsWithData = allItems.filter(
+      const groupItems =
+        board?.groups.find((g) => g.id === groupId)?.items ?? []
+      const itemsWithData = groupItems.filter(
         (it) => it.dynamicData?.[sourceKey] !== undefined
       )
 
@@ -1319,12 +1332,16 @@ export function EcosystraBoardMainView() {
         toast.success("Data duplicated", { id: "duplicate-data-progress" })
       }
     },
-    [patchBoardTableUi, tableUi, board?.groups, patchItemField]
+    [board?.groups, board?.metadata, patchGroupBoardTableUi, patchItemField]
   )
 
-  const deleteBoardColumn = useCallback(
-    (columnId: string) => {
-      const { tableColumnOrder, tableCustomColumns, hiddenColumnIds } = tableUi
+  const deleteBoardColumnForGroup = useCallback(
+    (groupId: string, columnId: string) => {
+      const gt = resolveMainTableUiForGroup(
+        board?.metadata as Record<string, unknown> | undefined,
+        groupId
+      )
+      const { tableColumnOrder, tableCustomColumns, hiddenColumnIds } = gt
 
       if (columnId === "task" || columnId === "select" || columnId === "add") {
         return
@@ -1335,28 +1352,20 @@ export function EcosystraBoardMainView() {
         const nextOrder = tableColumnOrder.filter((id) => id !== columnId)
         const nextCustom = { ...tableCustomColumns }
         delete nextCustom[columnId]
-        void patchBoardTableUi({
+        void patchGroupBoardTableUi(groupId, {
           tableColumnOrder: nextOrder,
           tableCustomColumns: nextCustom,
-          tablePinnedColumnIds: normalizePinnedColumnIds(
-            tableUi.tablePinnedColumnIds.filter((id) => id !== columnId),
-            nextOrder
-          ),
         })
       } else {
         const nextHidden = [
           ...new Set([...hiddenColumnIds, columnId as HidableBoardColumnId]),
         ]
-        void patchBoardTableUi({
+        void patchGroupBoardTableUi(groupId, {
           hiddenTableColumnIds: nextHidden,
-          tablePinnedColumnIds: normalizePinnedColumnIds(
-            tableUi.tablePinnedColumnIds.filter((id) => id !== columnId),
-            tableColumnOrder
-          ),
         })
       }
     },
-    [patchBoardTableUi, tableUi]
+    [board?.metadata, patchGroupBoardTableUi]
   )
 
   const handleBoardDragEnd = useCallback(
@@ -1377,8 +1386,17 @@ export function EcosystraBoardMainView() {
       }
 
       if (type === "COLUMN") {
-        const full = tableUi.tableColumnOrder
-        const hidden = new Set<string>(tableUi.hiddenColumnIds)
+        const gidMatch =
+          /^board-columns-(.+)$/.exec(destination.droppableId) ??
+          /^board-columns-(.+)$/.exec(source.droppableId)
+        const groupId = gidMatch?.[1]
+        if (!groupId) return
+        const gt = resolveMainTableUiForGroup(
+          board?.metadata as Record<string, unknown> | undefined,
+          groupId
+        )
+        const full = gt.tableColumnOrder
+        const hidden = new Set<string>(gt.hiddenColumnIds)
         const visibleIds = full.filter((id) => !hidden.has(id))
         const fromId = visibleIds[source.index]
         const toId = visibleIds[destination.index]
@@ -1389,7 +1407,7 @@ export function EcosystraBoardMainView() {
         const next = ensureAddColumnLastInOrder(
           reorderArray(full, fromFull, toFull)
         )
-        void patchBoardTableUi({ tableColumnOrder: next })
+        void patchGroupBoardTableUi(groupId, { tableColumnOrder: next })
         return
       }
 
@@ -1411,13 +1429,13 @@ export function EcosystraBoardMainView() {
       }
     },
     [
+      board?.metadata,
       patchBoardTableUi,
+      patchGroupBoardTableUi,
       patchSubitemBoardTableUi,
       sortedGroups,
       subitemTableUi.hiddenColumnIds,
       subitemTableUi.tableColumnOrder,
-      tableUi.hiddenColumnIds,
-      tableUi.tableColumnOrder,
     ]
   )
 
@@ -1654,9 +1672,7 @@ export function EcosystraBoardMainView() {
         valueKind: "text" as const,
       }
     })
-    rows.sort(
-      (a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999)
-    )
+    rows.sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999))
     return rows
   }, [
     hideColumnLabel,
@@ -1667,19 +1683,27 @@ export function EcosystraBoardMainView() {
   ])
 
   const hasHiddenHidableColumn = useMemo(
-    () =>
-      HIDABLE_COLUMN_IDS.some((id) => tableUi.hiddenColumnIds.includes(id)),
+    () => HIDABLE_COLUMN_IDS.some((id) => tableUi.hiddenColumnIds.includes(id)),
     [tableUi.hiddenColumnIds]
   )
 
-  const commitColumnTitle = useCallback(
-    (columnId: string, nextTitle: string, fallbackTitle: string) => {
-      const titles = { ...tableUi.tableColumnTitles }
+  const commitColumnTitleForGroup = useCallback(
+    (
+      groupId: string,
+      columnId: string,
+      nextTitle: string,
+      fallbackTitle: string
+    ) => {
+      const gt = resolveMainTableUiForGroup(
+        board?.metadata as Record<string, unknown> | undefined,
+        groupId
+      )
+      const titles = { ...gt.tableColumnTitles }
       if (nextTitle === fallbackTitle) delete titles[columnId]
       else titles[columnId] = nextTitle
-      void patchBoardTableUi({ tableColumnTitles: titles })
+      void patchGroupBoardTableUi(groupId, { tableColumnTitles: titles })
     },
-    [patchBoardTableUi, tableUi.tableColumnTitles]
+    [board?.metadata, patchGroupBoardTableUi]
   )
 
   const commitSubitemColumnTitle = useCallback(
@@ -2594,250 +2618,287 @@ export function EcosystraBoardMainView() {
                                 draggableId={`board-group-${group.id}`}
                                 index={groupIndex}
                               >
-                                {(dragProvided, snapshot) => (
-                                  <div
-                                    ref={dragProvided.innerRef}
-                                    {...dragProvided.draggableProps}
-                                    style={dragProvided.draggableProps.style}
-                                    className={cn(
-                                      snapshot.isDragging &&
-                                        "rounded-xl shadow-lg ring-2 ring-primary/25"
-                                    )}
-                                  >
-                                    <EcosystraAccordionItem
-                                      value={group.id}
-                                      id={`eco-board-group-${group.id}`}
-                                      className="rounded-lg border !border-b-0 border-[color:var(--eco-board-outer-border)] bg-[color:var(--eco-board-card-bg)] shadow-none sm:rounded-xl data-[state=open]:shadow-[0_1px_0_rgba(0,0,0,0.06)]"
+                                {(dragProvided, snapshot) => {
+                                  const groupTableUi =
+                                    resolveMainTableUiForGroup(
+                                      board?.metadata as
+                                        | Record<string, unknown>
+                                        | undefined,
+                                      group.id
+                                    )
+                                  return (
+                                    <div
+                                      ref={dragProvided.innerRef}
+                                      {...dragProvided.draggableProps}
+                                      style={dragProvided.draggableProps.style}
+                                      className={cn(
+                                        snapshot.isDragging &&
+                                          "rounded-xl shadow-lg ring-2 ring-primary/25"
+                                      )}
                                     >
-                                      <div
-                                        className="group/group-row flex items-stretch border-s-4"
-                                        style={{
-                                          borderColor: group.color
-                                            ? group.color
-                                            : "var(--eco-group-todo)",
-                                        }}
+                                      <EcosystraAccordionItem
+                                        value={group.id}
+                                        id={`eco-board-group-${group.id}`}
+                                        className="rounded-lg border !border-b-0 border-[color:var(--eco-board-outer-border)] bg-[color:var(--eco-board-card-bg)] shadow-none sm:rounded-xl data-[state=open]:shadow-[0_1px_0_rgba(0,0,0,0.06)]"
                                       >
-                                        <div className="flex min-w-0 flex-1 items-center gap-1.5 py-[var(--vibe-space-4)] ps-[var(--vibe-space-8)] pe-1 sm:gap-2 sm:py-[var(--vibe-space-8)] sm:ps-[var(--vibe-space-12)] sm:pe-2">
-                                          <EcosystraBoardGroupColorButton
-                                            color={group.color}
-                                            ariaLabel={bt.groupColorPickerAria}
-                                            onPick={(hex) =>
-                                              void patchGroup(
-                                                group.id,
-                                                undefined,
-                                                hex
-                                              )
-                                            }
-                                          />
-                                          <EcosystraBoardGroupEditableName
-                                            name={group.name}
-                                            groupColor={group.color}
-                                            onCommit={(next) =>
-                                              void patchGroup(
-                                                group.id,
-                                                next,
-                                                undefined
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                        <div className="flex shrink-0 items-stretch">
-                                          <button
-                                            type="button"
-                                            className="inline-flex size-8 shrink-0 items-center justify-center self-stretch rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover/group-row:opacity-100 focus-visible:opacity-100"
-                                            aria-label={bt.groupDragReorderAria}
-                                            {...dragProvided.dragHandleProps}
-                                          >
-                                            <GripVertical
-                                              className="size-4"
-                                              aria-hidden
+                                        <div
+                                          className="group/group-row flex items-stretch border-s-4"
+                                          style={{
+                                            borderColor: group.color
+                                              ? group.color
+                                              : "var(--eco-group-todo)",
+                                          }}
+                                        >
+                                          <div className="flex min-w-0 flex-1 items-center gap-1.5 py-[var(--vibe-space-4)] ps-[var(--vibe-space-8)] pe-1 sm:gap-2 sm:py-[var(--vibe-space-8)] sm:ps-[var(--vibe-space-12)] sm:pe-2">
+                                            <EcosystraBoardGroupColorButton
+                                              color={group.color}
+                                              ariaLabel={
+                                                bt.groupColorPickerAria
+                                              }
+                                              onPick={(hex) =>
+                                                void patchGroup(
+                                                  group.id,
+                                                  undefined,
+                                                  hex
+                                                )
+                                              }
                                             />
-                                          </button>
-                                          <EcosystraBoardGroupAccordionTrigger
-                                            className="hover:no-underline inline-flex shrink-0 items-center justify-center self-stretch px-2 py-[var(--vibe-space-8)]"
-                                            aria-label={
-                                              openByGroupId[group.id]
-                                                ? `${bt.collapseGroup}: ${group.name}`
-                                                : `${bt.expandGroup}: ${group.name}`
+                                            <EcosystraBoardGroupEditableName
+                                              name={group.name}
+                                              groupColor={group.color}
+                                              onCommit={(next) =>
+                                                void patchGroup(
+                                                  group.id,
+                                                  next,
+                                                  undefined
+                                                )
+                                              }
+                                            />
+                                          </div>
+                                          <div className="flex shrink-0 items-stretch">
+                                            <button
+                                              type="button"
+                                              className="inline-flex size-8 shrink-0 items-center justify-center self-stretch rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover/group-row:opacity-100 focus-visible:opacity-100"
+                                              aria-label={
+                                                bt.groupDragReorderAria
+                                              }
+                                              {...dragProvided.dragHandleProps}
+                                            >
+                                              <GripVertical
+                                                className="size-4"
+                                                aria-hidden
+                                              />
+                                            </button>
+                                            <EcosystraBoardGroupAccordionTrigger
+                                              className="hover:no-underline inline-flex shrink-0 items-center justify-center self-stretch px-2 py-[var(--vibe-space-8)]"
+                                              aria-label={
+                                                openByGroupId[group.id]
+                                                  ? `${bt.collapseGroup}: ${group.name}`
+                                                  : `${bt.expandGroup}: ${group.name}`
+                                              }
+                                            >
+                                              <span className="sr-only">
+                                                {openByGroupId[group.id]
+                                                  ? `${bt.collapseGroup}: ${group.name}`
+                                                  : `${bt.expandGroup}: ${group.name}`}
+                                              </span>
+                                            </EcosystraBoardGroupAccordionTrigger>
+                                          </div>
+                                          <div className="flex shrink-0 items-center pe-2">
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="size-8 shrink-0"
+                                                  aria-label={bt.groupRowMenu}
+                                                >
+                                                  <MoreHorizontal
+                                                    className="size-4"
+                                                    aria-hidden
+                                                  />
+                                                </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                <DropdownMenuItem
+                                                  className="text-destructive focus:text-destructive"
+                                                  onSelect={() =>
+                                                    setDeleteTarget({
+                                                      kind: "group",
+                                                      id: group.id,
+                                                    })
+                                                  }
+                                                >
+                                                  {bt.deleteGroupMenu}
+                                                </DropdownMenuItem>
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+                                          </div>
+                                        </div>
+                                        <AccordionContent className="px-[var(--vibe-space-4)] pb-[var(--vibe-space-8)] pt-0 sm:px-[var(--vibe-space-8)] md:px-[var(--vibe-space-12)] md:pb-[var(--vibe-space-12)]">
+                                          <EcosystraBoardGroupTable
+                                            groupId={group.id}
+                                            groupName={group.name}
+                                            groupColor={group.color}
+                                            workspaceId={board.workspaceId}
+                                            items={tableItemsForGroup(
+                                              group.id,
+                                              group.items
+                                            )}
+                                            rowDensityScale={1}
+                                            t={t}
+                                            expandedSubitemRowId={
+                                              expandedSubitemRowId
                                             }
-                                          >
-                                            <span className="sr-only">
-                                              {openByGroupId[group.id]
-                                                ? `${bt.collapseGroup}: ${group.name}`
-                                                : `${bt.expandGroup}: ${group.name}`}
-                                            </span>
-                                          </EcosystraBoardGroupAccordionTrigger>
-                                        </div>
-                                        <div className="flex shrink-0 items-center pe-2">
-                                          <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                              <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon"
-                                                className="size-8 shrink-0"
-                                                aria-label={bt.groupRowMenu}
-                                              >
-                                                <MoreHorizontal
-                                                  className="size-4"
-                                                  aria-hidden
-                                                />
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                              <DropdownMenuItem
-                                                className="text-destructive focus:text-destructive"
-                                                onSelect={() =>
-                                                  setDeleteTarget({
-                                                    kind: "group",
-                                                    id: group.id,
-                                                  })
-                                                }
-                                              >
-                                                {bt.deleteGroupMenu}
-                                              </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        </div>
-                                      </div>
-                                      <AccordionContent className="px-[var(--vibe-space-4)] pb-[var(--vibe-space-8)] pt-0 sm:px-[var(--vibe-space-8)] md:px-[var(--vibe-space-12)] md:pb-[var(--vibe-space-12)]">
-                                        <EcosystraBoardGroupTable
-                                          groupId={group.id}
-                                          groupName={group.name}
-                                          groupColor={group.color}
-                                          workspaceId={board.workspaceId}
-                                          items={tableItemsForGroup(
-                                            group.id,
-                                            group.items
-                                          )}
-                                          rowDensityScale={1}
-                                          t={t}
-                                          expandedSubitemRowId={
-                                            expandedSubitemRowId
-                                          }
-                                          setExpandedSubitemRowId={
-                                            setExpandedSubitemRowId
-                                          }
-                                          hiddenColumnIds={
-                                            tableUi.hiddenColumnIds
-                                          }
-                                          groupBySuite={tableUi.groupBySuite}
-                                          groupByColumn={groupByColumnMeta}
-                                          groupByLabels={filterLabels}
-                                          workspaceUsersForGroupBy={
-                                            mergedWorkspaceUsers
-                                          }
-                                          groupByUnassignedLabel={
-                                            bt.assigneeUnassigned
-                                          }
-                                          onPersonToolbarTarget={(id) =>
-                                            setPersonTargetItemId(id)
-                                          }
-                                          onAddTask={(gid) =>
-                                            void addTask(gid, "New task")
-                                          }
-                                          onAddSubitem={(parentId) =>
-                                            void addSubitem(
-                                              parentId,
-                                              "New subitem"
-                                            )
-                                          }
-                                          onPatchItem={(id, patch) =>
-                                            void patchItemField(id, patch)
-                                          }
-                                          onRenameItem={(id, name) =>
-                                            void renameItem(id, name)
-                                          }
-                                          onSetTaskAssignees={(
-                                            id,
-                                            userIds,
-                                            inviteEmails
-                                          ) =>
-                                            void setTaskAssignees(
+                                            setExpandedSubitemRowId={
+                                              setExpandedSubitemRowId
+                                            }
+                                            hiddenColumnIds={
+                                              groupTableUi.hiddenColumnIds
+                                            }
+                                            groupBySuite={
+                                              groupTableUi.groupBySuite
+                                            }
+                                            groupByColumn={groupByColumnMeta}
+                                            groupByLabels={filterLabels}
+                                            workspaceUsersForGroupBy={
+                                              mergedWorkspaceUsers
+                                            }
+                                            groupByUnassignedLabel={
+                                              bt.assigneeUnassigned
+                                            }
+                                            onPersonToolbarTarget={(id) =>
+                                              setPersonTargetItemId(id)
+                                            }
+                                            onAddTask={(gid) =>
+                                              void addTask(gid, "New task")
+                                            }
+                                            onAddSubitem={(parentId) =>
+                                              void addSubitem(
+                                                parentId,
+                                                "New subitem"
+                                              )
+                                            }
+                                            onPatchItem={(id, patch) =>
+                                              void patchItemField(id, patch)
+                                            }
+                                            onRenameItem={(id, name) =>
+                                              void renameItem(id, name)
+                                            }
+                                            onSetTaskAssignees={(
                                               id,
                                               userIds,
                                               inviteEmails
-                                            )
-                                          }
-                                          onDeleteItem={(id) =>
-                                            setDeleteTarget({
-                                              kind: "item",
-                                              id,
-                                            })
-                                          }
-                                          columnWidthsPx={
-                                            tableUi.columnWidthsPx
-                                          }
-                                          onColumnWidthCommit={
-                                            onColumnWidthCommit
-                                          }
-                                          tableColumnOrder={
-                                            tableUi.tableColumnOrder
-                                          }
-                                          tablePinnedColumnIds={
-                                            tableUi.tablePinnedColumnIds
-                                          }
-                                          tableCustomColumns={
-                                            tableUi.tableCustomColumns
-                                          }
-                                          enableColumnDrag
-                                          onAddBoardColumn={
-                                            addCustomBoardColumn
-                                          }
-                                          subitemTableUi={subitemTableUi}
-                                          onAddSubitemBoardColumn={
-                                            addSubitemBoardColumn
-                                          }
-                                          onSubitemColumnWidthCommit={
-                                            onSubitemColumnWidthCommit
-                                          }
-                                          enableSubitemColumnDrag
-                                          onDuplicateSubitemBoardColumn={
-                                            duplicateSubitemBoardColumn
-                                          }
-                                          onDeleteSubitemBoardColumn={
-                                            deleteSubitemBoardColumn
-                                          }
-                                          onSubitemColumnTitleCommit={
-                                            commitSubitemColumnTitle
-                                          }
-                                          onSubitemRowOrderCommit={
-                                            commitSubitemRowOrder
-                                          }
-                                          onDuplicateBoardColumn={
-                                            duplicateBoardColumn
-                                          }
-                                          onDeleteBoardColumn={
-                                            deleteBoardColumn
-                                          }
-                                          onRowSelectionChange={
-                                            groupSelectionHandlers[group.id]
-                                          }
-                                          selectionClearVersion={
-                                            selectionClearVersion
-                                          }
-                                          tableColumnTitles={
-                                            tableUi.tableColumnTitles
-                                          }
-                                          onColumnTitleCommit={
-                                            commitColumnTitle
-                                          }
-                                          duePriorityLabels={
-                                            tableUi.duePriorityLabels
-                                          }
-                                          statusLabels={tableUi.statusLabels}
-                                          priorityLabels={
-                                            tableUi.priorityLabels
-                                          }
-                                          notesCategoryLabels={
-                                            tableUi.notesCategoryLabels
-                                          }
-                                          patchBoardTableUi={patchBoardTableUi}
-                                        />
-                                      </AccordionContent>
-                                    </EcosystraAccordionItem>
-                                  </div>
-                                )}
+                                            ) =>
+                                              void setTaskAssignees(
+                                                id,
+                                                userIds,
+                                                inviteEmails
+                                              )
+                                            }
+                                            onDeleteItem={(id) =>
+                                              setDeleteTarget({
+                                                kind: "item",
+                                                id,
+                                              })
+                                            }
+                                            columnWidthsPx={
+                                              groupTableUi.columnWidthsPx
+                                            }
+                                            onColumnWidthCommit={columnWidthCommitForGroup(
+                                              group.id
+                                            )}
+                                            tableColumnOrder={
+                                              groupTableUi.tableColumnOrder
+                                            }
+                                            tablePinnedColumnIds={
+                                              groupTableUi.tablePinnedColumnIds
+                                            }
+                                            tableCustomColumns={
+                                              groupTableUi.tableCustomColumns
+                                            }
+                                            enableColumnDrag
+                                            onAddBoardColumn={(kind) =>
+                                              addCustomBoardColumnForGroup(
+                                                group.id,
+                                                kind
+                                              )
+                                            }
+                                            subitemTableUi={subitemTableUi}
+                                            onAddSubitemBoardColumn={
+                                              addSubitemBoardColumn
+                                            }
+                                            onSubitemColumnWidthCommit={
+                                              onSubitemColumnWidthCommit
+                                            }
+                                            enableSubitemColumnDrag
+                                            onDuplicateSubitemBoardColumn={
+                                              duplicateSubitemBoardColumn
+                                            }
+                                            onDeleteSubitemBoardColumn={
+                                              deleteSubitemBoardColumn
+                                            }
+                                            onSubitemColumnTitleCommit={
+                                              commitSubitemColumnTitle
+                                            }
+                                            onSubitemRowOrderCommit={
+                                              commitSubitemRowOrder
+                                            }
+                                            onDuplicateBoardColumn={(
+                                              columnId
+                                            ) =>
+                                              void duplicateBoardColumnForGroup(
+                                                group.id,
+                                                columnId
+                                              )
+                                            }
+                                            onDeleteBoardColumn={(columnId) =>
+                                              deleteBoardColumnForGroup(
+                                                group.id,
+                                                columnId
+                                              )
+                                            }
+                                            onRowSelectionChange={
+                                              groupSelectionHandlers[group.id]
+                                            }
+                                            selectionClearVersion={
+                                              selectionClearVersion
+                                            }
+                                            tableColumnTitles={
+                                              groupTableUi.tableColumnTitles
+                                            }
+                                            onColumnTitleCommit={(
+                                              columnId,
+                                              nextTitle,
+                                              fallbackTitle
+                                            ) =>
+                                              commitColumnTitleForGroup(
+                                                group.id,
+                                                columnId,
+                                                nextTitle,
+                                                fallbackTitle
+                                              )
+                                            }
+                                            duePriorityLabels={
+                                              tableUi.duePriorityLabels
+                                            }
+                                            statusLabels={tableUi.statusLabels}
+                                            priorityLabels={
+                                              tableUi.priorityLabels
+                                            }
+                                            notesCategoryLabels={
+                                              tableUi.notesCategoryLabels
+                                            }
+                                            patchBoardTableUi={
+                                              patchBoardTableUi
+                                            }
+                                          />
+                                        </AccordionContent>
+                                      </EcosystraAccordionItem>
+                                    </div>
+                                  )
+                                }}
                               </Draggable>
                             ))}
                             {dropProvided.placeholder}
@@ -3171,9 +3232,7 @@ export function EcosystraBoardMainView() {
               onOpenAutoFocus={focusOpenDialogTitle}
             >
               <DialogHeader>
-                <DialogTitle tabIndex={-1}>
-                  {bt.mediaModalTitle}
-                </DialogTitle>
+                <DialogTitle tabIndex={-1}>{bt.mediaModalTitle}</DialogTitle>
                 <DialogDescription>{bt.mediaModalDesc}</DialogDescription>
               </DialogHeader>
               <MediaGrid

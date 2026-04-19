@@ -20,6 +20,8 @@ declare module "next-auth" {
       status: string
     }
     apiAccessToken?: string
+    /** Short-lived Google OAuth access token (Drive Picker / copy). Google sign-in only. */
+    googleAccessToken?: string | null
   }
 
   interface User {
@@ -38,6 +40,9 @@ declare module "next-auth/jwt" {
     avatar: string | null
     status: string
     apiAccessToken?: string
+    googleAccessToken?: string
+    googleRefreshToken?: string
+    googleAccessTokenExpires?: number
   }
 }
 
@@ -70,15 +75,20 @@ export const authOptions: NextAuthOptions = {
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
             /** Link Google to existing user with same email (avoids OAuthAccountNotLinked). */
             allowDangerousEmailAccountLinking: true,
+            authorization: {
+              params: {
+                access_type: "offline",
+                scope:
+                  "openid profile email https://www.googleapis.com/auth/drive.file",
+              },
+            },
             profile(profile) {
               return {
                 id: profile.sub,
                 name: profile.name ?? profile.email?.split("@")[0] ?? "User",
                 email: profile.email,
                 image: profile.picture,
-                emailVerified: profile.email_verified
-                  ? new Date()
-                  : null,
+                emailVerified: profile.email_verified ? new Date() : null,
               }
             },
           }),
@@ -172,7 +182,7 @@ export const authOptions: NextAuthOptions = {
       }
       return baseUrl
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
         const image = (user as { image?: string | null }).image
         token.id = user.id
@@ -182,7 +192,56 @@ export const authOptions: NextAuthOptions = {
         token.status = user.status || "ONLINE"
       }
 
-      const secret = process.env.NEXTAUTH_SECRET || "dev-nextauth-secret-change-me"
+      if (account?.provider === "google") {
+        if (typeof account.access_token === "string") {
+          token.googleAccessToken = account.access_token
+        }
+        if (typeof account.refresh_token === "string") {
+          token.googleRefreshToken = account.refresh_token
+        }
+        if (typeof account.expires_at === "number") {
+          token.googleAccessTokenExpires = account.expires_at
+        }
+      }
+
+      if (
+        token.googleRefreshToken &&
+        typeof token.googleAccessTokenExpires === "number" &&
+        Date.now() >= token.googleAccessTokenExpires * 1000 - 60_000
+      ) {
+        const cid = process.env.GOOGLE_CLIENT_ID
+        const csec = process.env.GOOGLE_CLIENT_SECRET
+        if (cid && csec) {
+          try {
+            const res = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: cid,
+                client_secret: csec,
+                grant_type: "refresh_token",
+                refresh_token: String(token.googleRefreshToken),
+              }),
+            })
+            const data = (await res.json()) as {
+              access_token?: string
+              expires_in?: number
+              error?: string
+            }
+            if (res.ok && data.access_token) {
+              token.googleAccessToken = data.access_token
+              token.googleAccessTokenExpires = Math.floor(
+                Date.now() / 1000 + (data.expires_in ?? 3600)
+              )
+            }
+          } catch {
+            /* keep previous token */
+          }
+        }
+      }
+
+      const secret =
+        process.env.NEXTAUTH_SECRET || "dev-nextauth-secret-change-me"
       const key = new TextEncoder().encode(secret)
       token.apiAccessToken = await new jose.SignJWT({
         sub: token.id,
@@ -205,6 +264,10 @@ export const authOptions: NextAuthOptions = {
       }
 
       session.apiAccessToken = token.apiAccessToken
+      session.googleAccessToken =
+        typeof token.googleAccessToken === "string"
+          ? token.googleAccessToken
+          : null
 
       return session
     },

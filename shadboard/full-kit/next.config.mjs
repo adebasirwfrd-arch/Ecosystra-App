@@ -57,6 +57,10 @@ const nextConfig = {
   // See https://lucide.dev/guide/packages/lucide-react#nextjs-example
   transpilePackages: ["lucide-react"],
   experimental: {
+    // Board file uploads use Server Actions; default body limit is 1MB.
+    serverActions: {
+      bodySizeLimit: "50mb",
+    },
     externalDir: true,
     // Reduces dev-only "SegmentViewNode" / React Client Manifest flakes with Next 15 devtools
     devtoolSegmentExplorer: false,

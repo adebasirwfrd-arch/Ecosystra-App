@@ -35,7 +35,6 @@ import {
   Check,
   ChevronDown,
   CirclePlus,
-  FileText,
   GripVertical,
   Info,
   Mail,
@@ -61,6 +60,7 @@ import type {
 } from "@hello-pangea/dnd"
 import type { CSSProperties, FocusEvent, ReactNode, Ref } from "react"
 import type { DateRange } from "react-day-picker"
+import type { BoardFileAttachmentCellLabels } from "./ecosystra-board-file-attachment-cell"
 import type {
   BoardFacetLabels,
   BoardFilterColumnMeta,
@@ -134,6 +134,7 @@ import {
 } from "./ecosystra-board-avatars"
 import { ecoCcFieldKey } from "./ecosystra-board-cc-field-key"
 import { EcosystraBoardEditableColumnHeader } from "./ecosystra-board-editable-column-header"
+import { EcosystraBoardFileAttachmentCell } from "./ecosystra-board-file-attachment-cell"
 import { formatIdr } from "./ecosystra-board-format-idr"
 import { buildBoardGroupRowSegments } from "./ecosystra-board-group-by-engine"
 import { SortableBoardRowTbody } from "./ecosystra-board-sortable-row-tbody"
@@ -951,6 +952,33 @@ function optionalBoardHapticPulse(ms = 10) {
     navigator.vibrate(ms)
   } catch {
     /* unsupported or blocked */
+  }
+}
+
+function boardFileAttachmentLabels(
+  t: BoardGroupTableLabels
+): BoardFileAttachmentCellLabels {
+  const r = t as Record<string, string>
+  return {
+    fileCellUpload: r.fileCellUpload ?? "File saved",
+    fileCellAddFile: r.fileCellAddFile ?? "Add file",
+    fileCellMenuUploadDevice:
+      r.fileCellMenuUploadDevice ?? "Upload from device",
+    fileCellUploading: r.fileCellUploading ?? "Uploading…",
+    fileCellUploadFailed: r.fileCellUploadFailed ?? "Upload failed",
+    fileCellRemove: r.fileCellRemove ?? "Remove file",
+    fileCellPreviewTitle: r.fileCellPreviewTitle ?? "Preview",
+    fileCellOpenDrive: r.fileCellOpenDrive ?? "Open in Google Drive",
+    fileCellDownload: r.fileCellDownload ?? "Download",
+    fileCellPickFromDrive: r.fileCellPickFromDrive ?? "Pick from Drive",
+    fileCellGoogleSignInRequired:
+      r.fileCellGoogleSignInRequired ??
+      "Sign in with Google (with Drive access) to pick files.",
+    fileCellPickerLoadFailed:
+      r.fileCellPickerLoadFailed ?? "Could not load Google Picker",
+    fileCellPickerImportFailed:
+      r.fileCellPickerImportFailed ?? "Could not import the selected file",
+    fileCellOpenCamera: r.fileCellOpenCamera ?? "Take or choose a photo",
   }
 }
 
@@ -2129,36 +2157,21 @@ function EcosystraBoardGroupTableImpl({
           )
         }
         case "files": {
-          const raw = d[fk]
-          const n =
-            typeof raw === "number" && Number.isFinite(raw)
-              ? raw
-              : typeof raw === "string"
-                ? Number(raw.replace(/[^0-9.]/g, "")) || 0
-                : 0
           return (
             <TableCell
               key={col.id}
               {...boardAlign(col.id)}
               {...cellCommonProps}
             >
-              <div
-                className="flex items-center gap-1.5 text-muted-foreground"
-                aria-label={
-                  n > 0
-                    ? t.filesAttachedCount.replace("{n}", String(n))
-                    : t.filesNone
-                }
-              >
-                <FileText className="size-4 shrink-0" aria-hidden />
-                {n > 0 ? (
-                  <span className="text-xs font-medium text-foreground">
-                    {n}
-                  </span>
-                ) : (
-                  <span className="text-xs">—</span>
-                )}
-              </div>
+              <EcosystraBoardFileAttachmentCell
+                itemId={row.id}
+                groupName={groupName}
+                taskName={row.name}
+                dynamicData={d}
+                onPatchItem={onPatchItem}
+                labels={boardFileAttachmentLabels(t)}
+                attachmentsField={fk}
+              />
             </TableCell>
           )
         }
@@ -2635,27 +2648,16 @@ function EcosystraBoardGroupTableImpl({
         )
       }
       case "files": {
-        const n =
-          typeof d.filesCount === "number" && Number.isFinite(d.filesCount)
-            ? d.filesCount
-            : 0
         return (
           <TableCell key={col.id} {...boardAlign(col.id)} size="medium">
-            <div
-              className="flex items-center gap-1.5 text-muted-foreground"
-              aria-label={
-                n > 0
-                  ? t.filesAttachedCount.replace("{n}", String(n))
-                  : t.filesNone
-              }
-            >
-              <FileText className="size-4 shrink-0" aria-hidden />
-              {n > 0 ? (
-                <span className="text-xs font-medium text-foreground">{n}</span>
-              ) : (
-                <span className="text-xs">—</span>
-              )}
-            </div>
+            <EcosystraBoardFileAttachmentCell
+              itemId={row.id}
+              groupName={groupName}
+              taskName={row.name}
+              dynamicData={d}
+              onPatchItem={onPatchItem}
+              labels={boardFileAttachmentLabels(t)}
+            />
           </TableCell>
         )
       }
@@ -2991,23 +2993,20 @@ function EcosystraBoardGroupTableImpl({
             </div>
           )
         case "files": {
-          const n =
-            typeof sd[fk] === "number" && Number.isFinite(sd[fk] as number)
-              ? (sd[fk] as number)
-              : typeof sd.filesCount === "number"
-                ? sd.filesCount
-                : 0
           return (
             <div
               key={col.id}
-              className="flex items-center justify-center gap-1.5 text-muted-foreground"
+              className="flex min-w-0 w-full justify-start px-0.5 py-0.5"
             >
-              <FileText className="size-4 shrink-0" aria-hidden />
-              {n > 0 ? (
-                <span className="text-xs font-medium text-foreground">{n}</span>
-              ) : (
-                <span className="text-xs">—</span>
-              )}
+              <EcosystraBoardFileAttachmentCell
+                itemId={s.id}
+                groupName={groupName}
+                taskName={s.name}
+                dynamicData={sd}
+                onPatchItem={onPatchItem}
+                labels={boardFileAttachmentLabels(t)}
+                attachmentsField={fk}
+              />
             </div>
           )
         }
@@ -3361,21 +3360,19 @@ function EcosystraBoardGroupTableImpl({
           </div>
         )
       case "files": {
-        const n =
-          typeof sd.filesCount === "number" && Number.isFinite(sd.filesCount)
-            ? sd.filesCount
-            : 0
         return (
           <div
             key={col.id}
-            className="flex items-center justify-center gap-1.5 text-muted-foreground"
+            className="flex min-w-0 w-full justify-start px-0.5 py-0.5"
           >
-            <FileText className="size-4 shrink-0" aria-hidden />
-            {n > 0 ? (
-              <span className="text-xs font-medium text-foreground">{n}</span>
-            ) : (
-              <span className="text-xs">—</span>
-            )}
+            <EcosystraBoardFileAttachmentCell
+              itemId={s.id}
+              groupName={groupName}
+              taskName={s.name}
+              dynamicData={sd}
+              onPatchItem={onPatchItem}
+              labels={boardFileAttachmentLabels(t)}
+            />
           </div>
         )
       }

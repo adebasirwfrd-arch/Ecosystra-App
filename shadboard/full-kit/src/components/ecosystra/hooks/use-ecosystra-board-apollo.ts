@@ -607,29 +607,7 @@ export function parseBoardTableUiMetadata(
     }
   }
   const rawCc = meta?.tableCustomColumns
-  const tableCustomColumns: Record<string, TableCustomColumnDef> = {}
-  if (
-    rawCc &&
-    typeof rawCc === "object" &&
-    rawCc !== null &&
-    !Array.isArray(rawCc)
-  ) {
-    for (const [k, v] of Object.entries(rawCc)) {
-      if (
-        typeof k === "string" &&
-        k.startsWith("c_") &&
-        v &&
-        typeof v === "object" &&
-        !Array.isArray(v) &&
-        "kind" in v
-      ) {
-        const kind = (v as { kind?: unknown }).kind
-        if (HIDABLE_COLUMN_IDS.includes(kind as HidableBoardColumnId)) {
-          tableCustomColumns[k] = { kind: kind as HidableBoardColumnId }
-        }
-      }
-    }
-  }
+  const tableCustomColumns = parseCustomColumnsMap(rawCc)
   const customColumnIds = Object.keys(tableCustomColumns)
 
   const groupBySuite = parseTableGroupBySuite(meta, tableCustomColumns)
@@ -761,6 +739,142 @@ export function parseBoardTableUiMetadata(
     savedFilterViews,
     sortRules,
     tablePinnedColumnIds,
+  }
+}
+
+/** Per-group main-table layout persisted under `metadata.groupTableUiByGroupId`. */
+export type GroupTableScopedStored = {
+  hiddenTableColumnIds?: HidableBoardColumnId[]
+  tableColumnWidthsPx?: Record<string, number>
+  tableColumnOrder?: string[]
+  tableCustomColumns?: Record<string, TableCustomColumnDef>
+  tableColumnTitles?: Record<string, string>
+}
+
+function parseCustomColumnsMap(
+  rawCc: unknown
+): Record<string, TableCustomColumnDef> {
+  const tableCustomColumns: Record<string, TableCustomColumnDef> = {}
+  if (
+    rawCc &&
+    typeof rawCc === "object" &&
+    rawCc !== null &&
+    !Array.isArray(rawCc)
+  ) {
+    for (const [k, v] of Object.entries(rawCc)) {
+      if (
+        typeof k === "string" &&
+        k.startsWith("c_") &&
+        v &&
+        typeof v === "object" &&
+        !Array.isArray(v) &&
+        "kind" in v
+      ) {
+        const kind = (v as { kind?: unknown }).kind
+        if (HIDABLE_COLUMN_IDS.includes(kind as HidableBoardColumnId)) {
+          tableCustomColumns[k] = { kind: kind as HidableBoardColumnId }
+        }
+      }
+    }
+  }
+  return tableCustomColumns
+}
+
+export function readGroupTableUiByGroupId(
+  meta: Record<string, unknown> | undefined | null
+): Record<string, GroupTableScopedStored> {
+  const raw = meta?.groupTableUiByGroupId
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {}
+  const out: Record<string, GroupTableScopedStored> = {}
+  for (const [gid, v] of Object.entries(raw)) {
+    if (!gid || typeof v !== "object" || v === null || Array.isArray(v)) continue
+    const o = v as Record<string, unknown>
+    const entry: GroupTableScopedStored = {}
+    if (Array.isArray(o.hiddenTableColumnIds)) {
+      entry.hiddenTableColumnIds = o.hiddenTableColumnIds.filter(
+        (id): id is HidableBoardColumnId =>
+          HIDABLE_COLUMN_IDS.includes(id as HidableBoardColumnId)
+      ) as HidableBoardColumnId[]
+    }
+    if (
+      o.tableColumnWidthsPx &&
+      typeof o.tableColumnWidthsPx === "object" &&
+      !Array.isArray(o.tableColumnWidthsPx)
+    ) {
+      const m: Record<string, number> = {}
+      for (const [k, n] of Object.entries(
+        o.tableColumnWidthsPx as Record<string, unknown>
+      )) {
+        if (typeof n === "number" && Number.isFinite(n) && n > 0) m[k] = n
+      }
+      entry.tableColumnWidthsPx = m
+    }
+    if (Array.isArray(o.tableColumnOrder)) {
+      entry.tableColumnOrder = o.tableColumnOrder.filter(
+        (x): x is string => typeof x === "string"
+      )
+    }
+    const cc = parseCustomColumnsMap(o.tableCustomColumns)
+    if (Object.keys(cc).length > 0) entry.tableCustomColumns = cc
+    if (o.tableColumnTitles && typeof o.tableColumnTitles === "object") {
+      const titles: Record<string, string> = {}
+      for (const [k, v] of Object.entries(
+        o.tableColumnTitles as Record<string, unknown>
+      )) {
+        if (typeof k === "string" && typeof v === "string") titles[k] = v
+      }
+      if (Object.keys(titles).length > 0) entry.tableColumnTitles = titles
+    }
+    if (Object.keys(entry).length > 0) out[gid] = entry
+  }
+  return out
+}
+
+export type BoardTableUiResolved = ReturnType<typeof parseBoardTableUiMetadata>
+
+/**
+ * Main table UI for one group: board-wide metadata merged with optional
+ * `groupTableUiByGroupId[groupId]` overrides (column order, widths, custom cols, …).
+ */
+export function resolveMainTableUiForGroup(
+  meta: Record<string, unknown> | undefined | null,
+  groupId: string
+): BoardTableUiResolved {
+  const base = parseBoardTableUiMetadata(meta ?? undefined)
+  const scoped = readGroupTableUiByGroupId(meta ?? undefined)[groupId]
+  if (!scoped) return base
+
+  const tableColumnOrder = scoped.tableColumnOrder ?? base.tableColumnOrder
+  const tableCustomColumns =
+    scoped.tableCustomColumns != null
+      ? { ...scoped.tableCustomColumns }
+      : { ...base.tableCustomColumns }
+  const customColumnIds = Object.keys(tableCustomColumns)
+  const groupBySuite = parseTableGroupBySuite(
+    meta ?? undefined,
+    tableCustomColumns
+  )
+  const groupBy: BoardTableGroupBy = groupBySuite ? "priority" : "none"
+
+  return {
+    ...base,
+    groupBy,
+    groupBySuite,
+    hiddenColumnIds: scoped.hiddenTableColumnIds ?? base.hiddenColumnIds,
+    columnWidthsPx:
+      scoped.tableColumnWidthsPx != null
+        ? { ...scoped.tableColumnWidthsPx }
+        : { ...base.columnWidthsPx },
+    tableColumnOrder,
+    tableCustomColumns,
+    tableColumnTitles:
+      scoped.tableColumnTitles != null
+        ? { ...scoped.tableColumnTitles }
+        : { ...base.tableColumnTitles },
+    tablePinnedColumnIds: normalizePinnedColumnIds(
+      base.tablePinnedColumnIds,
+      tableColumnOrder
+    ),
   }
 }
 
@@ -1338,6 +1452,49 @@ export function useEcosystraBoardApollo() {
     [board?.id, updateBoardMetadata]
   )
 
+  const patchGroupBoardTableUi = useCallback(
+    async (
+      groupId: string,
+      partial: {
+        hiddenTableColumnIds?: HidableBoardColumnId[]
+        tableColumnWidthsPx?: Record<string, number>
+        tableColumnOrder?: string[]
+        tableCustomColumns?: Record<string, TableCustomColumnDef>
+        tableColumnTitles?: Record<string, string>
+      }
+    ): Promise<boolean> => {
+      if (!board?.id || !groupId) return false
+      const meta = (board.metadata ?? {}) as Record<string, unknown>
+      const cur = resolveMainTableUiForGroup(meta, groupId)
+      const next: GroupTableScopedStored = {
+        hiddenTableColumnIds:
+          partial.hiddenTableColumnIds ?? cur.hiddenColumnIds,
+        tableColumnWidthsPx:
+          partial.tableColumnWidthsPx ?? cur.columnWidthsPx,
+        tableColumnOrder: partial.tableColumnOrder ?? cur.tableColumnOrder,
+        tableCustomColumns:
+          partial.tableCustomColumns ?? cur.tableCustomColumns,
+        tableColumnTitles: partial.tableColumnTitles ?? cur.tableColumnTitles,
+      }
+      const by = readGroupTableUiByGroupId(meta)
+      try {
+        await updateBoardMetadata({
+          variables: {
+            id: board.id,
+            metadata: {
+              groupTableUiByGroupId: { ...by, [groupId]: next },
+            },
+          },
+        })
+        return true
+      } catch (e) {
+        toast.error(gqlErrorMessage(e))
+        return false
+      }
+    },
+    [board?.id, board?.metadata, updateBoardMetadata]
+  )
+
   const setTaskOwnerFn = useCallback(
     async (itemId: string, ownerUserId: string | null) => {
       try {
@@ -1424,6 +1581,7 @@ export function useEcosystraBoardApollo() {
     patchSubitemBoardTableUi,
     addSubitemBoardColumn,
     patchBoardTableUi,
+    patchGroupBoardTableUi,
     setTaskOwner: setTaskOwnerFn,
     setTaskAssignee: setTaskAssigneeFn,
     setTaskAssignees: setTaskAssigneesFn,

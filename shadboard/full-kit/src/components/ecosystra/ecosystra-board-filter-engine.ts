@@ -22,6 +22,8 @@ import {
   Users,
 } from "lucide-react"
 
+import { filesCountFromDynamic } from "@/lib/ecosystra/board-drive-attachment"
+
 import { ecoCcFieldKey } from "./ecosystra-board-cc-field-key"
 import type {
   DuePriorityLabel,
@@ -169,8 +171,7 @@ function budgetNumber(d: Record<string, unknown>): number {
 }
 
 function filesCountFrom(d: Record<string, unknown>): number {
-  const n = d.filesCount
-  return typeof n === "number" && Number.isFinite(n) ? n : 0
+  return filesCountFromDynamic(d)
 }
 
 function priorityDisplay(
