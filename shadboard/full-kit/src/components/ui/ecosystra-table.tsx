@@ -214,17 +214,25 @@ export function Table({
 
   const nativeScrollRef = useRef<HTMLDivElement>(null)
   const [horizScrolled, setHorizScrolled] = useState(false)
+  const [moreRight, setMoreRight] = useState(false)
 
-  const syncNativeScrollShadow = useCallback(() => {
+  const syncNativeHorizontalChrome = useCallback(() => {
     const el = nativeScrollRef.current
     if (!el) return
     setHorizScrolled(el.scrollLeft > 1)
+    const maxScroll = el.scrollWidth - el.clientWidth
+    setMoreRight(maxScroll > 4 && el.scrollLeft < maxScroll - 2)
   }, [])
 
   useEffect(() => {
     if (horizontalScroll !== "native") return
-    syncNativeScrollShadow()
-  }, [horizontalScroll, syncNativeScrollShadow, tableMinWidthPx, columns])
+    syncNativeHorizontalChrome()
+    const el = nativeScrollRef.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(() => syncNativeHorizontalChrome())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [horizontalScroll, syncNativeHorizontalChrome, tableMinWidthPx, columns])
 
   useEffect(() => {
     if (horizontalScroll !== "embla" || !emblaApi) return
@@ -342,18 +350,27 @@ export function Table({
   if (horizontalScroll === "native") {
     return (
       <div
-        ref={nativeScrollRef}
-        data-slot="ecosystra-table-scroll"
-        data-horiz-scrolled={horizScrolled ? "true" : "false"}
-        onScroll={syncNativeScrollShadow}
+        data-more-right={moreRight ? "true" : "false"}
         className={cn(
-          mobileNativeScroll.scrollNative,
-          "relative isolate w-full min-w-0 touch-pan-x",
+          mobileNativeScroll.edgeFadeHost,
+          "w-full min-w-0",
           className
         )}
         style={style}
       >
-        {tableEl}
+        <div
+          ref={nativeScrollRef}
+          data-slot="ecosystra-table-scroll"
+          data-horiz-scrolled={horizScrolled ? "true" : "false"}
+          onScroll={syncNativeHorizontalChrome}
+          className={cn(
+            mobileNativeScroll.scrollNative,
+            "touch-pan-x w-full min-w-0"
+          )}
+        >
+          {tableEl}
+        </div>
+        <div className={mobileNativeScroll.edgeFade} aria-hidden />
       </div>
     )
   }

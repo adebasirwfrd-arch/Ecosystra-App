@@ -3,6 +3,16 @@
  * Paired with `[data-slot="ecosystra-table-scroll"]` from `ecosystra-table.tsx`.
  */
 
+/**
+ * Host wraps the scroll viewport + fixed right-edge fade (does not scroll away).
+ */
+.edgeFadeHost {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-width: 0;
+}
+
 .scrollNative {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
@@ -50,4 +60,26 @@
   .scrollNative :is(th, td)[data-sticky="true"] {
     min-width: 140px;
   }
+}
+
+/* Monday-style hint: more columns exist to the right (paired with data-more-right on host). */
+.edgeFade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(52px, 18vw);
+  pointer-events: none;
+  z-index: 34;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  background: linear-gradient(to left, rgb(255 255 255 / 0.94), transparent);
+}
+
+:global(.dark) .edgeFade {
+  background: linear-gradient(to left, rgb(24 24 27 / 0.94), transparent);
+}
+
+.edgeFadeHost[data-more-right="true"] .edgeFade {
+  opacity: 1;
 }

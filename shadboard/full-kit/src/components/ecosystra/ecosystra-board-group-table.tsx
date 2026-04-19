@@ -939,6 +939,21 @@ function pickNarrowBoardColumnsForMobile(
   return chosen.length > 0 ? chosen : visible
 }
 
+/** PWA / mobile: subtle vibration when toggling column visibility (no-op if unsupported). */
+function optionalBoardHapticPulse(ms = 10) {
+  if (
+    typeof navigator === "undefined" ||
+    typeof navigator.vibrate !== "function"
+  ) {
+    return
+  }
+  try {
+    navigator.vibrate(ms)
+  } catch {
+    /* unsupported or blocked */
+  }
+}
+
 export type BoardGroupTableLabels = Record<string, string>
 
 type Props = {
@@ -3490,7 +3505,10 @@ function EcosystraBoardGroupTableImpl({
                         type="button"
                         variant="link"
                         className="h-auto min-h-11 shrink-0 px-2 py-1 text-xs"
-                        onClick={() => setMobileSubTableExpanded(true)}
+                        onClick={() => {
+                          optionalBoardHapticPulse()
+                          setMobileSubTableExpanded(true)
+                        }}
                       >
                         {(t as Record<string, string>)
                           .mobileTableShowAllColumns ?? "Show all columns"}
@@ -3501,7 +3519,10 @@ function EcosystraBoardGroupTableImpl({
                       type="button"
                       variant="link"
                       className="h-auto min-h-11 px-2 py-1 text-xs"
-                      onClick={() => setMobileSubTableExpanded(false)}
+                      onClick={() => {
+                        optionalBoardHapticPulse()
+                        setMobileSubTableExpanded(false)
+                      }}
                     >
                       {(t as Record<string, string>)
                         .mobileTableShowFewerColumns ?? "Show fewer columns"}
@@ -3719,7 +3740,10 @@ function EcosystraBoardGroupTableImpl({
                           type="button"
                           variant="link"
                           className="h-auto min-h-11 shrink-0 px-2 py-1 text-xs"
-                          onClick={() => setMobileBoardTableExpanded(true)}
+                          onClick={() => {
+                            optionalBoardHapticPulse()
+                            setMobileBoardTableExpanded(true)
+                          }}
                         >
                           {(t as Record<string, string>)
                             .mobileTableShowAllColumns ?? "Show all columns"}
@@ -3730,7 +3754,10 @@ function EcosystraBoardGroupTableImpl({
                         type="button"
                         variant="link"
                         className="h-auto min-h-11 px-2 py-1 text-xs"
-                        onClick={() => setMobileBoardTableExpanded(false)}
+                        onClick={() => {
+                          optionalBoardHapticPulse()
+                          setMobileBoardTableExpanded(false)
+                        }}
                       >
                         {(t as Record<string, string>)
                           .mobileTableShowFewerColumns ?? "Show fewer columns"}
