@@ -38,6 +38,7 @@ export function SortableBoardRowTbody({
   return (
     <tbody
       ref={setNodeRef}
+      id={id}
       data-slot="table-body"
       className={cn(
         "[&_tr:last-child>td]:border-b-0",

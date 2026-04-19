@@ -109,6 +109,8 @@ export type GqlBoard = {
   id: string
   name: string
   workspaceId: string
+  /** Workspace RBAC: ADMIN can manage members & workspace settings. */
+  viewerWorkspaceRole?: string
   metadata?: Record<string, unknown> | null
   columns: unknown
   subitemColumns: unknown

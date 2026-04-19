@@ -362,6 +362,20 @@ async function requireWorkspaceAccess(
   if (!m) throw new Error("FORBIDDEN");
 }
 
+async function requireWorkspaceAdmin(
+  viewerId: string,
+  workspaceId: string,
+  ctx: GqlContext
+) {
+  if (isSuperUserEmail(ctx.auth.email)) return;
+  const m = await prisma.ecoMember.findUnique({
+    where: {
+      userId_workspaceId: { userId: viewerId, workspaceId },
+    },
+  });
+  if (!m || m.role !== "ADMIN") throw new Error("FORBIDDEN");
+}
+
 /** Fields needed for board UI + GraphQL `Item` / `Group` — avoids loading unused relations (faster DB + JSON). */
 const ecoUserBoardPick = {
   id: true,
@@ -748,13 +762,17 @@ async function executeSetTaskAssignees(
     const assignee = await prisma.ecoUser.findUnique({ where: { id: uid } });
     if (!assignee) continue;
     try {
+      const boardLinkQuery: Record<string, string> = { task: itemId };
+      if (updated.groupId) {
+        boardLinkQuery.group = updated.groupId;
+      }
       await prisma.ecoNotification.create({
         data: {
           userId: assignee.id,
           title: `Assigned: ${updated.name}`,
           message: `${actorLabel} assigned you to this task.`,
           type: "task_assigned",
-          link: ecosystraBoardAbsoluteUrl({ task: itemId }),
+          link: ecosystraBoardAbsoluteUrl(boardLinkQuery),
         },
       });
     } catch (e) {
@@ -875,6 +893,23 @@ export const resolvers = {
   JSON: GraphQLJSON,
 
   Board: {
+    viewerWorkspaceRole: async (
+      board: { workspaceId: string },
+      _: unknown,
+      ctx: GqlContext
+    ) => {
+      const viewer = await getViewer(ctx);
+      const m = await prisma.ecoMember.findUnique({
+        where: {
+          userId_workspaceId: {
+            userId: viewer.id,
+            workspaceId: board.workspaceId,
+          },
+        },
+        select: { role: true },
+      });
+      return m?.role ?? "MEMBER";
+    },
     /** Fallback when board payload was not built with `boardTreeInclude` root `items`. */
     items: async (board: { id: string; items?: unknown[] }) => {
       if (Array.isArray(board.items)) return board.items;
@@ -1345,11 +1380,15 @@ export const resolvers = {
       { workspaceId, userId, role }: { workspaceId: string; userId: string; role: string },
       ctx: GqlContext
     ) => {
-      if (!isSuperUserEmail(ctx.auth.email)) throw new Error("FORBIDDEN");
-      await getViewer(ctx);
+      const viewer = await getViewer(ctx);
+      await requireWorkspaceAdmin(viewer.id, workspaceId, ctx);
+      const nextRole = String(role || "").trim().toUpperCase();
+      if (nextRole !== "ADMIN" && nextRole !== "MEMBER") {
+        throw new Error("INVALID_ROLE");
+      }
       return prisma.ecoMember.update({
         where: { userId_workspaceId: { userId, workspaceId } },
-        data: { role },
+        data: { role: nextRole },
       });
     },
 

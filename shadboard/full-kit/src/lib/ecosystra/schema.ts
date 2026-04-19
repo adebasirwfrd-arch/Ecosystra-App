@@ -21,6 +21,8 @@ export const typeDefs = `#graphql
     subitemColumns: JSON!
     metadata: JSON
     workspaceId: ID!
+    """Current viewer's EcoMember.role for this board's workspace (ADMIN | MEMBER)."""
+    viewerWorkspaceRole: String!
     groups: [Group!]!
     items: [Item!]!
     createdAt: String!

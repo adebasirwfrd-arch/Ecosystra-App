@@ -7,6 +7,7 @@ export const GET_OR_CREATE_BOARD = gql`
       id
       name
       workspaceId
+      viewerWorkspaceRole
       metadata
       columns
       subitemColumns
@@ -216,6 +217,87 @@ export const WORKSPACE_USERS = gql`
       id
       name
       email
+    }
+  }
+`
+
+export const ME_NAV_BOOTSTRAP = gql`
+  query MeNavBootstrap {
+    me {
+      id
+      memberships {
+        workspaceId
+        role
+      }
+    }
+  }
+`
+
+export const ECOSYSTRA_NOTIFICATIONS = gql`
+  query EcosystraNotifications {
+    notifications {
+      id
+      title
+      message
+      isRead
+      type
+      link
+      createdAt
+    }
+  }
+`
+
+export const MARK_NOTIFICATION_READ = gql`
+  mutation MarkNotificationRead($id: ID!) {
+    markNotificationAsRead(id: $id) {
+      id
+      isRead
+    }
+  }
+`
+
+export const ECOSYSTRA_EMAILS_INBOX = gql`
+  query EcosystraEmailsInbox {
+    emails(filter: "inbox") {
+      id
+      subject
+      read
+      createdAt
+      sender {
+        id
+        name
+        email
+        avatar
+      }
+    }
+    emailCounts {
+      inbox
+    }
+  }
+`
+
+export const WORKSPACE_MEMBERS_LIST = gql`
+  query WorkspaceMembersList($workspaceId: ID!) {
+    workspaceMembers(workspaceId: $workspaceId) {
+      id
+      role
+      createdAt
+      user {
+        id
+        name
+        email
+        avatarUrl
+        status
+      }
+    }
+  }
+`
+
+export const ASSIGN_MEMBER_ROLE = gql`
+  mutation AssignMemberRole($workspaceId: ID!, $userId: ID!, $role: String!) {
+    assignMemberRole(workspaceId: $workspaceId, userId: $userId, role: $role) {
+      id
+      role
     }
   }
 `

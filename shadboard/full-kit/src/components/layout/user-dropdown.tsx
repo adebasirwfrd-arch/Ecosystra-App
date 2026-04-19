@@ -1,11 +1,11 @@
+"use client"
+
 import Link from "next/link"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import { LogOut, User, UserCog } from "lucide-react"
 
 import type { DictionaryType } from "@/lib/get-dictionary"
 import type { LocaleType } from "@/types"
-
-import { userData } from "@/data/user"
 
 import { clearBoardLocalCache } from "@/lib/ecosystra/board-local-db"
 import { ensureLocalizedPathname } from "@/lib/i18n"
@@ -30,6 +30,24 @@ export function UserDropdown({
   dictionary: DictionaryType
   locale: LocaleType
 }) {
+  const { data: session, status } = useSession()
+  const u = session?.user
+  const displayEmail = u?.email?.trim() ?? ""
+  const emailLocalPart = (() => {
+    if (!displayEmail) return ""
+    const at = displayEmail.indexOf("@")
+    return at > 0 ? displayEmail.slice(0, at).trim() : displayEmail
+  })()
+  const displayName = u?.name?.trim() || emailLocalPart || "User"
+  const avatarSrc = u?.avatar?.trim() || undefined
+  const initialsSource = u?.name?.trim() || displayEmail || "User"
+  const rawInitials = getInitials(initialsSource)
+  const initials =
+    status === "loading"
+      ? "…"
+      : rawInitials.slice(0, 2) ||
+        (displayEmail ? displayEmail.charAt(0).toUpperCase() : "?")
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -37,29 +55,43 @@ export function UserDropdown({
           variant="outline"
           size="icon"
           className="rounded-lg"
-          aria-label="User"
+          aria-label={displayName}
         >
           <Avatar className="size-9">
-            <AvatarImage src={userData?.avatar} alt="" />
-            <AvatarFallback className="bg-transparent">
-              {userData?.name && getInitials(userData.name)}
+            {avatarSrc ? (
+              <AvatarImage
+                src={avatarSrc}
+                alt=""
+                referrerPolicy="no-referrer"
+              />
+            ) : null}
+            <AvatarFallback className="bg-transparent text-xs font-semibold">
+              {status === "loading" ? "…" : initials}
             </AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent forceMount>
         <DropdownMenuLabel className="flex gap-2">
-          <Avatar>
-            <AvatarImage src={userData?.avatar} alt="Avatar" />
-            <AvatarFallback className="bg-transparent">
-              {userData?.name && getInitials(userData.name)}
+          <Avatar className="size-10 shrink-0">
+            {avatarSrc ? (
+              <AvatarImage
+                src={avatarSrc}
+                alt=""
+                referrerPolicy="no-referrer"
+              />
+            ) : null}
+            <AvatarFallback className="bg-transparent text-sm font-semibold">
+              {status === "loading" ? "…" : initials}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col overflow-hidden">
-            <p className="text-sm font-medium truncate">John Doe</p>
-            <p className="text-xs text-muted-foreground font-semibold truncate">
-              {userData?.email}
-            </p>
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <p className="truncate text-sm font-medium">{displayName}</p>
+            {displayEmail ? (
+              <p className="truncate text-xs font-semibold text-muted-foreground">
+                {displayEmail}
+              </p>
+            ) : null}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -74,10 +106,7 @@ export function UserDropdown({
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link
-              href={ensureLocalizedPathname(
-                "/apps/ecosystra/settings",
-                locale
-              )}
+              href={ensureLocalizedPathname("/apps/ecosystra/settings", locale)}
             >
               <UserCog className="me-2 size-4" />
               {dictionary.navigation.userNav.settings}

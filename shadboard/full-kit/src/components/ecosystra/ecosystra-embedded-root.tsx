@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 
+import type { LocaleType } from "@/types"
 import type { ReactNode } from "react"
 
 import { AvatarStack } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -22,6 +24,8 @@ import {
   EcosystraGrandbookSteps,
 } from "./ecosystra-grandbook"
 import { ecosystraNavLabel } from "./ecosystra-nav-model"
+import { EcosystraShellViewBody } from "./ecosystra-shell-views"
+import { useOptionalEcosystraWorkspaceNav } from "./ecosystra-workspace-nav-context"
 
 export type EcosystraShellUser = {
   id: string
@@ -72,7 +76,10 @@ export function EcosystraEmbeddedRoot({
 }: Props) {
   const dictionary = useEcosystraDictionary()
   const pageLang = locale === "ar" ? "ar" : "en"
+  const localeTyped = (pageLang === "ar" ? "ar" : "en") as LocaleType
   const eco = dictionary.ecosystraApp
+  const { isWorkspaceAdmin, viewerWorkspaceRole } =
+    useOptionalEcosystraWorkspaceNav()
   const [profileTips, setProfileTips] = useState(true)
   const title = ecosystraNavLabel(dictionary, initialView)
 
@@ -97,6 +104,28 @@ export function EcosystraEmbeddedRoot({
     )
   }
 
+  if (
+    initialView === "dashboard" ||
+    initialView === "tasks" ||
+    initialView === "inbox" ||
+    initialView === "notifications" ||
+    initialView === "members"
+  ) {
+    return (
+      <div
+        lang={pageLang}
+        className="flex min-h-0 flex-1 flex-col overflow-auto bg-background p-2 sm:p-4 md:p-6"
+        data-ecosystra-embedded="true"
+      >
+        <EcosystraShellViewBody
+          view={initialView}
+          shellUser={shellUser}
+          locale={localeTyped}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       lang={pageLang}
@@ -104,6 +133,30 @@ export function EcosystraEmbeddedRoot({
       data-ecosystra-embedded="true"
     >
       <ViewCard title={title} description={description}>
+        {initialView === "settings" ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={isWorkspaceAdmin ? "default" : "secondary"}>
+                {isWorkspaceAdmin ? "Workspace ADMIN" : "Workspace MEMBER"}
+              </Badge>
+              {viewerWorkspaceRole ? (
+                <span className="text-xs text-muted-foreground">
+                  Role: {viewerWorkspaceRole}
+                </span>
+              ) : null}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {(eco as { shellViews?: { rebacNote?: string } }).shellViews
+                ?.rebacNote ??
+                "Workspace settings visibility follows your membership role."}
+            </p>
+            <ul className="list-disc space-y-2 ps-5 text-sm text-foreground">
+              <li>{eco.settingsView.general}</li>
+              <li>{eco.settingsView.privacy}</li>
+              <li>{eco.settingsView.advanced}</li>
+            </ul>
+          </div>
+        ) : null}
         {initialView === "profile" && shellUser ? (
           <div className="space-y-6">
             <EcosystraGrandbookSteps

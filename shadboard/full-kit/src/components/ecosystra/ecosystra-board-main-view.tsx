@@ -172,6 +172,7 @@ import {
   EcosystraGrandbookVirtualizedListWindow,
 } from "./ecosystra-grandbook"
 import { localeSegmentFromPathname } from "./ecosystra-path-utils"
+import { useOptionalEcosystraWorkspaceNav } from "./ecosystra-workspace-nav-context"
 
 /** `dynamicData` keys for core columns on sub-items (differs from top-level tasks, e.g. `taskStatus` vs `status`). */
 function subitemCoreColumnSourceKey(columnId: string): string {
@@ -219,6 +220,18 @@ function buildRowOrderDraft(
   return out
 }
 
+function findTopLevelTaskGroupId(
+  groups: Array<{ id: string; items: GqlBoardItem[] }>,
+  taskId: string
+): string | null {
+  for (const g of groups) {
+    for (const it of g.items) {
+      if (it.id === taskId && !it.parentItemId) return g.id
+    }
+  }
+  return null
+}
+
 function focusOpenDialogTitle(e: Event) {
   e.preventDefault()
   window.requestAnimationFrame(() => {
@@ -249,6 +262,7 @@ export function EcosystraBoardMainView() {
     viewTab,
     setViewTab,
     openByGroupId,
+    setGroupOpen,
     setGroupsOpenFromAccordion,
     expandedSubitemRowId,
     setExpandedSubitemRowId,
@@ -275,6 +289,13 @@ export function EcosystraBoardMainView() {
     setTaskAssignees,
     acceptTaskAssigneeInvite,
   } = useEcosystraBoardApollo()
+
+  const { setBoardAccess } = useOptionalEcosystraWorkspaceNav()
+  useEffect(() => {
+    if (board?.workspaceId && board.viewerWorkspaceRole) {
+      setBoardAccess(board.workspaceId, board.viewerWorkspaceRole)
+    }
+  }, [board?.workspaceId, board?.viewerWorkspaceRole, setBoardAccess])
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1547,6 +1568,37 @@ export function EcosystraBoardMainView() {
     acceptTaskAssigneeInvite,
     bt.toastInviteAccepted,
   ])
+
+  /** Deep link from shell (e.g. `?task=&group=`) — open group accordion, table tab, scroll to row (`tbody id`). */
+  useEffect(() => {
+    const taskDeepLinkId = searchParams.get("task")?.trim() ?? ""
+    const taskDeepLinkGroup = searchParams.get("group")?.trim() ?? ""
+    if (!taskDeepLinkId || !board?.groups?.length) return
+
+    const resolvedGroup = findTopLevelTaskGroupId(board.groups, taskDeepLinkId)
+    if (!resolvedGroup) return
+
+    let targetGroup = resolvedGroup
+    if (taskDeepLinkGroup) {
+      const gMatch = board.groups.find((g) => g.id === taskDeepLinkGroup)
+      const inUrlGroup = gMatch?.items.some(
+        (it) => it.id === taskDeepLinkId && !it.parentItemId
+      )
+      if (inUrlGroup) targetGroup = taskDeepLinkGroup
+    }
+
+    setViewTab("table")
+    setGroupOpen(targetGroup, true)
+
+    const scroll = () => {
+      document.getElementById(taskDeepLinkId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      })
+    }
+    const timers = [80, 320, 700].map((ms) => window.setTimeout(scroll, ms))
+    return () => timers.forEach(clearTimeout)
+  }, [board?.groups, searchParams, setGroupOpen, setViewTab])
 
   useEffect(() => {
     const valid = new Set(sortedGroups.map((g) => g.id))
