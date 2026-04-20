@@ -9,7 +9,11 @@ import FullCalendar from "@fullcalendar/react"
 import timeGridPlugin from "@fullcalendar/timegrid"
 import { useDirection } from "@radix-ui/react-direction"
 
-import type { DateInput, EventSourceInput } from "@fullcalendar/core/index.js"
+import type {
+  DateInput,
+  EventInput,
+  EventSourceInput,
+} from "@fullcalendar/core/index.js"
 import type { EventImpl } from "@fullcalendar/core/internal"
 import type { CategoryType, EventType } from "../types"
 
@@ -58,7 +62,10 @@ export function CalendarContent() {
         category: event.extendedProps.category,
         ...(event.extendedProps.description && {
           description: event.extendedProps.description,
-        }), // Include description if it exists in the extended properties
+        }),
+        ...(event.extendedProps.ecosystra && {
+          ecosystra: event.extendedProps.ecosystra,
+        }),
       },
     }
   }
@@ -90,14 +97,14 @@ export function CalendarContent() {
     setEventSidebarIsOpen(true)
   }
 
-  // Map events from the state and assign a color based on their category
+  // Map events from the state and assign a color; Ecosystra board tasks are not drag-edited here.
   const events = calendarState.events.map(
-    (event: EventType): EventSourceInput[] => ({
+    (event: EventType): EventSourceInput => ({
       ...event,
-      // @ts-ignore
-      color: eventColors[event.extendedProps.category], // Set color based on event category
+      editable: !event.extendedProps?.ecosystra,
+      color: eventColors[event.extendedProps.category],
     })
-  )
+  ) as EventInput[]
 
   // Custom class names for event styling
   const eventClassNames = () => [
@@ -112,7 +119,7 @@ export function CalendarContent() {
       initialView={INITIAL_VIEW}
       plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
       eventDisplay="block"
-      events={events}
+      events={events as EventSourceInput}
       eventClassNames={eventClassNames}
       headerToolbar={false}
       editable

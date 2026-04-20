@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { EcosystraCalendarTaskSidebar } from "./ecosystra-calendar-task-sidebar"
 
 export function EventSidebar() {
   const {
@@ -51,6 +52,7 @@ export function EventSidebar() {
     handleSelectEvent,
     eventSidebarIsOpen,
     setEventSidebarIsOpen,
+    refetchBoardEvents,
   } = useCalendarContext()
 
   const eventSidebarSchema = useMemo(
@@ -76,9 +78,11 @@ export function EventSidebar() {
   const { isSubmitting, isDirty } = form.formState
   const isDisabled = isSubmitting || !isDirty // Disable button if form is unchanged or submitting
   const selectedEvent = calendarState.selectedEvent
+  const eco = selectedEvent?.extendedProps?.ecosystra
 
   // Reset the form with the current selected event's values if it exists; otherwise reset to the default state. This runs whenever `selectedEvent` or `eventSidebarIsOpen` changes
   useEffect(() => {
+    if (eco) return
     if (selectedEvent) {
       const { extendedProps, ...eventProps } = selectedEvent
 
@@ -102,11 +106,16 @@ export function EventSidebar() {
         category: defaultCategory,
       })
     }
-  }, [eventSidebarIsOpen, selectedEvent, form, defaultCategory])
+  }, [eco, eventSidebarIsOpen, selectedEvent, form, defaultCategory])
 
   const handleSidebarClose = () => {
     handleSelectEvent(undefined) // Unselect the current event
     setEventSidebarIsOpen(false) // Close the sidebar
+  }
+
+  const onSheetOpenChange = (open: boolean) => {
+    setEventSidebarIsOpen(open)
+    if (!open) handleSelectEvent(undefined)
   }
 
   function onSubmit(data: EventSidebarFormType) {
@@ -151,8 +160,22 @@ export function EventSidebar() {
     }
   }
 
+  if (eco) {
+    return (
+      <EcosystraCalendarTaskSidebar
+        open={eventSidebarIsOpen}
+        onOpenChange={(open) => {
+          setEventSidebarIsOpen(open)
+          if (!open) handleSelectEvent(undefined)
+        }}
+        selectedEvent={selectedEvent}
+        onSaved={() => refetchBoardEvents?.()}
+      />
+    )
+  }
+
   return (
-    <Sheet open={eventSidebarIsOpen} onOpenChange={() => handleSidebarClose()}>
+    <Sheet open={eventSidebarIsOpen} onOpenChange={onSheetOpenChange}>
       <SheetContent className="p-0">
         <ScrollArea className="h-full p-4">
           <SheetHeader>

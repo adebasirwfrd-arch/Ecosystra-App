@@ -12,6 +12,17 @@ export function CalendarReducer(
   action: CalendarActionType
 ): CalendarStateType {
   switch (action.type) {
+    case "replaceEvents": {
+      const next = action.events ?? []
+      return {
+        ...calendarState,
+        initalEvents: next,
+        events: next,
+        selectedCategories: [...CATEGORIES],
+        selectedEvent: undefined,
+      }
+    }
+
     case "addEvent": {
       return {
         ...calendarState,

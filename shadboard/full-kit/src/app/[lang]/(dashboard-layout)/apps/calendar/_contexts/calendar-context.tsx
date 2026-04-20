@@ -1,6 +1,12 @@
 "use client"
 
-import { createContext, useReducer, useState } from "react"
+import {
+  createContext,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react"
 
 import type { CalendarApi } from "@fullcalendar/core/index.js"
 import type { ReactNode } from "react"
@@ -11,33 +17,45 @@ import type {
   EventWithoutIdType,
 } from "../types"
 
+import { CATEGORIES } from "../constants"
 import { CalendarReducer } from "../_reducers/calendar-reducer"
 
-// Create Kanban context
 export const CalendarContext = createContext<CalendarContextType | undefined>(
   undefined
 )
 
 export function CalendarProvider({
   events,
-  categories,
+  categories = CATEGORIES,
+  allowAddEvent = true,
+  refetchBoardEvents,
   children,
 }: {
   events: EventType[]
-  categories: CategoryType[]
+  categories?: CategoryType[]
+  allowAddEvent?: boolean
+  refetchBoardEvents?: () => void
   children: ReactNode
 }) {
+  const catList = categories.length ? categories : CATEGORIES
+
   const [calendarState, dispatch] = useReducer(CalendarReducer, {
     initalEvents: events,
     events,
-    selectedCategories: [...categories],
+    selectedCategories: [...catList],
   })
 
-  // State management
   const [calendarApi, setCalendarApi] = useState<null | CalendarApi>(null)
   const [eventSidebarIsOpen, setEventSidebarIsOpen] = useState(false)
 
-  // Handlers for event actions
+  const eventsSyncKey = useRef<string>("")
+  useEffect(() => {
+    const key = events.map((e) => e.id).join("|")
+    if (key === eventsSyncKey.current) return
+    eventsSyncKey.current = key
+    dispatch({ type: "replaceEvents", events })
+  }, [events])
+
   const handleAddEvent = (event: EventWithoutIdType) => {
     dispatch({
       type: "addEvent",
@@ -53,7 +71,6 @@ export function CalendarProvider({
     dispatch({ type: "deleteEvent", eventId })
   }
 
-  // Selection handlers
   const handleSelectEvent = (event?: EventType) => {
     dispatch({ type: "selectEvent", event: event })
   }
@@ -69,7 +86,8 @@ export function CalendarProvider({
   return (
     <CalendarContext.Provider
       value={{
-        allCategories: categories,
+        allCategories: catList,
+        allowAddEvent,
         calendarState,
         calendarApi,
         setCalendarApi,
@@ -81,6 +99,7 @@ export function CalendarProvider({
         handleSelectEvent,
         handleSelectCategory,
         handleSelectAllCategories,
+        refetchBoardEvents,
       }}
     >
       {children}

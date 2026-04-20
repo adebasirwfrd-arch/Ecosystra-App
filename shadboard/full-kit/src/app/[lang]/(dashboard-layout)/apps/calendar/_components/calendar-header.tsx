@@ -10,7 +10,8 @@ import { INITIAL_VIEW } from "../constants"
 import { EventFilters } from "./event-filters"
 
 export function CalendarHeader() {
-  const { calendarApi, setEventSidebarIsOpen } = useCalendarContext()
+  const { allowAddEvent, calendarApi, setEventSidebarIsOpen } =
+    useCalendarContext()
   const [currentView, setCurrentView] = useState(INITIAL_VIEW)
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
 
@@ -82,14 +83,16 @@ export function CalendarHeader() {
     <CardHeader className="justify-between items-center gap-4 space-y-0 md:flex-row">
       <div className="flex flex-wrap-reverse justify-center items-center gap-4">
         <div className="flex gap-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEventSidebarIsOpen(true)}
-            aria-label="Add new event"
-          >
-            <CalendarPlus className="h-4 w-4" />
-          </Button>
+          {allowAddEvent ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEventSidebarIsOpen(true)}
+              aria-label="Add new event"
+            >
+              <CalendarPlus className="h-4 w-4" />
+            </Button>
+          ) : null}
           <EventFilters />
           <Button
             variant="outline"
