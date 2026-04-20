@@ -1,18 +1,17 @@
 import { addDays, parseISO, startOfDay } from "date-fns"
 
 import type {
-  CategoryType,
-  EcosystraCalendarMeta,
-  EventType,
-} from "../types"
+  GqlBoard,
+  GqlBoardItem,
+} from "@/components/ecosystra/hooks/use-ecosystra-board-apollo"
+import type { CategoryType, EcosystraCalendarMeta, EventType } from "../types"
 
-import type { GqlBoard, GqlBoardItem } from "@/components/ecosystra/hooks/use-ecosystra-board-apollo"
-
-import { CATEGORIES } from "../constants"
 import {
   formatTimelineRange,
   parseTimelineRange,
 } from "@/lib/ecosystra/board-timeline-format"
+
+import { CATEGORIES } from "../constants"
 
 function categoryFromSeed(seed: string): CategoryType {
   let h = 0
@@ -39,11 +38,28 @@ function readTimelineLabel(item: GqlBoardItem): string {
   return tl && tl !== "—" ? tl : ""
 }
 
+function readZegoRoomId(item: GqlBoardItem): string {
+  const d = (item.dynamicData ?? {}) as Record<string, unknown>
+  const r = typeof d.zegoRoomId === "string" ? d.zegoRoomId.trim() : ""
+  return r
+}
+
+/** Prefer due date; else first day of timeline range (for meeting chip placement). */
+function meetingAnchorDay(item: GqlBoardItem): Date | null {
+  const dueIso = readDueIso(item, false)
+  if (dueIso) {
+    return startOfDay(parseISO(`${dueIso}T12:00:00`))
+  }
+  const tl = readTimelineLabel(item)
+  if (!tl) return null
+  const range = parseTimelineRange(tl)
+  return range?.from ? startOfDay(range.from) : null
+}
+
 function collectRootItems(
   board: GqlBoard
 ): { item: GqlBoardItem; group: { id: string; name: string } }[] {
-  const out: { item: GqlBoardItem; group: { id: string; name: string } }[] =
-    []
+  const out: { item: GqlBoardItem; group: { id: string; name: string } }[] = []
   for (const g of board.groups ?? []) {
     for (const it of g.items) {
       if (it.parentItemId) continue
@@ -54,7 +70,9 @@ function collectRootItems(
 }
 
 /** Maps Ecosystra board root tasks to FullCalendar events (due + timeline). */
-export function boardToCalendarEvents(board: GqlBoard | undefined): EventType[] {
+export function boardToCalendarEvents(
+  board: GqlBoard | undefined
+): EventType[] {
   if (!board?.groups?.length) return []
 
   const role = (board.viewerWorkspaceRole ?? "MEMBER").toUpperCase()
@@ -70,6 +88,7 @@ export function boardToCalendarEvents(board: GqlBoard | undefined): EventType[] 
       taskName: item.name,
       groupId: group.id,
       boardId: board.id,
+      workspaceId: board.workspaceId,
       groupName: group.name,
       dynamicDataSnapshot: snapshot,
       viewerWorkspaceRole: role,
@@ -123,6 +142,32 @@ export function boardToCalendarEvents(board: GqlBoard | undefined): EventType[] 
         })
       }
     }
+
+    const roomId = readZegoRoomId(item)
+    if (roomId) {
+      const anchor = meetingAnchorDay(item)
+      if (anchor) {
+        const start = anchor
+        const end = addDays(start, 1)
+        events.push({
+          id: `${item.id}:meeting`,
+          title: `${item.name} · Video meeting`,
+          allDay: true,
+          start,
+          end,
+          extendedProps: {
+            category: categoryFromSeed(`${item.id}-meet`),
+            description:
+              typeof d.notesText === "string" ? d.notesText : undefined,
+            ecosystra: {
+              ...baseMeta,
+              eventKind: "meeting",
+              zegoRoomId: roomId,
+            },
+          },
+        })
+      }
+    }
   }
 
   return events
@@ -135,6 +180,7 @@ export function mergeTaskDynamicFromCalendarForm(input: {
   dueDateStart: Date
   timelineStart: Date
   timelineEnd: Date
+  zegoRoomId: string | null
 }): Record<string, unknown> {
   const dueIso = `${input.dueDateStart.getFullYear()}-${String(input.dueDateStart.getMonth() + 1).padStart(2, "0")}-${String(input.dueDateStart.getDate()).padStart(2, "0")}`
   const m = input.dueDateStart.toLocaleString("en-US", { month: "short" })
@@ -147,7 +193,7 @@ export function mergeTaskDynamicFromCalendarForm(input: {
   }
   const timelineLabel = formatTimelineRange(range)
 
-  return {
+  const next: Record<string, unknown> = {
     ...input.snapshot,
     taskStatus: input.taskStatus,
     notesText: input.notesText,
@@ -155,4 +201,13 @@ export function mergeTaskDynamicFromCalendarForm(input: {
     dueDate: dueDisplay,
     timeline: timelineLabel,
   }
+
+  const trimmed = input.zegoRoomId?.trim() ?? ""
+  if (trimmed.length > 0) {
+    next.zegoRoomId = trimmed
+  } else {
+    delete next.zegoRoomId
+  }
+
+  return next
 }

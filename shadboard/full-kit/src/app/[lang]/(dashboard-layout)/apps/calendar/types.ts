@@ -36,8 +36,12 @@ export type EcosystraCalendarMeta = {
   taskName: string
   groupId: string
   boardId: string
+  /** Workspace roster for people / invites (calendar ↔ board). */
+  workspaceId: string
   groupName: string
-  eventKind: "due" | "timeline"
+  eventKind: "due" | "timeline" | "meeting"
+  /** ZEGOCLOUD room id when video meeting is enabled for this task. */
+  zegoRoomId?: string
   dynamicDataSnapshot: Record<string, unknown>
   viewerWorkspaceRole: string
   isSubitem: boolean

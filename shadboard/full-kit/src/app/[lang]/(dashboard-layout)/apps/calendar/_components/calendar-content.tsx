@@ -29,6 +29,9 @@ const eventColors: Record<CategoryType, string> = {
   Miscellaneous: "hsl(var(--primary))",
 }
 
+/** Ecosystra “Olo” accent for video meetings (distinct from board-driven categories). */
+const ECOSYSTRA_MEETING_COLOR = "#00FFCC"
+
 export function CalendarContent() {
   const direction = useDirection()
   const {
@@ -102,7 +105,10 @@ export function CalendarContent() {
     (event: EventType): EventSourceInput => ({
       ...event,
       editable: !event.extendedProps?.ecosystra,
-      color: eventColors[event.extendedProps.category],
+      color:
+        event.extendedProps?.ecosystra?.eventKind === "meeting"
+          ? ECOSYSTRA_MEETING_COLOR
+          : eventColors[event.extendedProps.category],
     })
   ) as EventInput[]
 

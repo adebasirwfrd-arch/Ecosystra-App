@@ -55,7 +55,7 @@ const nextConfig = {
   pageExtensions: ["js", "jsx", "ts", "tsx"],
 
   // See https://lucide.dev/guide/packages/lucide-react#nextjs-example
-  transpilePackages: ["lucide-react"],
+  transpilePackages: ["lucide-react", "@zegocloud/zego-uikit-prebuilt"],
   experimental: {
     // Board file uploads use Server Actions; default body limit is 1MB.
     serverActions: {
@@ -78,6 +78,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+
+  // Default is true (dev double-mount). Only uncomment to debug Zego if generation-guard logs still fail.
+  // reactStrictMode: false,
 
   // See https://nextjs.org/docs/app/building-your-application/routing/redirecting#redirects-in-nextconfigjs
   async redirects() {

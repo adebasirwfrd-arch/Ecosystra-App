@@ -344,3 +344,122 @@ export async function sendTaskAssigneeInviteEmail(
   console.info("[brevo] invite email sent", payload.toEmail);
   return { ok: true };
 }
+
+export type VideoMeetingInviteEmailPayload = {
+  toEmail: string
+  toName?: string | null
+  taskTitle: string
+  groupName?: string | null
+  roomId: string
+  joinUrl: string
+  inviterName: string
+}
+
+function buildVideoMeetingInviteHtml(p: VideoMeetingInviteEmailPayload): string {
+  const greeting = p.toName?.trim()
+    ? `Hello ${escapeHtml(p.toName.trim())},`
+    : "Hello,"
+  const groupLine =
+    p.groupName != null && p.groupName.trim()
+      ? `<tr><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;width:120px">Group</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#0f172a;font-weight:500">${escapeHtml(
+          p.groupName.trim()
+        )}</td></tr>`
+      : ""
+  const hrefSafe = p.joinUrl.replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>Meeting invitation</title></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Inter,Segoe UI,system-ui,-apple-system,sans-serif;color:#0f172a;">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    ${escapeHtml(p.taskTitle)} — video meeting on Ecosystra.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 10px 40px rgba(15,23,42,0.08);border:1px solid #e2e8f0;">
+        <tr><td style="height:4px;background:linear-gradient(90deg,#00FFCC,#0073ea);"></td></tr>
+        <tr><td style="padding:28px 32px 8px 32px;">
+          <p style="margin:0 0 6px 0;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;font-weight:600;">Ecosystra · Video meeting</p>
+          <h1 style="margin:0;font-size:22px;line-height:1.25;font-weight:700;color:#0f172a;">You’re invited to join a meeting</h1>
+        </td></tr>
+        <tr><td style="padding:8px 32px 0 32px;">
+          <p style="margin:0;font-size:15px;line-height:1.6;color:#475569;">${greeting}</p>
+          <p style="margin:16px 0 0 0;font-size:15px;line-height:1.6;color:#475569;"><strong style="color:#0f172a;">${escapeHtml(
+            p.inviterName
+          )}</strong> invited you to a scheduled video call for <strong style="color:#0f172a;">${escapeHtml(
+    p.taskTitle
+  )}</strong>. Use the secure link below to open the meeting preview and join when you’re ready.</p>
+        </td></tr>
+        <tr><td style="padding:24px 32px 8px 32px;">
+          <table role="presentation" width="100%" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+            <tr><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;width:120px">Task</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#0f172a;font-weight:500">${escapeHtml(
+              p.taskTitle
+            )}</td></tr>
+            ${groupLine}
+            <tr><td style="padding:10px 14px;font-size:13px;color:#64748b;width:120px;vertical-align:top">Room</td><td style="padding:10px 14px;font-size:12px;color:#0f172a;font-family:ui-monospace,monospace;word-break:break-all">${escapeHtml(
+              p.roomId
+            )}</td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:24px 32px 8px 32px;" align="center">
+          <a href="${hrefSafe}" style="display:inline-block;padding:14px 28px;background:#0073ea;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;letter-spacing:0.02em;">Join meeting</a>
+        </td></tr>
+        <tr><td style="padding:8px 32px 28px 32px;">
+          <p style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;text-align:center;">If the button does not work, copy and paste this link into your browser:<br/><span style="word-break:break-all;color:#64748b;">${escapeHtml(
+            p.joinUrl
+          )}</span></p>
+        </td></tr>
+        <tr><td style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+          <p style="margin:0;font-size:11px;line-height:1.5;color:#94a3b8;text-align:center;">You received this because someone shared this meeting link with your address. Sign in to Ecosystra to join the call.</p>
+          <p style="margin:10px 0 0 0;font-size:11px;color:#cbd5e1;text-align:center;">© ${new Date().getUTCFullYear()} Ecosystra · Delivered via Brevo</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
+}
+
+/** Transactional invite for ZEGOCLOUD video meeting — external recipients OK. */
+export async function sendVideoMeetingInviteEmail(
+  p: VideoMeetingInviteEmailPayload
+): Promise<{ ok: boolean; message?: string }> {
+  const key = apiKey()
+  if (!key) {
+    console.warn("[brevo] BREVO_API_KEY not set — skip meeting invite", p.toEmail)
+    return { ok: false, message: "no_api_key" }
+  }
+
+  const senderEmail =
+    process.env.BREVO_SENDER_EMAIL?.trim() || "noreply@example.com"
+  const senderName = process.env.BREVO_SENDER_NAME?.trim() || "Ecosystra"
+  const subject = `[Ecosystra] Meeting: ${p.taskTitle.slice(0, 80)}${p.taskTitle.length > 80 ? "…" : ""}`
+
+  const htmlContent = buildVideoMeetingInviteHtml(p)
+
+  const res = await fetch(`${BREVO_API}/smtp/email`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": key,
+    },
+    body: JSON.stringify({
+      sender: { name: senderName, email: senderEmail },
+      to: [{ email: p.toEmail, name: p.toName?.trim() || p.toEmail }],
+      subject,
+      htmlContent,
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error(
+      "[brevo] meeting invite failed",
+      res.status,
+      p.toEmail,
+      errText.slice(0, 400)
+    )
+    return { ok: false, message: errText }
+  }
+  console.info("[brevo] meeting invite sent", p.toEmail)
+  return { ok: true }
+}
