@@ -14,6 +14,7 @@ import {
 import { cn, getInitials } from "@/lib/utils"
 
 import { useWebRtcCall } from "../_contexts/webrtc-call-context"
+import { ChatCallMediaSettings } from "./chat-call-media-settings"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -50,6 +51,7 @@ export function ChatCallOverlay() {
     acceptIncoming,
     rejectIncoming,
     endCall,
+    speakerDeviceId,
   } = useWebRtcCall()
 
   /** Separate refs so outgoing vs live dialogs never fight for one ref (black preview). */
@@ -103,6 +105,16 @@ export function ChatCallOverlay() {
       if (a) a.srcObject = null
     }
   }, [remoteStream, hasRemoteVideo])
+
+  useLayoutEffect(() => {
+    const sink = speakerDeviceId || ""
+    const apply = (el: HTMLMediaElement | null) => {
+      if (!el || typeof el.setSinkId !== "function") return
+      void el.setSinkId(sink).catch(() => undefined)
+    }
+    if (hasRemoteVideo) apply(remoteVideoRef.current)
+    else apply(remoteAudioRef.current)
+  }, [speakerDeviceId, hasRemoteVideo, remoteStream])
 
   const remoteInitials = getInitials(remoteLabel || "?")
 
@@ -168,10 +180,13 @@ export function ChatCallOverlay() {
       <Dialog open={status === "outgoing"} onOpenChange={(o) => !o && endCall()}>
         <DialogContent
           className={cn(
-            "overflow-hidden border-0 bg-gradient-to-b from-zinc-900 to-zinc-950 p-0 sm:max-w-md",
+            "relative overflow-hidden border-0 bg-gradient-to-b from-zinc-900 to-zinc-950 p-0 sm:max-w-md",
             hideDialogClose
           )}
         >
+          <div className="absolute end-3 top-3 z-10">
+            <ChatCallMediaSettings showVideo={callUsesVideo} />
+          </div>
           <div className="flex flex-col items-center gap-6 px-6 py-10 text-center">
             {callUsesVideo && localStream ? (
               <div className="relative aspect-video w-full max-w-xs overflow-hidden rounded-2xl border-2 border-white/10 bg-black shadow-2xl">
@@ -303,6 +318,7 @@ export function ChatCallOverlay() {
 
             {/* Control bar — Teams-like */}
             <div className="flex shrink-0 items-center justify-center gap-3 border-t border-white/10 bg-zinc-900/95 px-4 py-4 backdrop-blur-md sm:gap-4">
+              <ChatCallMediaSettings showVideo={callUsesVideo} />
               <Button
                 type="button"
                 size="icon"

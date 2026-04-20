@@ -85,6 +85,11 @@ function formatMediaDeviceError(e: unknown): string {
   return "Could not access camera or microphone"
 }
 
+export type ChatMediaDevice = {
+  deviceId: string
+  label: string
+}
+
 export type WebRtcCallContextValue = {
   status: CallStatus
   localStream: MediaStream | null
@@ -95,6 +100,19 @@ export type WebRtcCallContextValue = {
   channelReady: boolean
   micMuted: boolean
   cameraOff: boolean
+  /** Output device for remote audio (`""` = browser default). */
+  speakerDeviceId: string
+  audioInputDevices: ChatMediaDevice[]
+  videoInputDevices: ChatMediaDevice[]
+  audioOutputDevices: ChatMediaDevice[]
+  /** `deviceId` from the active local audio track (for Select value). */
+  currentMicrophoneDeviceId: string
+  /** `deviceId` from the active local video track. */
+  currentCameraDeviceId: string
+  refreshMediaDevices: () => Promise<void>
+  setMicrophoneDeviceId: (deviceId: string) => Promise<void>
+  setCameraDeviceId: (deviceId: string) => Promise<void>
+  setSpeakerDeviceId: (deviceId: string) => void
   toggleMic: () => void
   toggleCamera: () => void
   startAudioCall: () => Promise<void>
@@ -143,6 +161,25 @@ export function WebRtcCallProvider({
   const [remoteLabel, setRemoteLabel] = useState("")
   const [micMuted, setMicMuted] = useState(false)
   const [cameraOff, setCameraOff] = useState(false)
+  const [audioInputDevices, setAudioInputDevices] = useState<ChatMediaDevice[]>(
+    []
+  )
+  const [videoInputDevices, setVideoInputDevices] = useState<ChatMediaDevice[]>(
+    []
+  )
+  const [audioOutputDevices, setAudioOutputDevices] = useState<
+    ChatMediaDevice[]
+  >([])
+  const [speakerDeviceId, setSpeakerDeviceIdState] = useState("")
+
+  const micMutedRef = useRef(false)
+  const cameraOffRef = useRef(false)
+  useEffect(() => {
+    micMutedRef.current = micMuted
+  }, [micMuted])
+  useEffect(() => {
+    cameraOffRef.current = cameraOff
+  }, [cameraOff])
 
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -195,7 +232,147 @@ export function WebRtcCallProvider({
     setCallUsesVideo(true)
     setMicMuted(false)
     setCameraOff(false)
+    setAudioInputDevices([])
+    setVideoInputDevices([])
+    setAudioOutputDevices([])
+    setSpeakerDeviceIdState("")
   }, [])
+
+  const refreshMediaDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices()
+      const fallback = (d: MediaDeviceInfo, i: number, prefix: string) =>
+        d.label || `${prefix} ${i + 1}`
+      setAudioInputDevices(
+        list
+          .filter((d) => d.kind === "audioinput")
+          .map((d, i) => ({
+            deviceId: d.deviceId,
+            label: fallback(d, i, "Microphone"),
+          }))
+      )
+      setVideoInputDevices(
+        list
+          .filter((d) => d.kind === "videoinput")
+          .map((d, i) => ({
+            deviceId: d.deviceId,
+            label: fallback(d, i, "Camera"),
+          }))
+      )
+      setAudioOutputDevices(
+        list
+          .filter((d) => d.kind === "audiooutput")
+          .map((d, i) => ({
+            deviceId: d.deviceId,
+            label: fallback(d, i, "Speaker"),
+          }))
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    const md = navigator.mediaDevices
+    if (!md?.addEventListener) return
+    const onDeviceChange = () => {
+      void refreshMediaDevices()
+    }
+    md.addEventListener("devicechange", onDeviceChange)
+    return () => md.removeEventListener("devicechange", onDeviceChange)
+  }, [refreshMediaDevices])
+
+  const replaceLocalStreamTracks = useCallback((tracks: MediaStreamTrack[]) => {
+    const next = new MediaStream(tracks)
+    localStreamRef.current = next
+    setLocalStream(next)
+  }, [])
+
+  const setSpeakerDeviceId = useCallback((deviceId: string) => {
+    setSpeakerDeviceIdState(deviceId === "__default__" ? "" : deviceId)
+  }, [])
+
+  const setMicrophoneDeviceId = useCallback(
+    async (deviceId: string) => {
+      const stream = localStreamRef.current
+      const pc = pcRef.current
+      if (!stream || !navigator.mediaDevices?.getUserMedia) return
+      try {
+        const temp = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: deviceId } },
+          video: false,
+        })
+        const newTrack = temp.getAudioTracks()[0]
+        if (!newTrack) {
+          temp.getTracks().forEach((t) => t.stop())
+          return
+        }
+        newTrack.enabled = !micMutedRef.current
+        for (const t of stream.getAudioTracks()) {
+          stream.removeTrack(t)
+          t.stop()
+        }
+        stream.addTrack(newTrack)
+        temp.getTracks().forEach((t) => {
+          if (t !== newTrack) t.stop()
+        })
+        const sender = pc?.getSenders().find((s) => s.track?.kind === "audio")
+        await sender?.replaceTrack(newTrack)
+        replaceLocalStreamTracks([...stream.getTracks()])
+        void refreshMediaDevices()
+      } catch (e) {
+        toast.error(formatMediaDeviceError(e))
+      }
+    },
+    [refreshMediaDevices, replaceLocalStreamTracks]
+  )
+
+  const setCameraDeviceId = useCallback(
+    async (deviceId: string) => {
+      const stream = localStreamRef.current
+      const pc = pcRef.current
+      if (!stream || !navigator.mediaDevices?.getUserMedia) return
+      if (stream.getVideoTracks().length === 0) return
+      try {
+        const temp = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { deviceId: { exact: deviceId } },
+        })
+        const newTrack = temp.getVideoTracks()[0]
+        if (!newTrack) {
+          temp.getTracks().forEach((t) => t.stop())
+          return
+        }
+        newTrack.enabled = !cameraOffRef.current
+        for (const t of stream.getVideoTracks()) {
+          stream.removeTrack(t)
+          t.stop()
+        }
+        stream.addTrack(newTrack)
+        temp.getTracks().forEach((t) => {
+          if (t !== newTrack) t.stop()
+        })
+        const sender = pc?.getSenders().find((s) => s.track?.kind === "video")
+        await sender?.replaceTrack(newTrack)
+        replaceLocalStreamTracks([...stream.getTracks()])
+        void refreshMediaDevices()
+      } catch (e) {
+        toast.error(formatMediaDeviceError(e))
+      }
+    },
+    [refreshMediaDevices, replaceLocalStreamTracks]
+  )
+
+  const currentMicrophoneDeviceId = useMemo(
+    () => localStream?.getAudioTracks()[0]?.getSettings().deviceId ?? "",
+    [localStream]
+  )
+
+  const currentCameraDeviceId = useMemo(
+    () => localStream?.getVideoTracks()[0]?.getSettings().deviceId ?? "",
+    [localStream]
+  )
 
   const flushIce = useCallback(async (pc: RTCPeerConnection) => {
     const buf = iceBufferRef.current.splice(0, iceBufferRef.current.length)
@@ -462,6 +639,7 @@ export function WebRtcCallProvider({
 
       localStreamRef.current = stream
       setLocalStream(stream)
+      void refreshMediaDevices()
 
       if (!channelReadyRef.current) {
         const waitToast = toast.loading("Connecting signaling…")
@@ -502,7 +680,16 @@ export function WebRtcCallProvider({
         toast.error(e instanceof Error ? e.message : "Could not start call")
       }
     },
-    [chat, cleanupMedia, currentUser.id, otherMembers.length, routeThreadId, sendSignal, setupPeerConnection]
+    [
+      chat,
+      cleanupMedia,
+      currentUser.id,
+      otherMembers.length,
+      refreshMediaDevices,
+      routeThreadId,
+      sendSignal,
+      setupPeerConnection,
+    ]
   )
 
   const acceptIncoming = useCallback(async () => {
@@ -531,6 +718,7 @@ export function WebRtcCallProvider({
 
     localStreamRef.current = stream
     setLocalStream(stream)
+    void refreshMediaDevices()
 
     try {
       const pc = setupPeerConnection(pending.callId)
@@ -562,6 +750,7 @@ export function WebRtcCallProvider({
     cleanupMedia,
     currentUser.id,
     flushIce,
+    refreshMediaDevices,
     routeThreadId,
     sendSignal,
     setupPeerConnection,
@@ -591,6 +780,16 @@ export function WebRtcCallProvider({
       remoteLabel,
       micMuted,
       cameraOff,
+      speakerDeviceId,
+      audioInputDevices,
+      videoInputDevices,
+      audioOutputDevices,
+      currentMicrophoneDeviceId,
+      currentCameraDeviceId,
+      refreshMediaDevices,
+      setMicrophoneDeviceId,
+      setCameraDeviceId,
+      setSpeakerDeviceId,
       toggleMic,
       toggleCamera,
       startAudioCall: () => startCall(false),
@@ -601,19 +800,29 @@ export function WebRtcCallProvider({
     }),
     [
       acceptIncoming,
+      audioInputDevices,
+      audioOutputDevices,
       callUsesVideo,
       cameraOff,
       channelReady,
+      currentCameraDeviceId,
+      currentMicrophoneDeviceId,
       endCall,
       localStream,
       micMuted,
+      refreshMediaDevices,
       rejectIncoming,
       remoteLabel,
       remoteStream,
+      setCameraDeviceId,
+      setMicrophoneDeviceId,
+      setSpeakerDeviceId,
+      speakerDeviceId,
       startCall,
       status,
       toggleCamera,
       toggleMic,
+      videoInputDevices,
     ]
   )
 
