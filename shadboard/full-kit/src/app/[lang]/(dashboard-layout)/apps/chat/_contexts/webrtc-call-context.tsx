@@ -70,6 +70,10 @@ export type WebRtcCallContextValue = {
   callUsesVideo: boolean
   remoteLabel: string
   channelReady: boolean
+  micMuted: boolean
+  cameraOff: boolean
+  toggleMic: () => void
+  toggleCamera: () => void
   startAudioCall: () => Promise<void>
   startVideoCall: () => Promise<void>
   acceptIncoming: () => Promise<void>
@@ -114,6 +118,8 @@ export function WebRtcCallProvider({
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [callUsesVideo, setCallUsesVideo] = useState(true)
   const [remoteLabel, setRemoteLabel] = useState("")
+  const [micMuted, setMicMuted] = useState(false)
+  const [cameraOff, setCameraOff] = useState(false)
 
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -164,6 +170,8 @@ export function WebRtcCallProvider({
     setStatus("idle")
     setRemoteLabel("")
     setCallUsesVideo(true)
+    setMicMuted(false)
+    setCameraOff(false)
   }, [])
 
   const flushIce = useCallback(async (pc: RTCPeerConnection) => {
@@ -192,6 +200,26 @@ export function WebRtcCallProvider({
     [cleanupMedia, currentUser.id, sendSignal]
   )
 
+  const toggleMic = useCallback(() => {
+    setMicMuted((m) => {
+      const next = !m
+      localStreamRef.current?.getAudioTracks().forEach((t) => {
+        t.enabled = !next
+      })
+      return next
+    })
+  }, [])
+
+  const toggleCamera = useCallback(() => {
+    setCameraOff((c) => {
+      const next = !c
+      localStreamRef.current?.getVideoTracks().forEach((t) => {
+        t.enabled = !next
+      })
+      return next
+    })
+  }, [])
+
   const setupPeerConnection = useCallback(
     (callId: string) => {
       const pc = new RTCPeerConnection({
@@ -211,8 +239,19 @@ export function WebRtcCallProvider({
       }
 
       pc.ontrack = (ev) => {
-        const [stream] = ev.streams
-        if (stream) setRemoteStream(stream)
+        setRemoteStream((prev) => {
+          const out = new MediaStream()
+          const add = (t: MediaStreamTrack) => {
+            if (!out.getTracks().some((x) => x.id === t.id)) out.addTrack(t)
+          }
+          prev?.getTracks().forEach(add)
+          if (ev.streams[0]) {
+            ev.streams[0].getTracks().forEach(add)
+          } else if (ev.track) {
+            add(ev.track)
+          }
+          return out
+        })
         setStatus("live")
       }
 
@@ -388,6 +427,8 @@ export function WebRtcCallProvider({
 
       try {
         setCallUsesVideo(video)
+        const callee = otherMembers[0]
+        setRemoteLabel(callee?.name ?? "Contact")
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: video ? { facingMode: "user" } : false,
@@ -487,6 +528,10 @@ export function WebRtcCallProvider({
       remoteStream,
       callUsesVideo,
       remoteLabel,
+      micMuted,
+      cameraOff,
+      toggleMic,
+      toggleCamera,
       startAudioCall: () => startCall(false),
       startVideoCall: () => startCall(true),
       acceptIncoming,
@@ -496,14 +541,18 @@ export function WebRtcCallProvider({
     [
       acceptIncoming,
       callUsesVideo,
+      cameraOff,
       channelReady,
       endCall,
       localStream,
+      micMuted,
       rejectIncoming,
       remoteLabel,
       remoteStream,
       startCall,
       status,
+      toggleCamera,
+      toggleMic,
     ]
   )
 
