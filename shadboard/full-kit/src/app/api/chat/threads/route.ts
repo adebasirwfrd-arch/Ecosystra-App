@@ -89,7 +89,7 @@ export async function POST(req: Request) {
       ...memberUserIds.map((userId) => ({ userId })),
     ]
 
-    await withPrismaRetry(() =>
+    const created = await withPrismaRetry(() =>
       db.ecoChatThread.create({
         data: {
           name,
@@ -98,11 +98,12 @@ export async function POST(req: Request) {
             create: memberCreates,
           },
         },
+        select: { id: true },
       })
     )
 
     const chats = await loadChatsForEcoUserId(eco.id)
-    return NextResponse.json({ chats })
+    return NextResponse.json({ chats, createdThreadId: created.id })
   } catch (e) {
     if (isChatSchemaMissingError(e)) {
       return NextResponse.json({ error: CHAT_DB_SETUP_MESSAGE }, { status: 503 })

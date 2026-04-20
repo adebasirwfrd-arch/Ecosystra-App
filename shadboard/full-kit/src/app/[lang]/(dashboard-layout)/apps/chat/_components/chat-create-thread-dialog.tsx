@@ -26,11 +26,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -148,10 +143,10 @@ export function ChatCreateThreadDialog({
   return (
     <Dialog open={open} onOpenChange={handleDialogChange}>
       <DialogContent
-        className="gap-0 overflow-hidden rounded-xl border bg-background p-0 shadow-lg sm:max-w-lg"
+        className="flex max-h-[min(92vh,720px)] flex-col gap-0 overflow-hidden rounded-xl border bg-background p-0 shadow-lg sm:max-w-lg"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="border-b bg-muted/40 px-6 py-4">
+        <div className="shrink-0 border-b bg-muted/40 px-6 py-4">
           <DialogHeader className="gap-1 text-left">
             <DialogTitle className="text-lg font-semibold tracking-tight">
               New chat
@@ -163,7 +158,7 @@ export function ChatCreateThreadDialog({
           </DialogHeader>
         </div>
 
-        <div className="space-y-5 px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-6 py-5">
           <div className="space-y-2">
             <Label htmlFor="chat-title" className="text-xs font-medium">
               Chat title
@@ -220,71 +215,78 @@ export function ChatCreateThreadDialog({
                   )}
                 </div>
 
-                <Popover open={peopleOpen} onOpenChange={setPeopleOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={peopleOpen}
-                      className="h-10 w-full justify-between font-normal"
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={peopleOpen}
+                    className="h-10 w-full justify-between font-normal"
+                    onClick={() => {
+                      setTaskOpen(false)
+                      setPeopleOpen((o) => !o)
+                    }}
+                  >
+                    <span className="flex items-center gap-2 truncate text-muted-foreground">
+                      <UserPlus className="size-4 shrink-0 opacity-70" />
+                      Add people…
+                    </span>
+                    <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                  </Button>
+                  {peopleOpen ? (
+                    <div
+                      className="relative z-10 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+                      onMouseDown={(e) => e.stopPropagation()}
                     >
-                      <span className="flex items-center gap-2 truncate text-muted-foreground">
-                        <UserPlus className="size-4 shrink-0 opacity-70" />
-                        Add people…
-                      </span>
-                      <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search by name or email…" />
-                      <CommandList className="max-h-56">
-                        <CommandEmpty>
-                          {users.length === 0
-                            ? "No other workspace users yet."
-                            : "No matching people."}
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {users.map((u) => {
-                            const on = selectedIds.includes(u.id)
-                            return (
-                              <CommandItem
-                                key={u.id}
-                                value={`${u.name} ${u.email}`}
-                                onSelect={() => toggleUser(u.id)}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 size-4 shrink-0",
-                                    on ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <Avatar className="size-7 mr-2">
-                                  <AvatarImage
-                                    src={u.avatarUrl ?? undefined}
-                                    alt=""
+                      <Command className="rounded-md">
+                        <CommandInput placeholder="Search by name or email…" />
+                        <CommandList className="max-h-56">
+                          <CommandEmpty>
+                            {users.length === 0
+                              ? "No other workspace users yet."
+                              : "No matching people."}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {users.map((u) => {
+                              const on = selectedIds.includes(u.id)
+                              return (
+                                <CommandItem
+                                  key={u.id}
+                                  value={`${u.id} ${u.name} ${u.email}`}
+                                  onSelect={() => toggleUser(u.id)}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 size-4 shrink-0",
+                                      on ? "opacity-100" : "opacity-0"
+                                    )}
                                   />
-                                  <AvatarFallback className="text-[10px]">
-                                    {getInitials(u.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex min-w-0 flex-1 flex-col">
-                                  <span className="truncate font-medium">
-                                    {u.name}
-                                  </span>
-                                  <span className="truncate text-xs text-muted-foreground">
-                                    {u.email}
-                                  </span>
-                                </div>
-                              </CommandItem>
-                            )
-                          })}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                                  <Avatar className="mr-2 size-7">
+                                    <AvatarImage
+                                      src={u.avatarUrl ?? undefined}
+                                      alt=""
+                                    />
+                                    <AvatarFallback className="text-[10px]">
+                                      {getInitials(u.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex min-w-0 flex-1 flex-col">
+                                    <span className="truncate font-medium">
+                                      {u.name}
+                                    </span>
+                                    <span className="truncate text-xs text-muted-foreground">
+                                      {u.email}
+                                    </span>
+                                  </div>
+                                </CommandItem>
+                              )
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </div>
+                  ) : null}
+                </div>
               </>
             )}
           </div>
@@ -299,92 +301,99 @@ export function ChatCreateThreadDialog({
             {loading ? (
               <Skeleton className="h-10 w-full rounded-md" />
             ) : (
-              <Popover open={taskOpen} onOpenChange={setTaskOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={taskOpen}
-                    className="h-10 w-full justify-between font-normal"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <ListTodo className="size-4 shrink-0 opacity-70" />
-                      {selectedTask ? (
-                        <span className="truncate">
-                          <span className="font-medium">{selectedTask.name}</span>
-                          {selectedTask.boardName ? (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              · {selectedTask.boardName}
-                            </span>
-                          ) : null}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          No task linked
-                        </span>
-                      )}
-                    </span>
-                    <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search tasks…" />
-                    <CommandList className="max-h-52">
-                      <CommandEmpty>
-                        {tasks.length === 0
-                          ? "No tasks in the database yet."
-                          : "No matching tasks."}
-                      </CommandEmpty>
-                      <CommandGroup>
-                        <CommandItem
-                          value="__none__"
-                          onSelect={() => {
-                            setTaskId(null)
-                            setTaskOpen(false)
-                          }}
-                        >
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={taskOpen}
+                  className="h-10 w-full justify-between font-normal"
+                  onClick={() => {
+                    setPeopleOpen(false)
+                    setTaskOpen((o) => !o)
+                  }}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <ListTodo className="size-4 shrink-0 opacity-70" />
+                    {selectedTask ? (
+                      <span className="truncate">
+                        <span className="font-medium">{selectedTask.name}</span>
+                        {selectedTask.boardName ? (
                           <span className="text-muted-foreground">
-                            Don&apos;t link a task
+                            {" "}
+                            · {selectedTask.boardName}
                           </span>
-                        </CommandItem>
-                        {tasks.map((t) => (
+                        ) : null}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        No task linked
+                      </span>
+                    )}
+                  </span>
+                  <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                </Button>
+                {taskOpen ? (
+                  <div
+                    className="relative z-10 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <Command className="rounded-md">
+                      <CommandInput placeholder="Search tasks…" />
+                      <CommandList className="max-h-52">
+                        <CommandEmpty>
+                          {tasks.length === 0
+                            ? "No tasks in the database yet."
+                            : "No matching tasks."}
+                        </CommandEmpty>
+                        <CommandGroup>
                           <CommandItem
-                            key={t.id}
-                            value={`${t.name} ${t.boardName}`}
+                            value="__none__"
                             onSelect={() => {
-                              setTaskId(t.id)
+                              setTaskId(null)
                               setTaskOpen(false)
                             }}
                           >
-                            <Check
-                              className={cn(
-                                "mr-2 size-4 shrink-0",
-                                taskId === t.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium">{t.name}</p>
-                              {t.boardName ? (
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {t.boardName}
-                                </p>
-                              ) : null}
-                            </div>
+                            <span className="text-muted-foreground">
+                              Don&apos;t link a task
+                            </span>
                           </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                          {tasks.map((t) => (
+                            <CommandItem
+                              key={t.id}
+                              value={`${t.id} ${t.name} ${t.boardName}`}
+                              onSelect={() => {
+                                setTaskId(t.id)
+                                setTaskOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 size-4 shrink-0",
+                                  taskId === t.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate font-medium">{t.name}</p>
+                                {t.boardName ? (
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {t.boardName}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t bg-muted/20 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-muted/20 px-6 py-4">
           <Button
             type="button"
             variant="ghost"

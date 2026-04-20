@@ -30,8 +30,9 @@ import { ChatThreadSearchDialog } from "./chat-thread-search-dialog"
 
 export function ChatHeaderActions({ chat }: { chat: ChatType }) {
   const { startAudioCall, startVideoCall, status } = useWebRtcCall()
-  const { updateThreadPreferences } = useChatContext()
+  const { currentUser, updateThreadPreferences } = useChatContext()
   const busy = status !== "idle"
+  const hasCallPeer = chat.users.some((u) => u.id !== currentUser.id)
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [blockOpen, setBlockOpen] = useState(false)
@@ -46,7 +47,12 @@ export function ChatHeaderActions({ chat }: { chat: ChatType }) {
           variant="ghost"
           size="icon"
           aria-label="Voice call"
-          disabled={busy}
+          title={
+            hasCallPeer
+              ? "Voice call"
+              : "Add people to this chat to start a call"
+          }
+          disabled={busy || !hasCallPeer}
           onClick={() => void startAudioCall()}
         >
           <Phone className="size-4" />
@@ -56,7 +62,12 @@ export function ChatHeaderActions({ chat }: { chat: ChatType }) {
           variant="ghost"
           size="icon"
           aria-label="Video call"
-          disabled={busy}
+          title={
+            hasCallPeer
+              ? "Video call"
+              : "Add people to this chat to start a call"
+          }
+          disabled={busy || !hasCallPeer}
           onClick={() => void startVideoCall()}
         >
           <Video className="size-4" />

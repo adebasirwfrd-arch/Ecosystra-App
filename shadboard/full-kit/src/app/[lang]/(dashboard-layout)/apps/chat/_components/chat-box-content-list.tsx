@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils"
 
 import { useChatContext } from "../_hooks/use-chat-context"
 import { useSettings } from "@/hooks/use-settings"
-import { ScrollBar } from "@/components/ui/scroll-area"
 import { MessageBubble } from "./message-bubble"
 
 export function ChatBoxContentList({
@@ -88,7 +87,12 @@ export function ChatBoxContentList({
           })}
         </ul>
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar orientation="vertical" />
+      <ScrollAreaPrimitive.ScrollAreaScrollbar
+        orientation="vertical"
+        className="flex h-full w-2.5 touch-none select-none border-l border-l-transparent p-[1px] transition-colors"
+      >
+        <ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-border" />
+      </ScrollAreaPrimitive.ScrollAreaScrollbar>
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )

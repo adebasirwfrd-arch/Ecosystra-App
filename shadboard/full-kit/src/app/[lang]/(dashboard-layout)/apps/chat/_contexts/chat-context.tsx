@@ -327,11 +327,17 @@ export function ChatProvider({
         toast.error(msg)
         return false
       }
-      const data = (await res.json()) as { chats?: unknown }
+      const data = (await res.json()) as {
+        chats?: unknown
+        createdThreadId?: string
+      }
       const chats = reviveChatsFromJson(data.chats)
       dispatch({ type: "hydrateChats", chats })
       toast.success("Chat created")
-      const id = chats[0]?.id
+      const id =
+        typeof data.createdThreadId === "string" && data.createdThreadId.trim()
+          ? data.createdThreadId.trim()
+          : chats[0]?.id
       if (id) {
         router.push(ensureLocalizedPathname(`/apps/chat/${id}`, locale))
       }
