@@ -44,16 +44,17 @@ import {
 } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { EcosystraZegoMeetingView } from "@/components/ecosystra/ecosystra-meeting"
+import { sanitizeZegoRoomId } from "@/lib/ecosystra/zego-room-id"
 import { mergeTaskDynamicFromCalendarForm } from "../_lib/board-to-calendar-events"
 import { collectTaskPersonUserIds } from "../_lib/task-person-ids"
 
 function generateZegoRoomId(itemId: string): string {
-  const safe = itemId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 24)
+  const safe = itemId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 48)
   const rand =
     typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
       : String(Date.now())
-  return `ecosystra_${safe}_${rand}`
+  return sanitizeZegoRoomId(`ecosystra_${safe}_${rand}`)
 }
 
 function gqlErr(e: unknown): string {

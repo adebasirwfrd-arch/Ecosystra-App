@@ -4,6 +4,7 @@ import { z } from "zod"
 import { jsonError, jsonFromZodError, jsonOk } from "@/lib/api/http"
 import { requireApiSession } from "@/lib/api/route-session"
 import { zegoTokenServerLog } from "@/lib/ecosystra/zego-meeting-log"
+import { sanitizeZegoRoomId } from "@/lib/ecosystra/zego-room-id"
 import { sanitizeZegoUserId } from "@/lib/ecosystra/zego-user-id"
 import { normalizeZegoServerSecret } from "@/lib/zego/zego-secret"
 import { generateToken04 } from "@/lib/zego/zegoServerAssistant"
@@ -11,7 +12,8 @@ import { generateToken04 } from "@/lib/zego/zegoServerAssistant"
 export const dynamic = "force-dynamic"
 
 const bodySchema = z.object({
-  roomID: z.string().min(1).max(128),
+  /** Raw from client (may contain hyphens); normalized before signing. */
+  roomID: z.string().min(1).max(256),
 })
 
 export async function POST(req: Request) {
@@ -119,12 +121,15 @@ export async function POST(req: Request) {
 
   const userID = sanitizeZegoUserId(String(gate.session.user?.id ?? "user"))
 
-  const { roomID } = parsed.data
+  const roomRaw = parsed.data.roomID
+  const roomID = sanitizeZegoRoomId(roomRaw)
   zegoTokenServerLog({
     phase: "inputs_ready",
     reqId,
     appID,
+    roomRawLen: roomRaw.length,
     roomIDLen: roomID.length,
+    roomIdSanitized: roomRaw !== roomID,
     zegoUserIDLen: userID.length,
     payloadPrivilege: "login+publish",
   })

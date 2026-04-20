@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ZegoUIKitPrebuilt } from "@zegocloud/zego-uikit-prebuilt"
 import { Loader2, UserPlus, X } from "lucide-react"
 
@@ -15,6 +15,7 @@ import {
   EcosystraMeetingInvitePanel,
   type MeetingInviteContext,
 } from "@/components/ecosystra/ecosystra-meeting-invite-panel"
+import { sanitizeZegoRoomId } from "@/lib/ecosystra/zego-room-id"
 import { sanitizeZegoUserId } from "@/lib/ecosystra/zego-user-id"
 
 function readShowPreJoinView(): boolean {
@@ -112,6 +113,11 @@ export function EcosystraZegoMeetingView({
 
   const uid = sanitizeZegoUserId(userID)
   const viewerId = viewerUserId?.trim() || userID
+  /** Hyphens / punctuation in stored task room ids break Zego login (20014 / 50120). */
+  const effectiveRoomId = useMemo(
+    () => sanitizeZegoRoomId(roomID),
+    [roomID]
+  )
 
   useEffect(() => {
     if (!open) {
@@ -133,8 +139,10 @@ export function EcosystraZegoMeetingView({
       phase: "effect_start",
       details: {
         generationAtStart: genAtStart,
-        roomID,
-        roomIDLength: roomID.length,
+        roomIDRaw: roomID,
+        roomID: effectiveRoomId,
+        roomIdSanitized: roomID !== effectiveRoomId,
+        roomIDLength: effectiveRoomId.length,
         userIdLen: uid.length,
         open,
         hasContainer: Boolean(containerRef.current),
@@ -192,7 +200,7 @@ export function EcosystraZegoMeetingView({
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomID }),
+          body: JSON.stringify({ roomID: effectiveRoomId }),
         })
         const fetchMs = Math.round(performance.now() - fetchStarted)
 
@@ -351,7 +359,7 @@ export function EcosystraZegoMeetingView({
           kitToken = ZegoUIKitPrebuilt.generateKitTokenForProduction(
             effectiveAppId,
             token,
-            roomID,
+            effectiveRoomId,
             kitUserId,
             displayName
           )
@@ -525,7 +533,7 @@ export function EcosystraZegoMeetingView({
           },
         })
 
-        setJoinedZegoUserIds(new Set([uid]))
+        setJoinedZegoUserIds(new Set([kitUserId]))
 
         zp.joinRoom({
           container: containerRef.current,
@@ -652,7 +660,7 @@ export function EcosystraZegoMeetingView({
       kitRef.current?.destroy()
       kitRef.current = null
     }
-  }, [open, roomID, uid])
+  }, [open, effectiveRoomId, uid])
 
   if (!open) return null
 
@@ -675,7 +683,7 @@ export function EcosystraZegoMeetingView({
       {inviteContext && invitePanelOpen ? (
         <div className="pointer-events-auto fixed right-3 top-14 z-[100] w-[min(calc(100vw-1.5rem),20rem)] max-md:left-3 max-md:right-3 max-md:w-auto">
           <EcosystraMeetingInvitePanel
-            roomId={roomID}
+            roomId={effectiveRoomId}
             invite={inviteContext}
             joinedZegoUserIds={joinedZegoUserIds}
             currentUserId={viewerId}
