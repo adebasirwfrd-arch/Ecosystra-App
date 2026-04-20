@@ -49,6 +49,15 @@ const nextConfig = {
     remotePatterns: supabaseStorageImageRemotePatterns(),
   },
 
+  // Prisma client is generated to `src/generated/prisma` (see prisma/schema.prisma). Next must ship the
+  // query-engine `.node` binary with serverless output; otherwise Vercel throws "could not locate … rhel-openssl-3.0.x".
+  outputFileTracingIncludes: {
+    "/**": ["./src/generated/prisma/**/*"],
+  },
+
+  // Avoid bundling Prisma in a way that drops native engines (see https://pris.ly/d/engine-not-found-nextjs)
+  serverExternalPackages: ["@prisma/client"],
+
   // pnpm workspace: node_modules are hoisted to workspace root, trace from there
   outputFileTracingRoot: workspaceRoot,
 
