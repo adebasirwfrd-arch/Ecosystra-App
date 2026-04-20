@@ -68,10 +68,14 @@ export async function POST(req: Request) {
     process.env.NEXT_PUBLIC_ZEGO_APP_ID ??
     ""
   ).trim()
-  // Console labels this "AppSign" (64 hex); some deployments only set ZEGO_APP_SIGN.
+  /**
+   * Prefer `ZEGO_APP_SIGN` (Console “AppSign”, 64 hex) over `ZEGO_SERVER_SECRET`.
+   * If both are set and the old order was SERVER_SECRET first, a mistaken 32-hex
+   * paste in ZEGO_SERVER_SECRET would shadow a valid full AppSign in ZEGO_APP_SIGN → 503.
+   */
   const secretRaw =
-    process.env.ZEGO_SERVER_SECRET?.trim() ||
     process.env.ZEGO_APP_SIGN?.trim() ||
+    process.env.ZEGO_SERVER_SECRET?.trim() ||
     ""
   if (!appIdRaw || !secretRaw) {
     zegoTokenServerLog({
@@ -82,7 +86,7 @@ export async function POST(req: Request) {
       durationMs: Date.now() - t0,
     })
     return jsonError(
-      "Zego is not configured on the server (need ZEGO_SERVER_SECRET or ZEGO_APP_SIGN, plus ZEGO_APP_ID)",
+      "Zego is not configured on the server (set ZEGO_APP_ID and ZEGO_APP_SIGN or ZEGO_SERVER_SECRET)",
       503
     )
   }
