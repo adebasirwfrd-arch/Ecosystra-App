@@ -69,7 +69,11 @@ export async function POST(req: Request) {
 
   const appIdRaw =
     process.env.ZEGO_APP_ID ?? process.env.NEXT_PUBLIC_ZEGO_APP_ID
-  const secretRaw = process.env.ZEGO_SERVER_SECRET
+  // Console labels this "AppSign" (64 hex); some deployments only set ZEGO_APP_SIGN.
+  const secretRaw =
+    process.env.ZEGO_SERVER_SECRET?.trim() ||
+    process.env.ZEGO_APP_SIGN?.trim() ||
+    ""
   if (!appIdRaw || !secretRaw) {
     zegoTokenServerLog({
       phase: "error_env_missing",
@@ -78,7 +82,10 @@ export async function POST(req: Request) {
       hasSecret: Boolean(secretRaw),
       durationMs: Date.now() - t0,
     })
-    return jsonError("Zego is not configured on the server", 503)
+    return jsonError(
+      "Zego is not configured on the server (need ZEGO_SERVER_SECRET or ZEGO_APP_SIGN, plus ZEGO_APP_ID)",
+      503
+    )
   }
 
   const appID = Number(appIdRaw)

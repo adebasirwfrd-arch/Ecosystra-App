@@ -188,6 +188,7 @@ export function EcosystraZegoMeetingView({
 
         const res = await fetch("/api/zego/token", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ roomID }),
         })

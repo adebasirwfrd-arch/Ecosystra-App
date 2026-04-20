@@ -12,10 +12,16 @@ export function normalizeZegoServerSecret(raw: string): string {
     }
     return buf.toString("latin1")
   }
+  // 32 hex chars = 16 bytes — never valid for Token04; people often paste half of AppSign.
+  if (t.length === 32 && /^[0-9a-fA-F]{32}$/.test(t)) {
+    throw new Error(
+      "ZEGO_SERVER_SECRET looks like 32 hex digits. Use the full 64-character AppSign from ZEGOCLOUD Console (Project → Basic setup), or the exact 32-byte server key your project uses."
+    )
+  }
   if (t.length === 32) {
     return t
   }
   throw new Error(
-    "ZEGO_SERVER_SECRET must be 32 ASCII characters or 64 hex characters"
+    "ZEGO_SERVER_SECRET must be 32 ASCII characters or 64 hex characters (AppSign)"
   )
 }
