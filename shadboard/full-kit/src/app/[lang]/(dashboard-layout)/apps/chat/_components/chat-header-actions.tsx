@@ -33,6 +33,7 @@ export function ChatHeaderActions({ chat }: { chat: ChatType }) {
   const { currentUser, updateThreadPreferences } = useChatContext()
   const busy = status !== "idle"
   const hasCallPeer = chat.users.some((u) => u.id !== currentUser.id)
+  /** Do not block the call buttons on Realtime — disabled buttons prevent any click, so getUserMedia never runs and the browser never shows the mic/camera prompt. We request media first, then wait for signaling inside startCall. */
   const signalingOk = channelReady
 
   const [searchOpen, setSearchOpen] = useState(false)
@@ -52,10 +53,10 @@ export function ChatHeaderActions({ chat }: { chat: ChatType }) {
             !hasCallPeer
               ? "Add people to this chat to start a call"
               : !signalingOk
-                ? "Connecting signaling — wait a moment"
+                ? "Voice call — Realtime still connecting; you can start and we will wait for signaling"
                 : "Voice call"
           }
-          disabled={busy || !hasCallPeer || !signalingOk}
+          disabled={busy || !hasCallPeer}
           onClick={() => void startAudioCall()}
         >
           <Phone className="size-4" />
@@ -69,10 +70,10 @@ export function ChatHeaderActions({ chat }: { chat: ChatType }) {
             !hasCallPeer
               ? "Add people to this chat to start a call"
               : !signalingOk
-                ? "Connecting signaling — wait a moment"
+                ? "Video call — Realtime still connecting; you can start and we will wait for signaling"
                 : "Video call"
           }
-          disabled={busy || !hasCallPeer || !signalingOk}
+          disabled={busy || !hasCallPeer}
           onClick={() => void startVideoCall()}
         >
           <Video className="size-4" />

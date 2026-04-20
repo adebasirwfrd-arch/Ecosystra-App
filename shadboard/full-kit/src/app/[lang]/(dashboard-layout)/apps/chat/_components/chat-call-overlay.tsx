@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from "react"
+import { useLayoutEffect, useMemo, useRef } from "react"
 import {
   Loader2,
   Mic,
@@ -52,24 +52,36 @@ export function ChatCallOverlay() {
     endCall,
   } = useWebRtcCall()
 
-  const localVideoRef = useRef<HTMLVideoElement>(null)
+  /** Separate refs so outgoing vs live dialogs never fight for one ref (black preview). */
+  const localVideoOutgoingRef = useRef<HTMLVideoElement>(null)
+  const localVideoLiveRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const remoteAudioRef = useRef<HTMLAudioElement>(null)
 
   const hasRemoteVideo = useHasLiveVideo(remoteStream)
 
-  useEffect(() => {
-    const el = localVideoRef.current
-    if (el && localStream) {
-      el.srcObject = localStream
-      void el.play().catch(() => undefined)
+  useLayoutEffect(() => {
+    const bind = (el: HTMLVideoElement | null) => {
+      if (!el) return
+      if (localStream) {
+        el.srcObject = localStream
+        void el.play().catch(() => undefined)
+      } else {
+        el.srcObject = null
+      }
     }
+    bind(localVideoOutgoingRef.current)
+    bind(localVideoLiveRef.current)
     return () => {
-      if (el) el.srcObject = null
+      const clear = (el: HTMLVideoElement | null) => {
+        if (el) el.srcObject = null
+      }
+      clear(localVideoOutgoingRef.current)
+      clear(localVideoLiveRef.current)
     }
-  }, [localStream])
+  }, [localStream, status])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const v = remoteVideoRef.current
     const a = remoteAudioRef.current
     if (!remoteStream) {
@@ -80,9 +92,7 @@ export function ChatCallOverlay() {
     if (hasRemoteVideo && v) {
       v.srcObject = remoteStream
       void v.play().catch(() => undefined)
-      if (a) {
-        a.srcObject = null
-      }
+      if (a) a.srcObject = null
     } else if (a) {
       a.srcObject = remoteStream
       void a.play().catch(() => undefined)
@@ -166,7 +176,7 @@ export function ChatCallOverlay() {
             {callUsesVideo && localStream ? (
               <div className="relative aspect-video w-full max-w-xs overflow-hidden rounded-2xl border-2 border-white/10 bg-black shadow-2xl">
                 <video
-                  ref={localVideoRef}
+                  ref={localVideoOutgoingRef}
                   className="h-full w-full object-cover"
                   playsInline
                   autoPlay
@@ -257,7 +267,7 @@ export function ChatCallOverlay() {
               {callUsesVideo && localStream ? (
                 <div className="absolute end-4 bottom-24 z-20 w-[min(38%,200px)] overflow-hidden rounded-xl border-2 border-white/20 bg-black shadow-2xl">
                   <video
-                    ref={localVideoRef}
+                    ref={localVideoLiveRef}
                     className={cn(
                       "aspect-video w-full object-cover",
                       cameraOff && "opacity-40"
@@ -274,7 +284,7 @@ export function ChatCallOverlay() {
                 </div>
               ) : (
                 <video
-                  ref={localVideoRef}
+                  ref={localVideoLiveRef}
                   className="sr-only"
                   playsInline
                   autoPlay

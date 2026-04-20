@@ -449,18 +449,11 @@ export function WebRtcCallProvider({
        */
       let stream: MediaStream
       try {
+        // Keep constraints minimal — strict width/height ideals break on many devices and can fail
+        // without a permission prompt (OverconstrainedError) or yield black video.
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-          },
-          video: video
-            ? {
-                facingMode: "user",
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              }
-            : false,
+          audio: true,
+          video: video ? { facingMode: "user" } : false,
         })
       } catch (e) {
         toast.error(formatMediaDeviceError(e))
@@ -528,17 +521,8 @@ export function WebRtcCallProvider({
     let stream: MediaStream
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-        video: pending.video
-          ? {
-              facingMode: "user",
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            }
-          : false,
+        audio: true,
+        video: pending.video ? { facingMode: "user" } : false,
       })
     } catch (e) {
       toast.error(formatMediaDeviceError(e))
