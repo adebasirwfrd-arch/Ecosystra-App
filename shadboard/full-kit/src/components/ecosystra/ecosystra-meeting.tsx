@@ -149,7 +149,9 @@ export function EcosystraZegoMeetingView({
       setLoading(true)
       setError(null)
       try {
-        const appID = Number(process.env.NEXT_PUBLIC_ZEGO_APP_ID)
+        const appID = Number(
+          String(process.env.NEXT_PUBLIC_ZEGO_APP_ID ?? "").trim()
+        )
         zegoMeetingClientLog({
           runId,
           phase: "env_check",
@@ -234,9 +236,15 @@ export function EcosystraZegoMeetingView({
           return
         }
 
-        let data: { token?: string; error?: string; appID?: number }
+        let data: {
+          token?: string
+          error?: string
+          appID?: number
+          /** Must match Token04 user id from the server or Zego reports token auth errors. */
+          zegoUserId?: string
+        }
         try {
-          data = JSON.parse(rawBody) as { token?: string; error?: string }
+          data = JSON.parse(rawBody) as typeof data
         } catch {
           zegoMeetingClientLog({
             runId,
@@ -260,6 +268,11 @@ export function EcosystraZegoMeetingView({
             ? data.appID
             : null
 
+        const kitUserId =
+          typeof data.zegoUserId === "string" && data.zegoUserId.length > 0
+            ? data.zegoUserId
+            : uid
+
         zegoMeetingClientLog({
           runId,
           phase: "fetch_token_response",
@@ -273,6 +286,8 @@ export function EcosystraZegoMeetingView({
             errorField: typeof data.error === "string" ? data.error : undefined,
             serverAppId,
             nextPublicAppId: appID,
+            zegoUserIdFromServerLen: kitUserId.length,
+            zegoUserIdMatchesClientProp: kitUserId === uid,
           },
         })
 
@@ -337,7 +352,7 @@ export function EcosystraZegoMeetingView({
             effectiveAppId,
             token,
             roomID,
-            uid,
+            kitUserId,
             displayName
           )
         } catch (kitErr) {
@@ -527,7 +542,7 @@ export function EcosystraZegoMeetingView({
             logoURL: "/images/branding/ecosystra-logo.jpg",
           },
           onJoinRoom: () => {
-            setJoinedZegoUserIds((prev) => new Set([...prev, uid]))
+            setJoinedZegoUserIds((prev) => new Set([...prev, kitUserId]))
             zegoMeetingClientLog({
               runId,
               phase: "callback_on_join_room",

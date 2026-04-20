@@ -4,6 +4,7 @@ import { z } from "zod"
 import { jsonError, jsonFromZodError, jsonOk } from "@/lib/api/http"
 import { requireApiSession } from "@/lib/api/route-session"
 import { zegoTokenServerLog } from "@/lib/ecosystra/zego-meeting-log"
+import { sanitizeZegoUserId } from "@/lib/ecosystra/zego-user-id"
 import { normalizeZegoServerSecret } from "@/lib/zego/zego-secret"
 import { generateToken04 } from "@/lib/zego/zegoServerAssistant"
 
@@ -12,11 +13,6 @@ export const dynamic = "force-dynamic"
 const bodySchema = z.object({
   roomID: z.string().min(1).max(128),
 })
-
-function sanitizeZegoUserId(raw: string): string {
-  const s = raw.replace(/[^a-zA-Z0-9_-]/g, "_")
-  return s.length > 0 ? s.slice(0, 64) : "user"
-}
 
 export async function POST(req: Request) {
   const reqId = `tok_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -67,8 +63,11 @@ export async function POST(req: Request) {
     return jsonFromZodError(parsed.error)
   }
 
-  const appIdRaw =
-    process.env.ZEGO_APP_ID ?? process.env.NEXT_PUBLIC_ZEGO_APP_ID
+  const appIdRaw = (
+    process.env.ZEGO_APP_ID ??
+    process.env.NEXT_PUBLIC_ZEGO_APP_ID ??
+    ""
+  ).trim()
   // Console labels this "AppSign" (64 hex); some deployments only set ZEGO_APP_SIGN.
   const secretRaw =
     process.env.ZEGO_SERVER_SECRET?.trim() ||
@@ -145,7 +144,11 @@ export async function POST(req: Request) {
       tokenPrefix: token.slice(0, 6),
       durationMs: Date.now() - t0,
     })
-    return jsonOk({ token, appID })
+    /**
+     * Client must pass this exact string into `generateKitTokenForProduction` as userID.
+     * If it differs from the id baked into Token04, Zego returns "token authentication error".
+     */
+    return jsonOk({ token, appID, zegoUserId: userID })
   } catch (e: unknown) {
     if (e instanceof Error) {
       zegoTokenServerLog({
