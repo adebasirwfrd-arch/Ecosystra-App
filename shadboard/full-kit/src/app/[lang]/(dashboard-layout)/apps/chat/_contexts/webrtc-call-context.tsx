@@ -62,6 +62,29 @@ function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms))
 }
 
+/** User-friendly copy when getUserMedia fails (permissions, hardware, busy). */
+function formatMediaDeviceError(e: unknown): string {
+  if (typeof DOMException !== "undefined" && e instanceof DOMException) {
+    if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+      return (
+        "Camera/microphone access was blocked. Allow microphone" +
+        " (and camera for video) in the browser address bar, then try again."
+      )
+    }
+    if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
+      return "No microphone or camera was found. Check that the device is connected."
+    }
+    if (e.name === "NotReadableError" || e.name === "TrackStartError") {
+      return "Microphone or camera is busy or unavailable. Close other apps using it and try again."
+    }
+    if (e.name === "OverconstrainedError") {
+      return "Camera constraints could not be satisfied. Try another browser or device."
+    }
+  }
+  if (e instanceof Error) return e.message
+  return "Could not access camera or microphone"
+}
+
 export type WebRtcCallContextValue = {
   status: CallStatus
   localStream: MediaStream | null
@@ -410,6 +433,43 @@ export function WebRtcCallProvider({
         toast.error("Need at least one other person in this chat to call")
         return
       }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error(
+          "This page cannot use the microphone/camera (use HTTPS, localhost, or a current browser)."
+        )
+        return
+      }
+
+      setCallUsesVideo(video)
+      setRemoteLabel(otherMembers[0]?.name ?? "Contact")
+
+      /**
+       * Request camera/microphone **before** any `await` that waits on signaling.
+       * Otherwise the browser may consume the user gesture and never show the permission prompt.
+       */
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+          video: video
+            ? {
+                facingMode: "user",
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              }
+            : false,
+        })
+      } catch (e) {
+        toast.error(formatMediaDeviceError(e))
+        return
+      }
+
+      localStreamRef.current = stream
+      setLocalStream(stream)
+
       if (!channelReadyRef.current) {
         const waitToast = toast.loading("Connecting signaling…")
         const deadline = Date.now() + 18_000
@@ -418,6 +478,9 @@ export function WebRtcCallProvider({
         }
         toast.dismiss(waitToast)
         if (!channelReadyRef.current) {
+          stream.getTracks().forEach((t) => t.stop())
+          localStreamRef.current = null
+          setLocalStream(null)
           toast.error(
             "Signaling not ready. Check NEXT_PUBLIC_SUPABASE_URL / ANON_KEY on this deployment and Supabase Realtime settings."
           )
@@ -426,16 +489,6 @@ export function WebRtcCallProvider({
       }
 
       try {
-        setCallUsesVideo(video)
-        const callee = otherMembers[0]
-        setRemoteLabel(callee?.name ?? "Contact")
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: video ? { facingMode: "user" } : false,
-        })
-        localStreamRef.current = stream
-        setLocalStream(stream)
-
         const callId = crypto.randomUUID()
         const pc = setupPeerConnection(callId)
         stream.getTracks().forEach((t) => pc.addTrack(t, stream))
@@ -463,15 +516,39 @@ export function WebRtcCallProvider({
     const pending = pendingOfferRef.current
     if (!pending || !routeThreadId) return
 
-    try {
-      setCallUsesVideo(pending.video)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: pending.video ? { facingMode: "user" } : false,
-      })
-      localStreamRef.current = stream
-      setLocalStream(stream)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error(
+        "This page cannot use the microphone/camera (use HTTPS, localhost, or a current browser)."
+      )
+      return
+    }
 
+    setCallUsesVideo(pending.video)
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+        video: pending.video
+          ? {
+              facingMode: "user",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            }
+          : false,
+      })
+    } catch (e) {
+      toast.error(formatMediaDeviceError(e))
+      return
+    }
+
+    localStreamRef.current = stream
+    setLocalStream(stream)
+
+    try {
       const pc = setupPeerConnection(pending.callId)
       stream.getTracks().forEach((t) => pc.addTrack(t, stream))
 
