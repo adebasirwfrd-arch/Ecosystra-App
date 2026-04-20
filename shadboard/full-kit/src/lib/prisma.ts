@@ -3,8 +3,8 @@ import { PrismaClient } from "@/generated/prisma"
 /**
  * Runtime URL for PrismaClient (GraphQL / API routes):
  * - Set `PRISMA_USE_POOLER=true` to force `DATABASE_URL` (PgBouncer :6543) when `db.*.supabase.co:5432` is unreachable.
- * - On **Vercel**, if `DATABASE_URL` is the Supabase transaction pooler (:6543), we default to the pooler even when
- *   `DIRECT_URL` is set — direct `db.*:5432` is often unreachable from serverless (IPv4 / network). Set `PRISMA_USE_POOLER=false` to force direct.
+ * - On **Vercel** or **`next dev`**, if `DATABASE_URL` is the Supabase transaction pooler (:6543), we default to the pooler even when
+ *   `DIRECT_URL` is set — direct `db.*:5432` is often unreachable (IPv4 / DNS / laptop firewall). Set `PRISMA_USE_POOLER=false` to force direct.
  * - Otherwise prefer `DIRECT_URL` when set, else `DATABASE_URL`.
  *
  * `directUrl` in prisma/schema is still used by Prisma CLI migrations — keep both env vars.
@@ -55,7 +55,7 @@ function ensureSupabasePrismaPoolParams(url: string): string {
 
 /**
  * When true, PrismaClient uses `DATABASE_URL` (pooler :6543) even if `DIRECT_URL` is set.
- * Explicit `PRISMA_USE_POOLER=false` opts out of Vercel auto-pooler as well.
+ * Explicit `PRISMA_USE_POOLER=false` opts out of auto-pooler (Vercel + dev) as well.
  */
 function prismaWantsPoolerRuntime(): boolean {
   const v = process.env.PRISMA_USE_POOLER?.trim().toLowerCase()
@@ -65,12 +65,12 @@ function prismaWantsPoolerRuntime(): boolean {
   if (v === "1" || v === "true" || v === "yes") {
     return true
   }
-  // Vercel → Supabase: direct host often fails with P1001; pooler :6543 usually works.
-  if (process.env.VERCEL === "1") {
-    const pooled = process.env.DATABASE_URL?.trim()
-    return Boolean(pooled && isSupabasePoolerUrl(pooled))
+  const pooled = process.env.DATABASE_URL?.trim()
+  if (!pooled || !isSupabasePoolerUrl(pooled)) {
+    return false
   }
-  return false
+  // Vercel / local dev: direct db.*:5432 often fails with P1001; pooler :6543 usually works.
+  return process.env.VERCEL === "1" || process.env.NODE_ENV === "development"
 }
 
 function prismaDatasourceUrl() {
@@ -79,8 +79,13 @@ function prismaDatasourceUrl() {
 
   if (prismaWantsPoolerRuntime() && pooled) {
     if (process.env.NODE_ENV === "development") {
+      const explicit = ["1", "true", "yes"].includes(
+        process.env.PRISMA_USE_POOLER?.trim().toLowerCase() ?? ""
+      )
       console.info(
-        "[prisma] PRISMA_USE_POOLER is set — using DATABASE_URL (Supabase pooler) for the app Prisma client."
+        explicit
+          ? "[prisma] PRISMA_USE_POOLER — using DATABASE_URL (Supabase pooler)."
+          : "[prisma] Auto: using DATABASE_URL (Supabase pooler) in dev — set PRISMA_USE_POOLER=false to use DIRECT_URL (db:5432)."
       )
     }
     return pooled
