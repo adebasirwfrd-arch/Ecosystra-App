@@ -58,6 +58,10 @@ function unwrapBroadcastPayload(raw: unknown): unknown {
   return raw
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms))
+}
+
 export type WebRtcCallContextValue = {
   status: CallStatus
   localStream: MediaStream | null
@@ -104,6 +108,8 @@ export function WebRtcCallProvider({
 
   const [status, setStatus] = useState<CallStatus>("idle")
   const [channelReady, setChannelReady] = useState(false)
+  /** Same as `channelReady` but updated in the Realtime subscribe callback (no React render delay). */
+  const channelReadyRef = useRef(false)
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [callUsesVideo, setCallUsesVideo] = useState(true)
@@ -290,6 +296,7 @@ export function WebRtcCallProvider({
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
     if (!supabase || !routeThreadId) {
+      channelReadyRef.current = false
       setChannelReady(false)
       return
     }
@@ -309,7 +316,9 @@ export function WebRtcCallProvider({
     )
 
     void ch.subscribe((s: string) => {
-      setChannelReady(s === "SUBSCRIBED")
+      const ok = s === "SUBSCRIBED"
+      channelReadyRef.current = ok
+      setChannelReady(ok)
       if (s === "CHANNEL_ERROR") {
         toast.error(
           "Realtime error — enable Realtime in Supabase project settings"
@@ -320,6 +329,7 @@ export function WebRtcCallProvider({
     channelRef.current = ch as typeof channelRef.current
 
     return () => {
+      channelReadyRef.current = false
       setChannelReady(false)
       void ch.unsubscribe()
       channelRef.current = null
@@ -361,9 +371,19 @@ export function WebRtcCallProvider({
         toast.error("Need at least one other person in this chat to call")
         return
       }
-      if (!channelReady) {
-        toast.error("Connecting to signaling… try again in a second")
-        return
+      if (!channelReadyRef.current) {
+        const waitToast = toast.loading("Connecting signaling…")
+        const deadline = Date.now() + 18_000
+        while (!channelReadyRef.current && Date.now() < deadline) {
+          await sleep(120)
+        }
+        toast.dismiss(waitToast)
+        if (!channelReadyRef.current) {
+          toast.error(
+            "Signaling not ready. Check NEXT_PUBLIC_SUPABASE_URL / ANON_KEY on this deployment and Supabase Realtime settings."
+          )
+          return
+        }
       }
 
       try {
@@ -395,16 +415,7 @@ export function WebRtcCallProvider({
         toast.error(e instanceof Error ? e.message : "Could not start call")
       }
     },
-    [
-      chat,
-      channelReady,
-      cleanupMedia,
-      currentUser.id,
-      otherMembers.length,
-      routeThreadId,
-      sendSignal,
-      setupPeerConnection,
-    ]
+    [chat, cleanupMedia, currentUser.id, otherMembers.length, routeThreadId, sendSignal, setupPeerConnection]
   )
 
   const acceptIncoming = useCallback(async () => {

@@ -29,10 +29,11 @@ import {
 import { ChatThreadSearchDialog } from "./chat-thread-search-dialog"
 
 export function ChatHeaderActions({ chat }: { chat: ChatType }) {
-  const { startAudioCall, startVideoCall, status } = useWebRtcCall()
+  const { startAudioCall, startVideoCall, status, channelReady } = useWebRtcCall()
   const { currentUser, updateThreadPreferences } = useChatContext()
   const busy = status !== "idle"
   const hasCallPeer = chat.users.some((u) => u.id !== currentUser.id)
+  const signalingOk = channelReady
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [blockOpen, setBlockOpen] = useState(false)
@@ -48,11 +49,13 @@ export function ChatHeaderActions({ chat }: { chat: ChatType }) {
           size="icon"
           aria-label="Voice call"
           title={
-            hasCallPeer
-              ? "Voice call"
-              : "Add people to this chat to start a call"
+            !hasCallPeer
+              ? "Add people to this chat to start a call"
+              : !signalingOk
+                ? "Connecting signaling — wait a moment"
+                : "Voice call"
           }
-          disabled={busy || !hasCallPeer}
+          disabled={busy || !hasCallPeer || !signalingOk}
           onClick={() => void startAudioCall()}
         >
           <Phone className="size-4" />
@@ -63,11 +66,13 @@ export function ChatHeaderActions({ chat }: { chat: ChatType }) {
           size="icon"
           aria-label="Video call"
           title={
-            hasCallPeer
-              ? "Video call"
-              : "Add people to this chat to start a call"
+            !hasCallPeer
+              ? "Add people to this chat to start a call"
+              : !signalingOk
+                ? "Connecting signaling — wait a moment"
+                : "Video call"
           }
-          disabled={busy || !hasCallPeer}
+          disabled={busy || !hasCallPeer || !signalingOk}
           onClick={() => void startVideoCall()}
         >
           <Video className="size-4" />
