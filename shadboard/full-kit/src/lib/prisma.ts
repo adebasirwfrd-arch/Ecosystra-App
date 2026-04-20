@@ -3,6 +3,8 @@ import { PrismaClient } from "@/generated/prisma"
 /**
  * Runtime URL for PrismaClient (GraphQL / API routes):
  * - Set `PRISMA_USE_POOLER=true` to force `DATABASE_URL` (PgBouncer :6543) when `db.*.supabase.co:5432` is unreachable.
+ * - On **Vercel**, if `DATABASE_URL` is the Supabase transaction pooler (:6543), we default to the pooler even when
+ *   `DIRECT_URL` is set — direct `db.*:5432` is often unreachable from serverless (IPv4 / network). Set `PRISMA_USE_POOLER=false` to force direct.
  * - Otherwise prefer `DIRECT_URL` when set, else `DATABASE_URL`.
  *
  * `directUrl` in prisma/schema is still used by Prisma CLI migrations — keep both env vars.
@@ -51,10 +53,24 @@ function ensureSupabasePrismaPoolParams(url: string): string {
   return url.includes("?") ? `${url}&${q}` : `${url}?${q}`
 }
 
-/** When true, PrismaClient uses `DATABASE_URL` (pooler :6543) even if `DIRECT_URL` is set. Use if `db.*.supabase.co:5432` is unreachable (IPv6 / firewall / ISP) but the pooler works. */
+/**
+ * When true, PrismaClient uses `DATABASE_URL` (pooler :6543) even if `DIRECT_URL` is set.
+ * Explicit `PRISMA_USE_POOLER=false` opts out of Vercel auto-pooler as well.
+ */
 function prismaWantsPoolerRuntime(): boolean {
   const v = process.env.PRISMA_USE_POOLER?.trim().toLowerCase()
-  return v === "1" || v === "true" || v === "yes"
+  if (v === "0" || v === "false" || v === "no") {
+    return false
+  }
+  if (v === "1" || v === "true" || v === "yes") {
+    return true
+  }
+  // Vercel → Supabase: direct host often fails with P1001; pooler :6543 usually works.
+  if (process.env.VERCEL === "1") {
+    const pooled = process.env.DATABASE_URL?.trim()
+    return Boolean(pooled && isSupabasePoolerUrl(pooled))
+  }
+  return false
 }
 
 function prismaDatasourceUrl() {
