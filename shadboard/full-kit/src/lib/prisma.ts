@@ -33,19 +33,41 @@ function isSupabasePoolerUrl(url: string): boolean {
 }
 
 /**
+ * Heuristic when `parseDbUrl` fails (e.g. unescaped `&` or `@` in password) but the string is still a Supabase transaction pooler URI.
+ */
+function looksLikeSupabaseTransactionPooler(url: string): boolean {
+  const lower = url.toLowerCase()
+  return (
+    lower.includes("pooler.supabase.com") &&
+    (/:6543(\/|\?|&|$)/.test(lower) || /@[^/]*:6543/.test(lower))
+  )
+}
+
+function isRuntimeSupabasePoolerDatabaseUrl(url: string): boolean {
+  return isSupabasePoolerUrl(url) || looksLikeSupabaseTransactionPooler(url)
+}
+
+/**
  * Transaction pooler (:6543) + many Next.js instances: without `connection_limit=1`
  * Prisma can open too many server-side connections and latency spikes follow.
  * Appends safe defaults only when missing (does not override your query string).
  */
 function ensureSupabasePrismaPoolParams(url: string): string {
   const u = parseDbUrl(url)
-  if (!u || !u.hostname.toLowerCase().includes("pooler.supabase.com")) {
+  if (
+    !u?.hostname.toLowerCase().includes("pooler.supabase.com") &&
+    !looksLikeSupabaseTransactionPooler(url)
+  ) {
     return url
   }
   const lower = url.toLowerCase()
   const add: string[] = []
   if (!lower.includes("connection_limit=")) add.push("connection_limit=1")
-  if (!lower.includes("pgbouncer=true") && u.port === "6543") {
+  const onTxnPort =
+    u?.port === "6543" ||
+    /:6543(\/|\?|&|$)/.test(lower) ||
+    /@[^/@]+:6543/.test(url)
+  if (!lower.includes("pgbouncer=true") && onTxnPort) {
     add.push("pgbouncer=true")
   }
   if (add.length === 0) return url
@@ -66,7 +88,7 @@ function prismaWantsPoolerRuntime(): boolean {
     return true
   }
   const pooled = process.env.DATABASE_URL?.trim()
-  if (!pooled || !isSupabasePoolerUrl(pooled)) {
+  if (!pooled || !isRuntimeSupabasePoolerDatabaseUrl(pooled)) {
     return false
   }
   // Vercel / local dev: direct db.*:5432 often fails with P1001; pooler :6543 usually works.
@@ -102,8 +124,21 @@ function prismaDatasourceUrl() {
     return pooled || direct
   }
   // Prefer direct Postgres (db.*.supabase.co:5432) — pooler :6543 is often blocked or flaky on some networks.
-  if (direct) return direct
-  if (pooled && isSupabasePoolerUrl(pooled) && process.env.NODE_ENV === "development") {
+  if (direct) {
+    if (
+      process.env.NODE_ENV === "development" &&
+      parseDbUrl(direct)?.hostname?.toLowerCase().includes(".supabase.co") &&
+      pooled &&
+      !isRuntimeSupabasePoolerDatabaseUrl(pooled)
+    ) {
+      console.warn(
+        "[prisma] Using DIRECT_URL (db.*:5432). Your DATABASE_URL is not the transaction pooler (:6543). " +
+          "Copy the pooler URI from Supabase → Connect into DATABASE_URL, keep DIRECT_URL for db:5432, then restart `next dev`."
+      )
+    }
+    return direct
+  }
+  if (pooled && isRuntimeSupabasePoolerDatabaseUrl(pooled) && process.env.NODE_ENV === "development") {
     console.warn(
       "[prisma] Only DATABASE_URL (Supabase pooler :6543) is set. If you see \"Can't reach database server\", " +
         "add DIRECT_URL from Supabase → Database → Connection string → Direct (host db.<project>.supabase.co, port 5432)."
@@ -132,13 +167,13 @@ declare global {
    * ("Cannot read properties of undefined (reading 'findUnique')").
    */
   // eslint-disable-next-line no-var
-  var prismaShadboardV12: undefined | ReturnType<typeof prismaClientSingleton>
+  var prismaShadboardV13: undefined | ReturnType<typeof prismaClientSingleton>
 }
 
-const db = globalThis.prismaShadboardV12 ?? prismaClientSingleton()
+const db = globalThis.prismaShadboardV13 ?? prismaClientSingleton()
 
 // If not in production, reuse the Prisma instance across hot reloads
-if (process.env.NODE_ENV !== "production") globalThis.prismaShadboardV12 = db
+if (process.env.NODE_ENV !== "production") globalThis.prismaShadboardV13 = db
 
 function isTransientConnectionError(e: unknown): boolean {
   if (typeof e === "object" && e !== null && "code" in e) {
